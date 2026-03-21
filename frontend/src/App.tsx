@@ -1,0 +1,292 @@
+import React, { useState, useEffect } from 'react';
+import { api } from './services/api';
+import { BrowserRouter, Routes, Route, NavLink, useNavigate } from 'react-router-dom';
+import Dashboard from './components/Dashboard';
+import UsersPage from './components/UsersPage';
+import AlertsPage from './components/AlertsPage';
+import SignInsPage from './components/SignInsPage';
+import MockPanel from './components/MockPanel';
+import LoginPage from './components/LoginPage';
+import LiveIndicator from './components/LiveIndicator';
+import ReportsPage from './components/ReportsPage';
+import PimPage from './components/PimPage';
+import MspDashboard from './components/MspDashboard';
+import SettingsPage from './components/SettingsPage';
+import AuditCenterPage from './components/AuditCenterPage';
+import CaseBoardPage from './components/CaseBoardPage';
+import TenantOpsPage from './components/TenantOpsPage';
+import RemediationPage from './components/RemediationPage';
+import './styles.css';
+
+interface TenantUser {
+  userName: string;
+  userEmail: string;
+  tenantId: string;
+  tenantName: string;
+}
+
+function NotificationDrawer({ open, items, onClose, onAck, onApprove, onReject, onAssign }: {
+  open: boolean;
+  items: any[];
+  onClose: () => void;
+  onAck: (id: string) => void;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  onAssign: (id: string) => void;
+}) {
+  if (!open) return null;
+  return (
+    <div style={{ position: 'absolute', top: 58, right: 0, width: 460, maxWidth: '92vw', maxHeight: '72vh', overflowY: 'auto', background: 'var(--navy-900)', border: '1px solid var(--navy-border)', borderRadius: 14, padding: 16, boxShadow: '0 24px 48px rgba(0,0,0,0.35)', zIndex: 400 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div>
+          <div className="card-title">Live notification center</div>
+          <div className="text-muted" style={{ fontSize: 12 }}>Deduped notifications with direct actions</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {items.filter(i => i.status !== 'acked').length > 0 && (
+            <button className="btn btn-ghost btn-sm" onClick={() => items.filter(i => i.status !== 'acked').forEach(i => onAck(i.id))} style={{ fontSize: 11 }}>
+              Mark all read
+            </button>
+          )}
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
+        </div>
+      </div>
+      {!items.length && <div className="text-muted" style={{ padding: '18px 4px' }}>No active notifications.</div>}
+      <div style={{ display: 'grid', gap: 10 }}>
+        {items.map((item) => {
+          const approval = item.type === 'approval';
+          return (
+            <div key={item.id} className="card" style={{ padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>{item.displayTitle || item.title}</div>
+                  {item.displaySubtitle && <div className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>{item.displaySubtitle}</div>}
+                </div>
+                <span className="role-tag">{item.kindLabel || item.type}</span>
+              </div>
+              {item.displayDetail && <div style={{ fontSize: 13, marginTop: 8 }}>{item.displayDetail}</div>}
+              {!!item.duplicateCount && item.duplicateCount > 1 && <div className="text-muted" style={{ fontSize: 11, marginTop: 6 }}>{item.duplicateCount} similar notifications were grouped here.</div>}
+              <div className="text-muted" style={{ fontSize: 11, marginTop: 6 }}>{new Date(item.createdAt).toLocaleString()}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                {item.metadata?.alertId && <a className="btn btn-ghost btn-sm" href="/alerts">Open incident</a>}
+                {item.metadata?.caseId && <a className="btn btn-ghost btn-sm" href="/cases">Open case</a>}
+                {approval && <button className="btn btn-sm" onClick={() => onAssign(item.metadata?.alertId || '')}>Assign to me</button>}
+                {approval && <button className="btn btn-primary btn-sm" onClick={() => onApprove(item.metadata?.alertId || '')}>Approve</button>}
+                {approval && <button className="btn btn-sm" onClick={() => onReject(item.metadata?.alertId || '')}>Reject</button>}
+                <button className="btn btn-ghost btn-sm" onClick={() => onAck(item.id)}>Acknowledge</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function NavBar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, onAckNotification, onApproveNotification, onRejectNotification, onAssignNotification }: {
+  user: TenantUser | null;
+  scanLoading: boolean;
+  onScan: () => void;
+  newAlertCount: number;
+  mockMode: boolean;
+  inbox: any[];
+  onAckNotification: (id: string) => void;
+  onApproveNotification: (alertId: string) => void;
+  onRejectNotification: (alertId: string) => void;
+  onAssignNotification: (alertId: string) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const unread = inbox.filter(i => i.status !== 'acked').length;
+  return (
+    <nav className="navbar">
+      <div className="navbar-brand">
+        <span className="brand-icon">⬡</span>
+        <div>
+          <div className="brand-title">Privileged Identity Monitor</div>
+          <div className="brand-sub">Modern Endpoint · Security Operations</div>
+        </div>
+      </div>
+      <button className="mobile-menu-btn" onClick={() => setMenuOpen(v => !v)} aria-label="Toggle navigation">☰</button>
+      <div className={`navbar-links ${menuOpen ? 'open' : ''}`}>
+        <NavLink to="/" end className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Overview</NavLink>
+        <NavLink to="/users" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Exposure</NavLink>
+        <NavLink to="/alerts" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+          Alerts {newAlertCount > 0 && <span className="badge-alert">{newAlertCount}</span>}
+		  
+        </NavLink>
+        <NavLink to="/signins" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Sign-in Activity</NavLink>
+        <NavLink to="/reports" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Posture & Reports</NavLink>
+        <NavLink to="/pim" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>PIM Analysis</NavLink>
+        <NavLink to="/msp" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>MSP Fleet</NavLink>
+        <NavLink to="/cases" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Case Board</NavLink>
+        <NavLink to="/audit" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Audit Center</NavLink>
+        <NavLink to="/ops" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Tenant Ops</NavLink>
+        <NavLink to="/settings" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>Settings</NavLink>
+		<NavLink
+  to="/remediation"
+  className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+>
+  Remediation
+</NavLink>
+      </div>
+      <div className="navbar-actions" style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative' }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => setDrawerOpen(v => !v)} style={{ position: 'relative' }}>
+          🔔{unread > 0 && <span className="badge-alert" style={{ marginLeft: 8 }}>{unread}</span>}
+        </button>
+        <NotificationDrawer open={drawerOpen} items={inbox} onClose={() => setDrawerOpen(false)} onAck={onAckNotification} onApprove={onApproveNotification} onReject={onRejectNotification} onAssign={onAssignNotification} />
+        <LiveIndicator onNewAlert={(alert) => {}} />
+        {!mockMode && (
+          <button className="btn-scan" onClick={onScan} disabled={scanLoading}>
+            {scanLoading ? <><span className="spin">⟳</span> Scanning...</> : <><span>⟳</span> Run Scan</>}
+          </button>
+        )}
+        {user && (
+          <div className="nav-user">
+            <div className="nav-user-avatar">{(user.userName || user.userEmail || '?').charAt(0).toUpperCase()}</div>
+            <div className="nav-user-info">
+              <div style={{ fontSize: 12, fontWeight: 600 }}>{user.userName}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{user.userEmail}</div>
+            </div>
+            <a href="/api/auth/logout" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>Sign out</a>
+          </div>
+        )}
+      </div>
+    </nav>
+  );
+}
+function AppShell() {
+  const [user, setUser] = useState<TenantUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [openAlerts, setOpenAlerts] = useState(0);
+  const [scanResult, setScanResult] = useState<string | null>(null);
+  const [mockMode, setMockMode] = useState(false);
+  const [showMockPanel, setShowMockPanel] = useState(false);
+  const [inbox, setInbox] = useState<any[]>([]);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check health first (to get mockMode)
+    fetch('/api/health', { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        setMockMode(d.mockMode === true);
+
+        if (d.mockMode === true) {
+          // In mock mode — bypass auth
+          setAuthLoading(false);
+          return;
+        }
+
+        // Check auth status — uses same session cookie
+        return fetch('/api/auth/status', { credentials: 'include' })
+          .then(r => r.json())
+          .then(d => {
+            console.log('[App] auth/status response:', d);
+            if (d.authenticated && d.tenant) {
+              setUser(d.tenant as TenantUser);
+            }
+          });
+      })
+      .catch(err => {
+        console.error('[App] health/auth check failed:', err);
+      })
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  useEffect(() => {
+    api.getNotificationInbox({ limit: 12, dedupe: true }).then((res: any) => setInbox(res.items || [])).catch(() => {});
+    api.getAlertStats().then((stats: any) => setOpenAlerts(stats.open || stats.active || stats.totalOpen || 0)).catch(() => {});
+  }, []);
+
+  const handleScan = async () => {
+    setScanLoading(true);
+    setScanResult(null);
+    try {
+      const { api } = await import('./services/api');
+      const result = await api.triggerScan();
+      setScanResult(`Scan complete — ${result.newAlerts} new alert${result.newAlerts !== 1 ? 's' : ''} detected`);
+      setOpenAlerts(p => p + result.newAlerts);
+    } catch {
+      setScanResult('Scan failed — check backend connection');
+    } finally {
+      setScanLoading(false);
+      setTimeout(() => setScanResult(null), 5000);
+    }
+  };
+
+  if (authLoading) return (
+    <div className="loading-state" style={{ minHeight: '100vh' }}>
+      <div className="loading-spinner" />
+      <div className="loading-text">Loading...</div>
+    </div>
+  );
+
+  // Not in mock mode and not authenticated → show login
+  if (!mockMode && !user) {
+    return <LoginPage onLogin={() => {}} />;
+  }
+
+  return (
+    <div className="app">
+      <NavBar
+        user={user}
+        scanLoading={scanLoading}
+        onScan={handleScan}
+        newAlertCount={openAlerts}
+        mockMode={mockMode}
+        inbox={inbox}
+        onAckNotification={(id) => api.ackNotification(id).then(() => api.getNotificationInbox({ limit: 12, dedupe: true }).then((res: any) => setInbox(res.items || [])))}
+        onApproveNotification={(alertId) => api.approveAlertAction(alertId).then(() => api.getNotificationInbox({ limit: 12, dedupe: true }).then((res: any) => setInbox(res.items || [])))}
+        onRejectNotification={(alertId) => api.rejectAlertAction(alertId).then(() => api.getNotificationInbox({ limit: 12, dedupe: true }).then((res: any) => setInbox(res.items || [])))}
+        onAssignNotification={(alertId) => user && api.assignAlertOwner(alertId, user.userEmail).then(() => api.getNotificationInbox({ limit: 12, dedupe: true }).then((res: any) => setInbox(res.items || [])))}
+      />
+
+      {mockMode && (
+        <div className="mock-banner">
+          <span>🟡 MOCK MODE — Simulated data</span>
+          <button className="mock-trigger-btn" onClick={() => setShowMockPanel(p => !p)}>
+            {showMockPanel ? '✕ Close' : '⚡ Trigger Test Alert'}
+          </button>
+        </div>
+      )}
+
+      {showMockPanel && mockMode && (
+        <MockPanel onAlertTriggered={() => setOpenAlerts(p => p + 1)} />
+      )}
+
+      {scanResult && (
+        <div className={`scan-toast ${scanResult.includes('failed') ? 'toast-error' : 'toast-success'}`}>
+          {scanResult}
+        </div>
+      )}
+
+      <main className="main-content">
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/users" element={<UsersPage />} />
+          <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/signins" element={<SignInsPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/pim" element={<PimPage />} />
+          <Route path="/msp" element={<MspDashboard />} />
+          <Route path="/cases" element={<CaseBoardPage />} />
+          <Route path="/audit" element={<AuditCenterPage />} />
+          <Route path="/ops" element={<TenantOpsPage />} />
+          <Route path="/login" element={<LoginPage onLogin={() => navigate('/')} />} />
+          <Route path="/settings" element={<SettingsPage />} />
+		  <Route path="/remediation" element={<RemediationPage />} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppShell />
+    </BrowserRouter>
+  );
+}

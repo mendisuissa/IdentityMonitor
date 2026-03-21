@@ -1,0 +1,244 @@
+<!--
+  INSTRUCTIONS FOR GHOST:
+  1. Ghost Admin → Pages → New Page
+  2. Title: "Privileged Identity Monitor"
+  3. URL: identity-monitor
+  4. Click "+" → HTML card → paste everything below
+  5. In Page Settings → Template: choose "Wide" or "Full"
+  6. Publish
+-->
+
+<style>
+:root{--navy:#060c18;--navy2:#0b1628;--border:#1e3060;--amber:#f5a623;--red:#ff3b3b;--orange:#ff6b35;--green:#2ecc71;--blue:#4a90d9;--text:#e8edf8;--muted:#8ba3cc;--dim:#4a6490;--mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif}
+.pim-wrap *{box-sizing:border-box;margin:0;padding:0}
+.pim-wrap{font-family:var(--sans);color:#1a2540;line-height:1.6;max-width:1100px;margin:0 auto;padding:0 24px 80px}
+
+/* Hero */
+.pim-hero{text-align:center;padding:60px 0 40px;background:linear-gradient(180deg,#060c18 0%,#0b1628 100%);margin:-40px -24px 60px;padding:80px 24px}
+.pim-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 14px;background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.25);border-radius:20px;font-size:12px;font-weight:700;color:#f5a623;letter-spacing:.5px;margin-bottom:20px;font-family:var(--mono)}
+.pim-hero h1{font-family:var(--mono);font-size:clamp(28px,5vw,52px);font-weight:700;color:#e8edf8;line-height:1.2;margin-bottom:20px}
+.pim-hero h1 span{color:#f5a623}
+.pim-hero p{font-size:clamp(15px,2vw,18px);color:#8ba3cc;max-width:580px;margin:0 auto 36px}
+.pim-ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.pim-btn{padding:13px 28px;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;transition:all .2s}
+.pim-btn-primary{background:#f5a623;color:#000}.pim-btn-primary:hover{background:#ffb84d;transform:translateY(-1px)}
+.pim-btn-ghost{background:transparent;color:#e8edf8;border:1px solid #1e3060}.pim-btn-ghost:hover{border-color:#f5a623;color:#f5a623}
+
+/* Mockup */
+.pim-mockup{max-width:820px;margin:40px auto 0;background:#0b1628;border:1px solid #1e3060;border-radius:12px;overflow:hidden;box-shadow:0 32px 64px rgba(0,0,0,.5)}
+.pim-bar{padding:10px 14px;background:rgba(0,0,0,.3);border-bottom:1px solid #1e3060;display:flex;align-items:center;gap:7px}
+.pim-dot{width:9px;height:9px;border-radius:50%}
+.pim-url{flex:1;text-align:center;font-family:var(--mono);font-size:10px;color:#4a6490}
+.pim-live{display:flex;align-items:center;gap:3px}
+.pim-live-dot{width:6px;height:6px;border-radius:50%;background:#2ecc71;box-shadow:0 0 6px #2ecc71;animation:pim-pulse 2s infinite}
+@keyframes pim-pulse{0%,100%{box-shadow:0 0 4px #2ecc71}50%{box-shadow:0 0 10px #2ecc71}}
+.pim-live span{font-family:var(--mono);font-size:9px;color:#2ecc71;font-weight:700}
+.pim-mbody{padding:16px}
+.pim-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px}
+.pim-stat{background:rgba(0,0,0,.25);border:1px solid #1e3060;border-radius:8px;padding:10px 6px;text-align:center}
+.pim-stat-n{font-family:var(--mono);font-size:20px;font-weight:700;line-height:1}
+.pim-stat-l{font-size:8px;color:#4a6490;text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+.pim-row{display:flex;align-items:center;gap:10px;padding:9px 12px;background:rgba(0,0,0,.2);border-radius:6px;margin-bottom:7px;border-left:3px solid}
+.pim-bk{padding:2px 7px;border-radius:3px;font-size:8px;font-weight:700;font-family:var(--mono);text-transform:uppercase;white-space:nowrap}
+
+/* Sections */
+.pim-section{padding:64px 0}
+.pim-label{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#f5a623;margin-bottom:10px}
+.pim-title{font-family:var(--mono);font-size:clamp(22px,3.5vw,36px);font-weight:700;color:#1a2540;margin-bottom:14px;line-height:1.2}
+.pim-sub{font-size:17px;color:#4a6490;max-width:580px;line-height:1.7;margin-bottom:36px}
+
+/* VS Table */
+.pim-vs{width:100%;border-collapse:collapse;margin-top:8px}
+.pim-vs th{padding:10px 16px;text-align:left;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#8ba3cc;border-bottom:2px solid #e5e7eb}
+.pim-vs th:nth-child(2){color:#f5a623}
+.pim-vs td{padding:12px 16px;border-bottom:1px solid #f0f4f8;font-size:13px;color:#4a6490}
+.pim-vs tr:hover td{background:#f9fafb}
+.pim-ok{color:#16a34a;font-weight:700}.pim-no{color:#dc2626}.pim-pa{color:#d97706}
+
+/* Steps */
+.pim-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px}
+.pim-step{background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:24px 20px}
+.pim-step-n{font-family:var(--mono);font-size:36px;font-weight:700;color:#f5a623;opacity:.4;line-height:1;margin-bottom:10px}
+.pim-step h3{font-weight:700;font-size:15px;margin-bottom:6px;color:#1a2540}
+.pim-step p{font-size:13px;color:#64748b;line-height:1.5}
+
+/* Detection */
+.pim-detect-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.pim-detect-card{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:18px;display:flex;gap:12px}
+.pim-detect-icon{font-size:26px;flex-shrink:0}
+.pim-detect-label{font-size:12px;font-weight:700;font-family:var(--mono);color:#1a2540;margin-bottom:4px}
+.pim-detect-desc{font-size:12px;color:#64748b;line-height:1.5}
+.pim-detect-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;font-family:var(--mono);margin-top:6px}
+
+/* Pricing */
+.pim-price-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+.pim-price-card{background:#fff;border:2px solid #e5e7eb;border-radius:16px;padding:28px;position:relative}
+.pim-price-card.pim-featured{border-color:#f5a623;box-shadow:0 0 32px rgba(245,166,35,.15)}
+.pim-price-card.pim-featured::before{content:'Most Popular';position:absolute;top:14px;right:14px;padding:3px 10px;background:#f5a623;color:#000;border-radius:20px;font-size:10px;font-weight:700}
+.pim-price-name{font-size:18px;font-weight:700;color:#1a2540;margin-bottom:4px}
+.pim-price-desc{font-size:12px;color:#64748b;margin-bottom:20px;line-height:1.4}
+.pim-price-amount{font-family:var(--mono);font-size:44px;font-weight:700;color:#f5a623;line-height:1}
+.pim-price-period{font-size:12px;color:#94a3b8;margin-top:2px;margin-bottom:20px}
+.pim-features{list-style:none;margin-bottom:24px}
+.pim-features li{padding:5px 0;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:7px}
+.pim-features li::before{content:'✓';color:#16a34a;font-weight:700;flex-shrink:0}
+
+/* CTA Banner */
+.pim-cta-banner{background:linear-gradient(135deg,#060c18,#0f2040);border-radius:16px;padding:48px;text-align:center;margin-top:60px}
+.pim-cta-banner h2{font-family:var(--mono);font-size:clamp(22px,3vw,32px);color:#e8edf8;margin-bottom:12px}
+.pim-cta-banner p{color:#8ba3cc;font-size:16px;margin-bottom:28px;max-width:480px;margin-left:auto;margin-right:auto}
+
+@media(max-width:768px){
+  .pim-stats{grid-template-columns:repeat(3,1fr)}
+  .pim-vs{font-size:12px}.pim-vs th,.pim-vs td{padding:8px 8px}
+}
+</style>
+
+<div class="pim-wrap">
+
+<!-- HERO -->
+<div class="pim-hero">
+  <div class="pim-badge">⚡ Real-time · No Entra P2 · $10/tenant/month</div>
+  <h1>Protect Your <span>Privileged Accounts</span><br/>Before Damage Is Done</h1>
+  <p>Real-time anomaly detection for Global Admins and Intune Admins. Impossible travel, unknown devices, suspicious sign-ins — detected in seconds.</p>
+  <div class="pim-ctas">
+    <a href="https://identitymonitor.modernendpoint.tech" class="pim-btn pim-btn-primary">🚀 Start 14-Day Free Trial</a>
+    <a href="#pim-how" class="pim-btn pim-btn-ghost">See How It Works</a>
+  </div>
+  <div class="pim-mockup">
+    <div class="pim-bar">
+      <div class="pim-dot" style="background:#ff5f57"></div>
+      <div class="pim-dot" style="background:#febc2e"></div>
+      <div class="pim-dot" style="background:#28c840"></div>
+      <div class="pim-url">identitymonitor.modernendpoint.tech</div>
+      <div class="pim-live"><div class="pim-live-dot"></div><span>LIVE</span></div>
+    </div>
+    <div class="pim-mbody">
+      <div class="pim-stats">
+        <div class="pim-stat"><div class="pim-stat-n" style="color:#ff3b3b">2</div><div class="pim-stat-l">Critical</div></div>
+        <div class="pim-stat"><div class="pim-stat-n" style="color:#ff6b35">3</div><div class="pim-stat-l">High</div></div>
+        <div class="pim-stat"><div class="pim-stat-n" style="color:#f5a623">5</div><div class="pim-stat-l">Medium</div></div>
+        <div class="pim-stat"><div class="pim-stat-n" style="color:#e8edf8">10</div><div class="pim-stat-l">Open</div></div>
+        <div class="pim-stat"><div class="pim-stat-n" style="color:#f5a623">4</div><div class="pim-stat-l">Admins</div></div>
+        <div class="pim-stat"><div class="pim-stat-n" style="color:#2ecc71">7</div><div class="pim-stat-l">Resolved</div></div>
+      </div>
+      <div class="pim-row" style="border-color:#ff3b3b">
+        <span class="pim-bk" style="background:rgba(255,59,59,.15);color:#ff3b3b">🚨 critical</span>
+        <div style="flex:1"><div style="font-weight:600;font-size:12px;color:#e8edf8">Alex Johnson — Impossible Travel · Risk 92/100</div><div style="font-size:10px;color:#4a6490">9,200 km in 0.7h · Tel Aviv→Tokyo · Azure Portal (×2.0)</div></div>
+        <div style="font-size:10px;color:#4a6490">2 min ago</div>
+      </div>
+      <div class="pim-row" style="border-color:#ff6b35">
+        <span class="pim-bk" style="background:rgba(255,107,53,.15);color:#ff6b35">⚠️ high</span>
+        <div style="flex:1"><div style="font-weight:600;font-size:12px;color:#e8edf8">Sarah Mitchell — New Country: North Korea · Risk 78/100</div><div style="font-size:10px;color:#4a6490">High-risk country · Intune Admin Center</div></div>
+        <div style="font-size:10px;color:#4a6490">15 min ago</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VS MICROSOFT -->
+<div class="pim-section">
+  <div class="pim-label">Why not just use Microsoft?</div>
+  <div class="pim-title">The $21,600/Year You Don't Have to Spend</div>
+  <div class="pim-sub">Microsoft Identity Protection requires Entra ID P2. 200 users × $9/user/month = $21,600/year. We give you better protection for $10/month.</div>
+  <table class="pim-vs">
+    <thead><tr><th>Feature</th><th>⬡ Identity Monitor — $10/mo</th><th>Microsoft P2 — $9/user/mo</th></tr></thead>
+    <tbody>
+      <tr><td>Privileged account focus</td><td><span class="pim-ok">✓ Only monitors admins</span></td><td><span class="pim-pa">~ All users equally</span></td></tr>
+      <tr><td>Behavioral risk scoring</td><td><span class="pim-ok">✓ 0-100 score with context</span></td><td><span class="pim-pa">~ Basic risk levels</span></td></tr>
+      <tr><td>Telegram interactive playbook</td><td><span class="pim-ok">✓ Approve/block in-chat</span></td><td><span class="pim-no">✗ Not available</span></td></tr>
+      <tr><td>Works with Entra P1</td><td><span class="pim-ok">✓ No P2 required</span></td><td><span class="pim-no">✗ Requires P2</span></td></tr>
+      <tr><td>Custom work hours / timezone</td><td><span class="pim-ok">✓ Israeli/any timezone</span></td><td><span class="pim-no">✗ Not available</span></td></tr>
+      <tr><td>SIEM / Sentinel integration</td><td><span class="pim-ok">✓ Log Analytics + Webhooks</span></td><td><span class="pim-ok">✓ Native Sentinel</span></td></tr>
+      <tr><td>Country risk scoring</td><td><span class="pim-ok">✓ Russia/NK/CN = auto high</span></td><td><span class="pim-pa">~ Named locations</span></td></tr>
+      <tr><td>Cost for 200 users</td><td><span class="pim-ok" style="font-family:var(--mono);font-size:15px">$10/mo</span></td><td><span class="pim-no" style="font-family:var(--mono);font-size:15px">$1,800/mo</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- HOW IT WORKS -->
+<div class="pim-section" id="pim-how">
+  <div class="pim-label">How it works</div>
+  <div class="pim-title">Up and Running in 3 Minutes</div>
+  <div class="pim-steps">
+    <div class="pim-step"><div class="pim-step-n">01</div><h3>Connect Your Tenant</h3><p>Click "Sign in with Microsoft" — one admin consent. No agents, no scripts.</p></div>
+    <div class="pim-step"><div class="pim-step-n">02</div><h3>Baseline Built</h3><p>The system learns known IPs, countries, and devices for each privileged account.</p></div>
+    <div class="pim-step"><div class="pim-step-n">03</div><h3>Real-Time Monitoring</h3><p>Graph Webhooks push every sign-in in seconds. No polling, no delay.</p></div>
+    <div class="pim-step"><div class="pim-step-n">04</div><h3>Alert + Score + Act</h3><p>Risk score 0-100. Email + Telegram with one-tap Approve/Block. Critical = auto-revoke in 15 min.</p></div>
+  </div>
+</div>
+
+<!-- DETECTION -->
+<div class="pim-section">
+  <div class="pim-label">Smart Detection</div>
+  <div class="pim-title">Risk Score, Not Just Rules</div>
+  <div class="pim-sub">Every sign-in gets a 0-100 risk score based on multiple factors. Same anomaly from Outlook = medium. From Azure Portal at 3am from Russia = critical.</div>
+  <div class="pim-detect-grid">
+    <div class="pim-detect-card"><div class="pim-detect-icon">✈️</div><div><div class="pim-detect-label">Impossible Travel</div><div class="pim-detect-desc">Two sign-ins impossible to make in the given time based on distance and speed.</div><div class="pim-detect-badge" style="background:#fff0f0;color:#dc2626">CRITICAL · Base score 55+</div></div></div>
+    <div class="pim-detect-card"><div class="pim-detect-icon">🌍</div><div><div class="pim-detect-label">New Country</div><div class="pim-detect-desc">First sign-in from a new country. Russia/China/NK automatically escalate to critical.</div><div class="pim-detect-badge" style="background:#fff4f0;color:#ea580c">HIGH · +35 for high-risk nations</div></div></div>
+    <div class="pim-detect-card"><div class="pim-detect-icon">🏛️</div><div><div class="pim-detect-label">App Risk Weighting</div><div class="pim-detect-desc">Azure Portal sign-in = 2× risk multiplier. Outlook = 1×. Same anomaly, different response.</div><div class="pim-detect-badge" style="background:#fff9f0;color:#d97706">CONTEXT-AWARE · ×2.0 portals</div></div></div>
+    <div class="pim-detect-card"><div class="pim-detect-icon">⚡</div><div><div class="pim-detect-label">Sign-in Velocity</div><div class="pim-detect-desc">4+ sign-ins in 10 minutes triggers anomaly — potential credential stuffing or automated attack.</div><div class="pim-detect-badge" style="background:#fffff0;color:#ca8a04">BEHAVIORAL · New detection</div></div></div>
+    <div class="pim-detect-card"><div class="pim-detect-icon">📱</div><div><div class="pim-detect-label">Unknown Device</div><div class="pim-detect-desc">Authentication from a device never previously seen for this privileged account.</div><div class="pim-detect-badge" style="background:#fff9f0;color:#d97706">MEDIUM</div></div></div>
+    <div class="pim-detect-card"><div class="pim-detect-icon">🌙</div><div><div class="pim-detect-label">Off-Hours Sign-in</div><div class="pim-detect-desc">Configurable per timezone and work schedule. Sunday–Thursday 07:00–20:00 for Israeli organizations.</div><div class="pim-detect-badge" style="background:#f0f9ff;color:#0369a1">LOW · Configurable</div></div></div>
+  </div>
+</div>
+
+<!-- PRICING -->
+<div class="pim-section" id="pim-pricing" style="text-align:center">
+  <div class="pim-label">Pricing</div>
+  <div class="pim-title" style="margin:0 auto">$10 per Tenant. That's It.</div>
+  <div class="pim-sub" style="margin:12px auto 40px;text-align:center">No per-user fees. No hidden costs. 14-day free trial, no credit card.</div>
+  <div class="pim-price-grid" style="max-width:880px;margin:0 auto">
+    <div class="pim-price-card">
+      <div class="pim-price-name">Starter</div>
+      <div class="pim-price-desc">For IT admins managing their own organization</div>
+      <div class="pim-price-amount">$10</div>
+      <div class="pim-price-period">per tenant / month</div>
+      <ul class="pim-features">
+        <li>1 Microsoft 365 tenant</li>
+        <li>All 6+ anomaly detectors</li>
+        <li>Email + Telegram alerts</li>
+        <li>PDF security reports</li>
+        <li>14-day free trial</li>
+      </ul>
+      <a href="https://identitymonitor.modernendpoint.tech" class="pim-btn pim-btn-ghost" style="display:block;text-align:center">Start Free Trial</a>
+    </div>
+    <div class="pim-price-card pim-featured">
+      <div class="pim-price-name">MSP / Multi-Tenant</div>
+      <div class="pim-price-desc">For MSPs protecting multiple clients</div>
+      <div class="pim-price-amount">$10</div>
+      <div class="pim-price-period">per tenant / month · unlimited tenants</div>
+      <ul class="pim-features">
+        <li>Unlimited tenants</li>
+        <li>Multi-admin per tenant</li>
+        <li>SIEM / Sentinel integration</li>
+        <li>Custom detection rules</li>
+        <li>Behavioral risk scoring</li>
+        <li>Audit log (compliance)</li>
+      </ul>
+      <a href="https://identitymonitor.modernendpoint.tech" class="pim-btn pim-btn-primary" style="display:block;text-align:center">Start Free Trial →</a>
+    </div>
+    <div class="pim-price-card">
+      <div class="pim-price-name">Enterprise</div>
+      <div class="pim-price-desc">Custom deployment + white-label</div>
+      <div class="pim-price-amount" style="font-size:28px;margin-top:6px">Let's Talk</div>
+      <div class="pim-price-period">volume pricing</div>
+      <ul class="pim-features">
+        <li>White-label option</li>
+        <li>Custom integrations</li>
+        <li>SLA guarantee</li>
+        <li>On-premise option</li>
+      </ul>
+      <a href="mailto:menahem@modernendpoint.tech?subject=Enterprise%20Inquiry" class="pim-btn pim-btn-ghost" style="display:block;text-align:center">Contact Sales</a>
+    </div>
+  </div>
+</div>
+
+<!-- CTA BANNER -->
+<div class="pim-cta-banner">
+  <h2>Start Protecting Your Admins Today</h2>
+  <p>14-day free trial. No credit card. Connect in 3 minutes.</p>
+  <a href="https://identitymonitor.modernendpoint.tech" class="pim-btn pim-btn-primary" style="font-size:16px;padding:14px 36px">🚀 Start Free Trial →</a>
+</div>
+
+</div>
