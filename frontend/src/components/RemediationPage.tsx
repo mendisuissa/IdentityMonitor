@@ -18,7 +18,6 @@ type Finding = {
   affectedMachineCount?: number;
   affectedMachines?: string[];
   inferenceSource?: string | null;
-  relatedProducts?: string[];
 };
 
 function getFriendlyErrorMessage(error: any) {
@@ -39,15 +38,7 @@ function normalizeProblemLabel(finding: Finding) {
 function getDisplayProduct(finding: Finding) {
   const value = finding.productName || finding.softwareName || finding.name || '';
   if (!value || /^CVE-/i.test(value) || /^TVM-/i.test(value)) {
-    const related = Array.isArray(finding.relatedProducts) ? finding.relatedProducts.filter(Boolean) : [];
-    return related[0] || 'Unknown product';
-  }
-  const related = Array.isArray(finding.relatedProducts) ? finding.relatedProducts.filter(Boolean) : [];
-  if (related.length > 1 && !related.includes(value)) {
-    return `${value} (+${related.length} related)`;
-  }
-  if (related.length > 1) {
-    return `${value} (+${related.length - 1} more)`;
+    return 'Unknown product';
   }
   return value;
 }
@@ -338,6 +329,21 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
               <div className="label" style={{ marginTop: 12 }}>Recommended action</div>
               <div className="value">{selectedFinding.recommendation || 'Apply the vendor-provided update or mitigation path for the affected product.'}</div>
+
+              {Array.isArray((selectedFinding as any).relatedProducts) && (selectedFinding as any).relatedProducts.length > 1 ? (
+                <>
+                  <div className="label" style={{ marginTop: 12 }}>Related products</div>
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    {(selectedFinding as any).relatedProducts.slice(0, 8).map((item: any, idx: number) => (
+                      <li key={`${item.productName || 'product'}-${item.productVersion || idx}`}>
+                        {item.productName || 'Unknown product'}
+                        {item.productVersion ? ` ${item.productVersion}` : ''}
+                        {item.publisher ? ` · ${item.publisher}` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
 
               <div className="label" style={{ marginTop: 12 }}>Affected devices</div>
               {machinesLoading ? <div className="value">Loading affected devices...</div> : affectedMachines.length ? (
