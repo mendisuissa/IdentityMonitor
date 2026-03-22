@@ -464,6 +464,10 @@ export const api = {
       updateType?: 'security' | 'feature';
       rebootBehavior?: 'ifRequired' | 'force' | 'defer';
       targetDeviceIds?: string[];
+      deviceIds?: string[];
+      policyTarget?: string;
+      scriptName?: string;
+      notes?: string;
     };
   }) =>
     apiFetch<any>('/remediation/plan', {
@@ -481,6 +485,10 @@ export const api = {
       updateType?: 'security' | 'feature';
       rebootBehavior?: 'ifRequired' | 'force' | 'defer';
       targetDeviceIds?: string[];
+      deviceIds?: string[];
+      policyTarget?: string;
+      scriptName?: string;
+      notes?: string;
     };
   }) =>
     apiFetch<any>('/remediation/execute', {

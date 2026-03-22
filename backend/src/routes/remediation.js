@@ -1,71 +1,43 @@
 const express = require('express');
 const { classifyFinding } = require('../services/remediationCatalog');
-const nativeExecutor = require('../services/nativeRemediationExecutor');
 const {
-  getExternalHealth,
   resolveApplicationRemediation,
   executeApplicationRemediation
 } = require('../services/webappExecutionClient');
+const {
+  planNativeRemediation,
+  executeNativeRemediation
+} = require('../services/nativeRemediationExecutor');
 
 const router = express.Router();
 
-function buildStatusCard(code, label, tone, message) {
-  return { code, label, tone, message };
+function getTenantIdFromRequest(req) {
+  const sessionTenantId = req.session?.tenant?.tenantId || null;
+  const requestedTenantId = req.body?.tenantId || null;
+
+  if (!sessionTenantId) {
+    const err = new Error('No authenticated tenant session was found.');
+    err.status = 401;
+    throw err;
+  }
+
+  if (requestedTenantId && requestedTenantId !== sessionTenantId) {
+    const err = new Error('Cross-tenant remediation requests are not allowed.');
+    err.status = 403;
+    throw err;
+  }
+
+  return sessionTenantId;
 }
 
-function buildExternalNotConnectedPlan(classification, externalHealth) {
-  const message = externalHealth?.details?.message || externalHealth?.error || 'Not connected. Click Connect first.';
-
-  return {
-    executor: 'webapp',
-    supported: false,
-    remediationType: 'manual-review',
-    autoRemediate: false,
-    app: null,
-    candidates: [],
-    checkedSources: [],
-    message,
-    executionMode: 'external-not-connected',
-    statusCard: buildStatusCard('external-not-connected', 'external not connected', 'danger', message),
-    executionPath: {
-      classification: classification.type,
-      family: classification.family,
-      executor: 'webapp',
-      status: 'external-not-connected',
-      route: 'Application -> Webapp external remediation'
-    },
-    external: {
-      connected: false,
-      status: externalHealth?.status || 401,
-      details: externalHealth?.details || { message },
-      baseUrl: externalHealth?.baseUrl || null,
-      tokenConfigured: !!externalHealth?.tokenConfigured,
-      sharedTokenConfigured: !!externalHealth?.sharedTokenConfigured,
-      sharedTokenAccepted: !!externalHealth?.sharedTokenAccepted
-    }
-  };
-}
-
-router.get('/health', async (_req, res) => {
-  const external = await getExternalHealth();
-  res.json({ ok: true, service: 'identity-remediation-orchestrator', external });
+router.get('/health', (_req, res) => {
+  res.json({ ok: true, service: 'identity-remediation-orchestrator' });
 });
 
 router.post('/plan', async (req, res) => {
   try {
-    const sessionTenantId = req.session?.tenant?.tenantId || null;
-    const requestedTenantId = req.body?.tenantId || null;
-
-    if (!sessionTenantId) {
-      return res.status(401).json({ ok: false, error: 'No authenticated tenant session was found.' });
-    }
-
-    if (requestedTenantId && requestedTenantId !== sessionTenantId) {
-      return res.status(403).json({ ok: false, error: 'Cross-tenant remediation requests are not allowed.' });
-    }
-
-    const { finding = {} } = req.body || {};
-    const tenantId = sessionTenantId;
+    const tenantId = getTenantIdFromRequest(req);
+    const { finding = {}, options = {} } = req.body || {};
     const classification = classifyFinding(finding);
 
     if (classification.type === 'application') {
@@ -80,39 +52,60 @@ router.post('/plan', async (req, res) => {
           candidates: resolution?.resolution?.candidates || [],
           checkedSources: resolution?.resolution?.checkedSources || [],
           message: resolution?.resolution?.message || null,
-          executionMode: resolution?.resolution?.executionMode || (resolution?.resolution?.supported ? 'live-deploy' : 'guided-manual'),
-          statusCard: resolution?.resolution?.statusCard || buildStatusCard(
-            resolution?.resolution?.supported ? 'live-deploy' : 'manual-review-required',
-            resolution?.resolution?.supported ? 'live deploy' : 'manual review required',
-            resolution?.resolution?.supported ? 'success' : 'warning',
-            resolution?.resolution?.message || null
-          ),
+          executionMode: resolution?.resolution?.executionMode || 'webapp-live',
+          statusCard: resolution?.resolution?.statusCard || null,
           executionPath: resolution?.resolution?.executionPath || {
-            classification: classification.type,
-            family: classification.family,
+            classification: 'application',
+            family: 'software',
             executor: 'webapp',
-            status: resolution?.resolution?.supported ? 'live-deploy' : 'manual-review-required',
+            status: 'ready',
             route: 'Application -> Webapp external remediation'
           },
           rawResolution: resolution
         };
         return res.json({ ok: true, tenantId, classification, finding, plan });
       } catch (error) {
-        const externalHealth = await getExternalHealth();
-        const plan = buildExternalNotConnectedPlan(classification, externalHealth);
         return res.json({
           ok: true,
           tenantId,
           classification,
           finding,
-          plan,
+          plan: {
+            executor: 'webapp',
+            supported: false,
+            remediationType: 'manual-review',
+            autoRemediate: false,
+            app: null,
+            candidates: [],
+            checkedSources: [],
+            message: error?.details?.message || 'Not connected. Click Connect first.',
+            executionMode: 'external-not-connected',
+            statusCard: {
+              code: 'external-not-connected',
+              label: 'external not connected',
+              tone: 'danger',
+              message: error?.details?.message || 'Not connected. Click Connect first.'
+            },
+            executionPath: {
+              classification: 'application',
+              family: 'software',
+              executor: 'webapp',
+              status: 'external-not-connected',
+              route: 'Application -> Webapp external remediation'
+            },
+            external: {
+              connected: false,
+              status: error.status || 401,
+              details: error.details || { message: error.message }
+            }
+          },
           warning: 'External app remediation is not connected.'
         });
       }
     }
 
-    const nativePlan = nativeExecutor.plan(classification, finding);
-    return res.json({ ok: true, tenantId, classification, finding, plan: nativePlan });
+    const plan = await planNativeRemediation({ classification, finding, options });
+    return res.json({ ok: true, tenantId, classification, finding, plan });
   } catch (error) {
     return res.status(error.status || 500).json({ ok: false, error: error.message, details: error.details || null });
   }
@@ -120,19 +113,8 @@ router.post('/plan', async (req, res) => {
 
 router.post('/execute', async (req, res) => {
   try {
-    const sessionTenantId = req.session?.tenant?.tenantId || null;
-    const requestedTenantId = req.body?.tenantId || null;
-
-    if (!sessionTenantId) {
-      return res.status(401).json({ ok: false, error: 'No authenticated tenant session was found.' });
-    }
-
-    if (requestedTenantId && requestedTenantId !== sessionTenantId) {
-      return res.status(403).json({ ok: false, error: 'Cross-tenant remediation requests are not allowed.' });
-    }
-
-    const { approvalId = null, finding = {}, devices = [], plan = {} } = req.body || {};
-    const tenantId = sessionTenantId;
+    const tenantId = getTenantIdFromRequest(req);
+    const { approvalId = null, finding = {}, devices = [], plan = {}, options = {} } = req.body || {};
     const classification = classifyFinding(finding);
 
     if (plan.executor === 'webapp' || classification.type === 'application') {
@@ -142,12 +124,12 @@ router.post('/execute', async (req, res) => {
           approvalId,
           finding,
           devices,
-          plan
+          plan,
+          options
         });
 
         return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'webapp', result });
       } catch (error) {
-        const externalHealth = await getExternalHealth();
         return res.json({
           ok: true,
           tenantId,
@@ -157,22 +139,23 @@ router.post('/execute', async (req, res) => {
             supported: false,
             status: 'external-not-connected',
             executionMode: 'guided-manual',
-            message: 'External application remediation is not connected. Review the plan and connect the Webapp remediation service first.',
-            external: externalHealth
+            message: 'External application remediation is not connected. Review the plan and connect the Webapp remediation service first.'
           }
         });
       }
     }
 
-    const result = nativeExecutor.execute(classification, {
-      approvalId,
+    const result = await executeNativeRemediation({
+      tenantId,
       finding,
-      devices,
-      plan,
-      tenantId
+      classification,
+      options: {
+        ...options,
+        deviceIds: options.deviceIds || devices
+      }
     });
 
-    return res.json({ ok: true, tenantId, approvalId, result });
+    return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'native', result });
   } catch (error) {
     return res.status(error.status || 500).json({
       ok: false,
