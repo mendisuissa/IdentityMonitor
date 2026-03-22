@@ -1,19 +1,18 @@
-Apply this delta on top of your latest ZIP baseline.
+Apply this delta on top of your current UI baseline.
 
-Included:
-- frontend/src/components/RemediationPage.tsx
+Files included:
+- backend/src/services/remediationCatalog.js
+- backend/src/services/nativeRemediationExecutor.js
+- backend/src/routes/remediation.js
 
-What this delta does:
-- Restores the cleaner Defender-style tabbed remediation UI
-- Keeps the quick filters:
-  - Remediation required only
-  - Exposed devices only
-- Keeps the current planning / execute wiring
-- Keeps Windows Update / Intune / Script controls inside the Plan tab
-- Moves raw JSON under collapsed Technical details
+What it does:
+- Preserves the current tabbed Remediation UI (no frontend files changed)
+- Improves classification for windows-update / intune-policy / script before generic application matching
+- Enables Windows Update live execution through Graph beta deployment flow
+- Keeps Intune Policy and Script as native queued execution with taskId / queuedAt / summary
+- Extends /api/remediation/health to include external connector status
 
-What it does NOT change:
-- backend routes
-- token flow
-- defender mapping
-- external connector logic
+Important for Windows Update live execution:
+- CLIENT_ID and CLIENT_SECRET must be configured
+- App registration needs Graph permissions for Windows Update deployment
+- Use Microsoft Entra device IDs when executing Windows Update
