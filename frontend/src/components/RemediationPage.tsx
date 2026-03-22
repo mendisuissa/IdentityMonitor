@@ -276,6 +276,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           rebootBehavior,
           policyTarget,
           scriptName,
+          affectedDeviceNames: affectedMachines,
         },
       });
       setPlanResult(result);
@@ -288,24 +289,26 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     }
   }
 
-  async function handleExecute() {
+  async function handleExecute(runNow = false) {
     if (!selectedFinding || !planResult?.plan) return;
     setExecuting(true);
     setError('');
     setTechnicalError('');
     try {
       const deviceIds = toCsvLines(deviceIdsText);
+      const fallbackNames = deviceIds.length ? [] : affectedMachines;
       const result = await api.executeRemediation({
         tenantId,
-        approvalId: 'apr-ui-001',
+        approvalId: runNow ? 'apr-ui-run-now' : 'apr-ui-001',
         devices: deviceIds,
-        finding: selectedFinding,
+        finding: { ...selectedFinding, affectedMachines },
         plan: planResult.plan,
         options: {
           updateType,
           rebootBehavior,
           deviceIds,
           targetDeviceIds: deviceIds,
+          affectedDeviceNames: fallbackNames,
           policyTarget,
           scriptName,
           notes: executionNotes,
@@ -609,7 +612,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                           <option value="force">Force reboot</option>
                           <option value="defer">Try to defer reboot</option>
                         </select>
-                        <textarea className="rem-input" value={deviceIdsText} onChange={(e) => setDeviceIdsText(e.target.value)} rows={4} placeholder="Microsoft Entra device IDs, comma or new line separated" />
+                        <textarea className="rem-input" value={deviceIdsText} onChange={(e) => setDeviceIdsText(e.target.value)} rows={4} placeholder="Microsoft Entra device IDs, comma or new line separated. Leave empty to use exposed device names automatically." />
                       </div>
                     ) : null}
 
@@ -631,7 +634,10 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
                     <div className="rem-plan-actions">
                       <button className="btn btn-primary" onClick={handlePlan} disabled={planning || needsAdminConsent}>{planning ? 'Planning…' : 'Refresh plan'}</button>
-                      <button className="btn btn-ghost" onClick={handleExecute} disabled={executing || !planResult?.plan || needsAdminConsent}>{executing ? 'Executing…' : 'Execute remediation'}</button>
+                      {isWindowsExecutor ? (
+                        <button className="btn btn-secondary" onClick={() => handleExecute(true)} disabled={executing || !planResult?.plan || needsAdminConsent}>{executing ? 'Running…' : 'Run Windows Update now'}</button>
+                      ) : null}
+                      <button className="btn btn-ghost" onClick={() => handleExecute(false)} disabled={executing || !planResult?.plan || needsAdminConsent}>{executing ? 'Executing…' : 'Execute remediation'}</button>
                     </div>
 
                     <details className="rem-raw-json">

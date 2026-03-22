@@ -1,7 +1,3 @@
-function textContainsAny(text, hints = []) {
-  return hints.some((hint) => text.includes(hint));
-}
-
 function classifyFinding(finding = {}) {
   const category = String(finding.category || '').toLowerCase();
   const productName = String(finding.productName || finding.softwareName || finding.name || '').toLowerCase();
@@ -11,47 +7,24 @@ function classifyFinding(finding = {}) {
 
   const text = [category, productName, publisher, description, recommendation].join(' ');
 
-  const windowsUpdateHints = [
-    'windows update', 'security update', 'feature update', 'quality update', 'cumulative update',
-    'servicing stack', 'monthly rollup', 'microsoft windows', 'windows server', 'operating system',
-    'kb', 'patch tuesday'
-  ];
-  const intuneHints = [
-    'intune', 'configuration profile', 'compliance policy', 'device policy', 'endpoint security policy',
-    'attack surface reduction', 'asr rule', 'device configuration'
-  ];
-  const scriptHints = [
-    'script', 'powershell', 'remediation script', 'proactive remediation', 'shell script', 'detection script'
-  ];
-  const appHints = [
-    'chrome', 'firefox', 'edge', 'webview', '7-zip', '7zip', 'notepad++', 'acrobat', 'office', 'vlc',
-    'java', 'python', 'node.js', 'mongodb', 'webex', 'zoom', 'teams', 'adobe'
-  ];
+  const appHints = ['chrome', 'firefox', 'edge', 'webview2', '7-zip', '7zip', 'notepad++', 'acrobat', 'office', 'vlc', 'java'];
+  const windowsUpdateHints = ['windows update', 'security update', 'feature update', 'quality update', 'kb', 'cumulative update', 'windows component', 'operating system', 'patch tuesday', 'os build'];
+  const intuneHints = ['intune', 'configuration profile', 'compliance policy', 'device policy', 'attack surface reduction policy', 'endpoint security policy'];
+  const scriptHints = ['script', 'powershell', 'remediation script', 'proactive remediation', 'detection script', 'remediation package'];
 
-  if (textContainsAny(text, intuneHints)) {
-    return { type: 'intune-policy', family: 'configuration' };
-  }
-
-  if (textContainsAny(text, scriptHints)) {
-    return { type: 'script', family: 'configuration' };
-  }
-
-  if (
-    textContainsAny(text, windowsUpdateHints) ||
-    category.includes('windows') ||
-    category.includes('os') ||
-    productName.startsWith('windows ') ||
-    productName.includes('windows server') ||
-    /^kb\d+/i.test(productName)
-  ) {
+  if (windowsUpdateHints.some((hint) => text.includes(hint)) || category.includes('windows') || productName.includes('windows')) {
     return { type: 'windows-update', family: 'platform' };
   }
 
-  if (
-    category.includes('application') ||
-    textContainsAny(text, appHints) ||
-    (publisher && publisher !== 'microsoft windows' && !productName.includes('windows'))
-  ) {
+  if (intuneHints.some((hint) => text.includes(hint))) {
+    return { type: 'intune-policy', family: 'configuration' };
+  }
+
+  if (scriptHints.some((hint) => text.includes(hint))) {
+    return { type: 'script', family: 'configuration' };
+  }
+
+  if (category.includes('application') || appHints.some((hint) => text.includes(hint)) || (publisher && !text.includes('microsoft windows'))) {
     return { type: 'application', family: 'software' };
   }
 
