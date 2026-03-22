@@ -20,38 +20,6 @@ type Finding = {
   inferenceSource?: string | null;
 };
 
-type PlanOptions = {
-  updateType: 'security' | 'feature';
-  rebootBehavior: 'ifRequired' | 'force' | 'defer';
-};
-
-const badgeStyles: Record<string, React.CSSProperties> = {
-  'live deploy': { background: '#052e16', color: '#bbf7d0', border: '1px solid #166534' },
-  'bundle created': { background: '#172554', color: '#bfdbfe', border: '1px solid #1d4ed8' },
-  'manual review required': { background: '#3f2a0d', color: '#fde68a', border: '1px solid #92400e' },
-  'external not connected': { background: '#3f0f1a', color: '#fecdd3', border: '1px solid #be123c' },
-};
-
-function StatusBadge({ value }: { value?: string | null }) {
-  const label = value || 'manual review required';
-  return (
-    <span style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6,
-      padding: '4px 10px',
-      borderRadius: 999,
-      fontSize: 12,
-      fontWeight: 600,
-      textTransform: 'uppercase',
-      letterSpacing: 0.4,
-      ...(badgeStyles[label] || badgeStyles['manual review required'])
-    }}>
-      {label}
-    </span>
-  );
-}
-
 function getFriendlyErrorMessage(error: any) {
   const raw = error?.message || error?.error || error?.details?.error?.message || '';
   const normalized = String(raw).toLowerCase();
@@ -83,13 +51,23 @@ function isCveId(value?: string | null) {
   return !!value && /^CVE-/i.test(value);
 }
 
-function getDownloadUrl(execResult: any) {
-  return execResult?.result?.downloadUrl || execResult?.result?.bundleUrl || execResult?.result?.artifact?.downloadUrl || '';
+function mapRebootBehavior(value: string) {
+  if (value === 'force') return 'force-reboot';
+  if (value === 'defer') return 'defer-reboot';
+  return 'reboot-if-required';
 }
 
-function getExecutionPath(planResult: any, execResult: any) {
-  const path = execResult?.result?.executionPath || planResult?.plan?.executionPath || [];
-  return Array.isArray(path) ? path : [];
+function getStatusBadgeStyle(code?: string) {
+  if (code === 'live-deploy' || code === 'native-queued') return { background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.45)', color: '#86efac' };
+  if (code === 'bundle-created') return { background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.45)', color: '#93c5fd' };
+  if (code === 'external-not-connected') return { background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.45)', color: '#fca5a5' };
+  return { background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.45)', color: '#fcd34d' };
+}
+
+function getBundleInfo(execResult: any) {
+  const result = execResult?.result || execResult || {};
+  const delivery = result?.delivery || {};
+  return delivery?.bundle || result?.bundle || null;
 }
 
 type Props = { tenantId?: string; tenantName?: string };
@@ -117,7 +95,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [affectedMachines, setAffectedMachines] = useState<string[]>([]);
   const [affectedMachinesError, setAffectedMachinesError] = useState('');
-  const [planOptions, setPlanOptions] = useState<PlanOptions>({ updateType: 'security', rebootBehavior: 'ifRequired' });
+  const [updateType, setUpdateType] = useState<'security' | 'feature'>('security');
+  const [rebootBehavior, setRebootBehavior] = useState<'ifRequired' | 'force' | 'defer'>('ifRequired');
+  const [targetDeviceIds, setTargetDeviceIds] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -193,6 +173,10 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   }, [search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity]);
 
   const selectedFinding = useMemo(() => filteredFindings[selectedIndex] || null, [filteredFindings, selectedIndex]);
+  const classificationType = planResult?.classification?.type || '';
+  const planStatus = planResult?.plan?.statusCard || null;
+  const executionPath = planResult?.plan?.executionPath || null;
+  const bundleInfo = getBundleInfo(execResult);
 
   useEffect(() => {
     let mounted = true;
@@ -235,7 +219,15 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setTechnicalError('');
     setExecResult(null);
     try {
-      const result = await api.planRemediation({ tenantId, finding: selectedFinding, options: planOptions });
+      const result = await api.planRemediation({
+        tenantId,
+        finding: selectedFinding,
+        options: {
+          updateType,
+          rebootBehavior,
+          targetDeviceIds: targetDeviceIds.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean)
+        }
+      });
       setPlanResult(result);
     } catch (err: any) {
       setError(err?.message || 'Planning failed.');
@@ -257,7 +249,11 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         devices: affectedMachines,
         finding: selectedFinding,
         plan: planResult.plan,
-        options: planOptions,
+        options: {
+          updateType,
+          rebootBehavior,
+          targetDeviceIds: targetDeviceIds.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean)
+        }
       });
       setExecResult(result);
     } catch (err: any) {
@@ -265,6 +261,33 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : '');
     } finally {
       setExecuting(false);
+    }
+  }
+
+  function handleDownloadBundle() {
+    const bundle = bundleInfo;
+    if (!bundle) return;
+
+    if (bundle.downloadUrl) {
+      window.open(bundle.downloadUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    if (bundle.base64) {
+      const mimeType = bundle.mimeType || 'application/zip';
+      const fileName = bundle.fileName || 'remediation-bundle.zip';
+      const binary = atob(bundle.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     }
   }
 
@@ -276,13 +299,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setFilterCategory('');
     setFilterSeverity('');
   };
-
-  const classificationType = planResult?.classification?.type || null;
-  const isApplicationPlan = classificationType === 'application';
-  const showNativeControls = classificationType && classificationType !== 'application';
-  const executionPath = getExecutionPath(planResult, execResult);
-  const downloadUrl = getDownloadUrl(execResult);
-  const currentStatus = execResult?.result?.status || planResult?.plan?.status || null;
 
   return (
     <div className="page-shell">
@@ -350,7 +366,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       </section>
 
       <section className="panel">
-        <div className="panel-header"><div><h2>Plan Details</h2><p>See exactly what product is affected, which executor will run, and what path will be used.</p></div></div>
+        <div className="panel-header"><div><h2>Plan Details</h2><p>See exactly which executor will run, and what path will be used.</p></div></div>
         <div className="stack">
           {error ? (
             <div className="detail-card" style={{ borderColor: '#7f1d1d' }}>
@@ -389,76 +405,99 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             </div>
           ) : <div className="detail-card">No finding selected.</div>}
 
-          {showNativeControls ? (
+          {classificationType === 'windows-update' ? (
             <div className="detail-card">
-              <div className="label">Native execution options</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginTop: 10 }}>
-                <label>
+              <div className="label">Windows Update options</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 10 }}>
+                <div>
+                  <div className="label">Update now</div>
+                  <div className="muted">This native executor creates a WUfB deployment immediately after planning and execution.</div>
+                </div>
+                <div>
                   <div className="label">Update type</div>
-                  <select value={planOptions.updateType} onChange={(e) => setPlanOptions((current) => ({ ...current, updateType: e.target.value as 'security' | 'feature' }))}>
+                  <select value={updateType} onChange={(e) => setUpdateType(e.target.value as 'security' | 'feature')}>
                     <option value="security">Security</option>
                     <option value="feature">Feature</option>
                   </select>
-                </label>
-                <label>
+                </div>
+                <div>
                   <div className="label">Reboot behavior</div>
-                  <select value={planOptions.rebootBehavior} onChange={(e) => setPlanOptions((current) => ({ ...current, rebootBehavior: e.target.value as 'ifRequired' | 'force' | 'defer' }))}>
-                    <option value="ifRequired">If required</option>
+                  <select value={rebootBehavior} onChange={(e) => setRebootBehavior(e.target.value as 'ifRequired' | 'force' | 'defer')}>
+                    <option value="ifRequired">Reboot if required</option>
                     <option value="force">Force reboot</option>
                     <option value="defer">Defer reboot</option>
                   </select>
-                </label>
+                </div>
+                <div>
+                  <div className="label">Target device IDs</div>
+                  <textarea value={targetDeviceIds} onChange={(e) => setTargetDeviceIds(e.target.value)} rows={5} placeholder="Paste Microsoft Entra device IDs, one per line or comma-separated" />
+                </div>
               </div>
-              <div className="muted" style={{ marginTop: 10 }}>These controls apply only to native execution paths. Application findings stay on the external Webapp path.</div>
-            </div>
-          ) : planResult?.classification?.type === 'application' ? (
-            <div className="detail-card">
-              <div className="label">External application path</div>
-              <div className="value">This finding is classified as an application issue and will stay on the Webapp remediation executor. Native update options are intentionally hidden.</div>
             </div>
           ) : null}
 
           {planResult ? (
             <div className="detail-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div>
-                  <div className="label">Executor</div><div className="value">{planResult.plan?.executor || 'n/a'}</div>
+                  <div className="label">Executor</div>
+                  <div className="value">{planResult.plan?.executor || 'n/a'}</div>
                 </div>
-                <StatusBadge value={planResult.plan?.status} />
+                {planStatus ? (
+                  <span style={{ ...getStatusBadgeStyle(planStatus.code), borderRadius: 999, padding: '6px 10px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3 }}>{planStatus.label}</span>
+                ) : null}
               </div>
-              <div className="label" style={{ marginTop: 12 }}>Execution mode</div><div className="value">{planResult.plan?.executionMode || 'n/a'}</div>
-              <div className="label" style={{ marginTop: 12 }}>Classification</div><div className="value">{planResult.classification?.type || 'n/a'}</div>
-              <div className="label" style={{ marginTop: 12 }}>Execution path</div>
-              <div className="value">{(planResult.plan?.executionPath || []).join(' → ') || 'n/a'}</div>
-              {planResult.plan?.message ? <><div className="label" style={{ marginTop: 12 }}>Planner message</div><div className="value">{planResult.plan.message}</div></> : null}
-              {planResult.plan?.note ? <><div className="label" style={{ marginTop: 12 }}>Planner note</div><div className="value">{planResult.plan.note}</div></> : null}
-              {planResult.plan?.checkedSources?.length ? <><div className="label" style={{ marginTop: 12 }}>Checked sources</div><div className="value">{planResult.plan.checkedSources.join(', ')}</div></> : null}
-              <div className="label" style={{ marginTop: 12 }}>Raw plan</div><pre className="json-box">{JSON.stringify(planResult, null, 2)}</pre>
+              <div className="label" style={{ marginTop: 12 }}>Execution mode</div>
+              <div className="value">{planResult.plan?.executionMode || 'n/a'}</div>
+              {executionPath ? (
+                <>
+                  <div className="label" style={{ marginTop: 12 }}>Execution path</div>
+                  <div className="value">{executionPath.route}</div>
+                </>
+              ) : null}
+              {planStatus?.message ? (
+                <>
+                  <div className="label" style={{ marginTop: 12 }}>Plan status</div>
+                  <div className="value">{planStatus.message}</div>
+                </>
+              ) : null}
+              {planResult?.warning ? (
+                <div className="detail-card" style={{ marginTop: 12, borderColor: '#7f1d1d' }}>{planResult.warning}</div>
+              ) : null}
+              <div className="label" style={{ marginTop: 12 }}>Raw plan</div>
+              <pre className="json-box">{JSON.stringify(planResult, null, 2)}</pre>
             </div>
           ) : <div className="detail-card">Run planning to generate a remediation path.</div>}
 
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary" onClick={handleExecute} disabled={executing || !planResult?.plan || needsAdminConsent}>
-              {executing ? 'Executing...' : (planResult?.classification?.type === 'windows-update' ? 'Update now' : 'Execute Remediation')}
-            </button>
-            {currentStatus === 'bundle created' && downloadUrl ? (
-              <a className="btn btn-primary" href={downloadUrl} target="_blank" rel="noreferrer">Download remediation bundle</a>
-            ) : null}
-          </div>
+          <button className="btn btn-secondary" onClick={handleExecute} disabled={executing || !planResult?.plan || needsAdminConsent}>
+            {executing ? 'Executing...' : 'Execute Remediation'}
+          </button>
 
           {execResult ? (
             <div className="detail-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div>
-                  <div className="label">External remediation result</div>
-                  <div className="value">{execResult.result?.message || execResult.result?.outcome || 'Execution completed.'}</div>
+                  <div className="label">Execution result</div>
+                  <div className="value">{execResult?.result?.message || execResult?.result?.status || 'Completed'}</div>
                 </div>
-                <StatusBadge value={execResult.result?.status} />
+                {execResult?.result?.statusCard ? (
+                  <span style={{ ...getStatusBadgeStyle(execResult.result.statusCard.code), borderRadius: 999, padding: '6px 10px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3 }}>{execResult.result.statusCard.label}</span>
+                ) : null}
               </div>
-              <div className="label" style={{ marginTop: 12 }}>Execution path</div>
-              <div className="value">{executionPath.join(' → ') || 'n/a'}</div>
-              {downloadUrl ? <><div className="label" style={{ marginTop: 12 }}>Bundle</div><div className="value">Bundle artifact is available for download.</div></> : null}
-              <div className="label" style={{ marginTop: 12 }}>Raw execution result</div><pre className="json-box">{JSON.stringify(execResult, null, 2)}</pre>
+
+              {(execResult?.forwardedTo === 'webapp' || planResult?.plan?.executor === 'webapp') ? (
+                <div className="detail-card" style={{ marginTop: 12 }}>
+                  <div className="label">External remediation result</div>
+                  <div className="value">{execResult?.result?.message || 'Application remediation was handled through the external Webapp service.'}</div>
+                  {bundleInfo ? (
+                    <div style={{ marginTop: 12 }}>
+                      <button className="btn btn-primary" onClick={handleDownloadBundle}>Download remediation bundle</button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <pre className="json-box">{JSON.stringify(execResult, null, 2)}</pre>
             </div>
           ) : null}
         </div>
