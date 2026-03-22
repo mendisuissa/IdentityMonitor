@@ -156,6 +156,46 @@ function guessProductFromText(text) {
   return null;
 }
 
+function inferCategory(raw = {}, productName = null, publisher = null) {
+  const explicitCategory = normalizeText(raw.category || raw.vulnerabilityCategory || raw.assetCategory);
+  if (explicitCategory) {
+    return explicitCategory.toLowerCase();
+  }
+
+  const text = [
+    raw.name,
+    raw.description,
+    productName,
+    publisher,
+    raw.recommendation,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  const windowsUpdateHints = [
+    'windows update',
+    'security update',
+    'feature update',
+    'quality update',
+    'cumulative update',
+    'servicing stack',
+    'kb',
+    'microsoft windows',
+    'windows server',
+    'operating system',
+  ];
+  const intuneHints = ['intune', 'configuration profile', 'compliance policy', 'device policy', 'settings catalog'];
+  const scriptHints = ['script', 'powershell', 'bash', 'proactive remediation', 'remediation script'];
+  const identityHints = ['identity', 'entra', 'azure ad', 'conditional access', 'mfa', 'authentication'];
+
+  if (windowsUpdateHints.some((hint) => text.includes(hint))) return 'windows-update';
+  if (intuneHints.some((hint) => text.includes(hint))) return 'intune-policy';
+  if (scriptHints.some((hint) => text.includes(hint))) return 'script';
+  if (identityHints.some((hint) => text.includes(hint))) return 'identity';
+  return 'application';
+}
+
 function normalizeVulnerability(raw) {
   const cveId = normalizeText(raw.cveId || raw.id || null);
   const productName =
@@ -163,6 +203,7 @@ function normalizeVulnerability(raw) {
     guessProductFromText(raw.description) ||
     (cveId && cveId.toUpperCase().startsWith('CVE-') ? null : normalizeText(raw.name));
   const publisher = normalizeText(raw.vendor || raw.publisher || null);
+  const category = inferCategory(raw, productName, publisher);
   return {
     id: normalizeText(raw.id || cveId),
     cveId,
@@ -180,7 +221,7 @@ function normalizeVulnerability(raw) {
     exploitInKit: raw.exploitInKit === true,
     status: normalizeText(raw.status) || null,
     epss: raw.epss ?? null,
-    category: 'application',
+    category,
     affectedMachineCount: Number(raw.exposedMachines || raw.affectedMachineCount || 0),
     affectedMachines: Array.isArray(raw.affectedMachines) ? raw.affectedMachines : [],
     recommendation: normalizeText(raw.recommendation) || null,
