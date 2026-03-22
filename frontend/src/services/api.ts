@@ -448,6 +448,10 @@ export const api = {
   getDefenderTenantConfig: () =>
     apiFetch<any>('/defender/tenant/config'),
 
+
+  getRemediationHealth: () =>
+    apiFetch<any>('/remediation/health'),
+
   getRiskPosture: () =>
     apiFetch<any>('/reports/risk-posture'),
 

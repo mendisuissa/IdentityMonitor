@@ -76,6 +76,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [filterPublisher, setFilterPublisher] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
+  const [remediationRequiredOnly, setRemediationRequiredOnly] = useState(true);
+  const [exposedDevicesOnly, setExposedDevicesOnly] = useState(true);
+  const [remediationHealth, setRemediationHealth] = useState<any>(null);
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [affectedMachines, setAffectedMachines] = useState<string[]>([]);
   const [affectedMachinesError, setAffectedMachinesError] = useState('');
@@ -110,15 +113,17 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       setNeedsAdminConsent(false);
       setAdminConsentUrl('');
       try {
-        const [config, result] = await Promise.all([
+        const [config, result, health] = await Promise.all([
           api.getDefenderTenantConfig(),
-          api.getDefenderVulnerabilities(100)
+          api.getDefenderVulnerabilities(100),
+          api.getRemediationHealth().catch(() => null)
         ]);
         if (!mounted) return;
         const items = Array.isArray(result?.items) ? result.items : [];
         setTenantConfig(config || null);
         setNeedsAdminConsent(!!config?.needsAdminConsent);
         setAdminConsentUrl(config?.adminConsentUrl || '');
+        setRemediationHealth(health || null);
         setFindings(items);
         setSelectedIndex(0);
       } catch (err: any) {
@@ -126,6 +131,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         setError(getFriendlyErrorMessage(err));
         setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : (err?.message || ''));
         setTenantConfig(null);
+        setRemediationHealth(null);
         setFindings([]);
         setNeedsAdminConsent(!!err?.needsAdminConsent);
         setAdminConsentUrl(err?.adminConsentUrl || '');
@@ -152,13 +158,15 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       if (filterPublisher && !publisher.includes(filterPublisher.toLowerCase())) return false;
       if (filterCategory && !category.includes(filterCategory.toLowerCase())) return false;
       if (filterSeverity && severity !== filterSeverity.toLowerCase()) return false;
+      if (remediationRequiredOnly && status !== 'remediationrequired') return false;
+      if (exposedDevicesOnly && Number(f.affectedMachineCount || 0) <= 0) return false;
       return true;
     });
-  }, [findings, search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity]);
+  }, [findings, search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
 
   useEffect(() => {
     setSelectedIndex(0);
-  }, [search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity]);
+  }, [search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
 
   const selectedFinding = useMemo(() => filteredFindings[selectedIndex] || null, [filteredFindings, selectedIndex]);
   const selectedExecutor = planResult?.plan?.executor || null;
@@ -263,7 +271,18 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setFilterPublisher('');
     setFilterCategory('');
     setFilterSeverity('');
+    setRemediationRequiredOnly(true);
+    setExposedDevicesOnly(true);
   };
+
+  async function refreshRemediationHealth() {
+    try {
+      const health = await api.getRemediationHealth();
+      setRemediationHealth(health);
+    } catch (_err) {
+      setRemediationHealth(null);
+    }
+  }
 
   return (
     <div className="page-shell">
@@ -305,6 +324,17 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             <option value="low">Low</option>
           </select>
         </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 16 }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={remediationRequiredOnly} onChange={(e) => setRemediationRequiredOnly(e.target.checked)} />
+            <span>Remediation required only</span>
+          </label>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={exposedDevicesOnly} onChange={(e) => setExposedDevicesOnly(e.target.checked)} />
+            <span>Exposed devices only</span>
+          </label>
+          <span className="text-muted" style={{ fontSize: 12 }}>Showing {filteredFindings.length} of {findings.length} findings</span>
+        </div>
         <div style={{ marginBottom: 16 }}><button className="btn btn-secondary" onClick={clearFilters}>Clear filters</button></div>
 
         {loadingFindings ? <div className="detail-card">Loading Defender vulnerabilities...</div> : filteredFindings.length === 0 ? (
@@ -337,6 +367,21 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             <div className="detail-card" style={{ borderColor: '#7f1d1d' }}>
               <div>{error}</div>
               {technicalError ? <details style={{ marginTop: 10, opacity: 0.75 }}><summary>Technical details</summary><div style={{ marginTop: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{technicalError}</div></details> : null}
+            </div>
+          ) : null}
+
+          {remediationHealth ? (
+            <div className="detail-card" style={{ borderColor: remediationHealth?.external?.ok ? '#14532d' : '#7f1d1d' }}>
+              <div className="label">External remediation service</div>
+              <div className="value">{remediationHealth?.external?.ok ? 'Connected' : 'Not connected'}</div>
+              <div className="muted" style={{ marginTop: 6 }}>
+                {remediationHealth?.external?.ok
+                  ? `Base URL: ${remediationHealth?.external?.baseUrl || '-'}`
+                  : (remediationHealth?.external?.details?.message || remediationHealth?.external?.error || 'The external remediation connector is unavailable.')}
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <button className="btn btn-secondary" onClick={refreshRemediationHealth}>Retry connection</button>
+              </div>
             </div>
           ) : null}
 
@@ -411,17 +456,23 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                 </div>
               ) : null}
 
-              <div style={{ marginTop: 16 }}>
+              <div style={{ marginTop: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <button className="btn btn-secondary" onClick={handleExecute} disabled={executing || needsAdminConsent}>
                   {executing ? 'Executing...' : 'Execute Remediation'}
                 </button>
+                {planResult?.plan?.executionMode === 'external-not-connected' ? (
+                  <button className="btn btn-secondary" onClick={refreshRemediationHealth}>Retry connection</button>
+                ) : null}
               </div>
 
-              <div className="label" style={{ marginTop: 12 }}>Raw plan</div><pre className="json-box">{JSON.stringify(planResult, null, 2)}</pre>
+              <details style={{ marginTop: 12 }}>
+                <summary>Technical details</summary>
+                <pre className="json-box">{JSON.stringify(planResult, null, 2)}</pre>
+              </details>
             </div>
           ) : <div className="detail-card">Run planning to generate a remediation path.</div>}
 
-          {execResult ? <div className="detail-card"><div className="label">Execution result</div><pre className="json-box">{JSON.stringify(execResult, null, 2)}</pre></div> : null}
+          {execResult ? <div className="detail-card"><div className="label">Execution result</div><details style={{ marginTop: 8 }} open><summary>View result</summary><pre className="json-box">{JSON.stringify(execResult, null, 2)}</pre></details></div> : null}
         </div>
       </section>
     </div>
