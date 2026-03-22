@@ -1,20 +1,16 @@
-IdentityMonitor delta
+Apply these files on top of the current IdentityMonitor repo.
 
 Files included:
-- backend/src/routes/remediation.js
-- backend/src/services/nativeRemediationExecutor.js
+- backend/src/services/tenantDefenderClient.js
 - frontend/src/components/RemediationPage.tsx
 
-What this delta adds:
-- External remediation / bundle UX
-- Result card + status badges
-- Execution path rendering
-- Classification matrix routing
-- Native executor skeletons for Windows Update / Intune Policy / Script
-- Windows Update options: update type + reboot behavior
+What this fixes:
+- switches Defender software enrichment to the official machinesVulnerabilities API path
+- maps productName / productVendor / machineName fields correctly
+- aggregates affected machines by unique machineId
+- keeps related products per CVE so a CVE affecting Edge/Chrome/WebView2 no longer shows as Unknown product
+- improves remediation product display in the UI
 
-Validation completed:
-- frontend npm run build: passed
-- backend node --check: passed
-
-Apply by copying these files over the matching paths in your repo.
+Validation performed:
+- node --check backend/src/services/tenantDefenderClient.js
+- frontend npm run build

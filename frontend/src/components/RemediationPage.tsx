@@ -18,6 +18,7 @@ type Finding = {
   affectedMachineCount?: number;
   affectedMachines?: string[];
   inferenceSource?: string | null;
+  relatedProducts?: string[];
 };
 
 function getFriendlyErrorMessage(error: any) {
@@ -38,7 +39,15 @@ function normalizeProblemLabel(finding: Finding) {
 function getDisplayProduct(finding: Finding) {
   const value = finding.productName || finding.softwareName || finding.name || '';
   if (!value || /^CVE-/i.test(value) || /^TVM-/i.test(value)) {
-    return 'Unknown product';
+    const related = Array.isArray(finding.relatedProducts) ? finding.relatedProducts.filter(Boolean) : [];
+    return related[0] || 'Unknown product';
+  }
+  const related = Array.isArray(finding.relatedProducts) ? finding.relatedProducts.filter(Boolean) : [];
+  if (related.length > 1 && !related.includes(value)) {
+    return `${value} (+${related.length} related)`;
+  }
+  if (related.length > 1) {
+    return `${value} (+${related.length - 1} more)`;
   }
   return value;
 }
@@ -49,25 +58,6 @@ function getDisplayPublisher(finding: Finding) {
 
 function isCveId(value?: string | null) {
   return !!value && /^CVE-/i.test(value);
-}
-
-function mapRebootBehavior(value: string) {
-  if (value === 'force') return 'force-reboot';
-  if (value === 'defer') return 'defer-reboot';
-  return 'reboot-if-required';
-}
-
-function getStatusBadgeStyle(code?: string) {
-  if (code === 'live-deploy' || code === 'native-queued') return { background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.45)', color: '#86efac' };
-  if (code === 'bundle-created') return { background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.45)', color: '#93c5fd' };
-  if (code === 'external-not-connected') return { background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.45)', color: '#fca5a5' };
-  return { background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.45)', color: '#fcd34d' };
-}
-
-function getBundleInfo(execResult: any) {
-  const result = execResult?.result || execResult || {};
-  const delivery = result?.delivery || {};
-  return delivery?.bundle || result?.bundle || null;
 }
 
 type Props = { tenantId?: string; tenantName?: string };
@@ -95,9 +85,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [affectedMachines, setAffectedMachines] = useState<string[]>([]);
   const [affectedMachinesError, setAffectedMachinesError] = useState('');
-  const [updateType, setUpdateType] = useState<'security' | 'feature'>('security');
-  const [rebootBehavior, setRebootBehavior] = useState<'ifRequired' | 'force' | 'defer'>('ifRequired');
-  const [targetDeviceIds, setTargetDeviceIds] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -173,10 +160,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   }, [search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity]);
 
   const selectedFinding = useMemo(() => filteredFindings[selectedIndex] || null, [filteredFindings, selectedIndex]);
-  const classificationType = planResult?.classification?.type || '';
-  const planStatus = planResult?.plan?.statusCard || null;
-  const executionPath = planResult?.plan?.executionPath || null;
-  const bundleInfo = getBundleInfo(execResult);
 
   useEffect(() => {
     let mounted = true;
@@ -219,15 +202,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setTechnicalError('');
     setExecResult(null);
     try {
-      const result = await api.planRemediation({
-        tenantId,
-        finding: selectedFinding,
-        options: {
-          updateType,
-          rebootBehavior,
-          targetDeviceIds: targetDeviceIds.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean)
-        }
-      });
+      const result = await api.planRemediation({ tenantId, finding: selectedFinding });
       setPlanResult(result);
     } catch (err: any) {
       setError(err?.message || 'Planning failed.');
@@ -246,14 +221,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       const result = await api.executeRemediation({
         tenantId,
         approvalId: 'apr-ui-001',
-        devices: affectedMachines,
+        devices: [],
         finding: selectedFinding,
-        plan: planResult.plan,
-        options: {
-          updateType,
-          rebootBehavior,
-          targetDeviceIds: targetDeviceIds.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean)
-        }
+        plan: planResult.plan
       });
       setExecResult(result);
     } catch (err: any) {
@@ -261,33 +231,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : '');
     } finally {
       setExecuting(false);
-    }
-  }
-
-  function handleDownloadBundle() {
-    const bundle = bundleInfo;
-    if (!bundle) return;
-
-    if (bundle.downloadUrl) {
-      window.open(bundle.downloadUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    if (bundle.base64) {
-      const mimeType = bundle.mimeType || 'application/zip';
-      const fileName = bundle.fileName || 'remediation-bundle.zip';
-      const binary = atob(bundle.base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-      const blob = new Blob([bytes], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
     }
   }
 
@@ -366,7 +309,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       </section>
 
       <section className="panel">
-        <div className="panel-header"><div><h2>Plan Details</h2><p>See exactly which executor will run, and what path will be used.</p></div></div>
+        <div className="panel-header"><div><h2>Plan Details</h2><p>See exactly what product is affected and where it exists.</p></div></div>
         <div className="stack">
           {error ? (
             <div className="detail-card" style={{ borderColor: '#7f1d1d' }}>
@@ -405,101 +348,18 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             </div>
           ) : <div className="detail-card">No finding selected.</div>}
 
-          {classificationType === 'windows-update' ? (
-            <div className="detail-card">
-              <div className="label">Windows Update options</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 10 }}>
-                <div>
-                  <div className="label">Update now</div>
-                  <div className="muted">This native executor creates a WUfB deployment immediately after planning and execution.</div>
-                </div>
-                <div>
-                  <div className="label">Update type</div>
-                  <select value={updateType} onChange={(e) => setUpdateType(e.target.value as 'security' | 'feature')}>
-                    <option value="security">Security</option>
-                    <option value="feature">Feature</option>
-                  </select>
-                </div>
-                <div>
-                  <div className="label">Reboot behavior</div>
-                  <select value={rebootBehavior} onChange={(e) => setRebootBehavior(e.target.value as 'ifRequired' | 'force' | 'defer')}>
-                    <option value="ifRequired">Reboot if required</option>
-                    <option value="force">Force reboot</option>
-                    <option value="defer">Defer reboot</option>
-                  </select>
-                </div>
-                <div>
-                  <div className="label">Target device IDs</div>
-                  <textarea value={targetDeviceIds} onChange={(e) => setTargetDeviceIds(e.target.value)} rows={5} placeholder="Paste Microsoft Entra device IDs, one per line or comma-separated" />
-                </div>
-              </div>
-            </div>
-          ) : null}
-
           {planResult ? (
             <div className="detail-card">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                <div>
-                  <div className="label">Executor</div>
-                  <div className="value">{planResult.plan?.executor || 'n/a'}</div>
-                </div>
-                {planStatus ? (
-                  <span style={{ ...getStatusBadgeStyle(planStatus.code), borderRadius: 999, padding: '6px 10px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3 }}>{planStatus.label}</span>
-                ) : null}
-              </div>
-              <div className="label" style={{ marginTop: 12 }}>Execution mode</div>
-              <div className="value">{planResult.plan?.executionMode || 'n/a'}</div>
-              {executionPath ? (
-                <>
-                  <div className="label" style={{ marginTop: 12 }}>Execution path</div>
-                  <div className="value">{executionPath.route}</div>
-                </>
-              ) : null}
-              {planStatus?.message ? (
-                <>
-                  <div className="label" style={{ marginTop: 12 }}>Plan status</div>
-                  <div className="value">{planStatus.message}</div>
-                </>
-              ) : null}
-              {planResult?.warning ? (
-                <div className="detail-card" style={{ marginTop: 12, borderColor: '#7f1d1d' }}>{planResult.warning}</div>
-              ) : null}
-              <div className="label" style={{ marginTop: 12 }}>Raw plan</div>
-              <pre className="json-box">{JSON.stringify(planResult, null, 2)}</pre>
+              <div className="label">Executor</div><div className="value">{planResult.plan?.executor || 'n/a'}</div>
+              <div className="label" style={{ marginTop: 12 }}>Execution mode</div><div className="value">{planResult.plan?.executionMode || 'n/a'}</div>
+              <div className="label" style={{ marginTop: 12 }}>Raw plan</div><pre className="json-box">{JSON.stringify(planResult, null, 2)}</pre>
             </div>
           ) : <div className="detail-card">Run planning to generate a remediation path.</div>}
 
           <button className="btn btn-secondary" onClick={handleExecute} disabled={executing || !planResult?.plan || needsAdminConsent}>
             {executing ? 'Executing...' : 'Execute Remediation'}
           </button>
-
-          {execResult ? (
-            <div className="detail-card">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                <div>
-                  <div className="label">Execution result</div>
-                  <div className="value">{execResult?.result?.message || execResult?.result?.status || 'Completed'}</div>
-                </div>
-                {execResult?.result?.statusCard ? (
-                  <span style={{ ...getStatusBadgeStyle(execResult.result.statusCard.code), borderRadius: 999, padding: '6px 10px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3 }}>{execResult.result.statusCard.label}</span>
-                ) : null}
-              </div>
-
-              {(execResult?.forwardedTo === 'webapp' || planResult?.plan?.executor === 'webapp') ? (
-                <div className="detail-card" style={{ marginTop: 12 }}>
-                  <div className="label">External remediation result</div>
-                  <div className="value">{execResult?.result?.message || 'Application remediation was handled through the external Webapp service.'}</div>
-                  {bundleInfo ? (
-                    <div style={{ marginTop: 12 }}>
-                      <button className="btn btn-primary" onClick={handleDownloadBundle}>Download remediation bundle</button>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <pre className="json-box">{JSON.stringify(execResult, null, 2)}</pre>
-            </div>
-          ) : null}
+          {execResult ? <div className="detail-card"><div className="label">Execution result</div><pre className="json-box">{JSON.stringify(execResult, null, 2)}</pre></div> : null}
         </div>
       </section>
     </div>

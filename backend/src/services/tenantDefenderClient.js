@@ -200,34 +200,47 @@ function mergeEnrichment(vuln, recMap, softwareMap) {
   const rec = recMap.get(cveKey);
   const software = softwareMap.get(cveKey);
   const productName =
-    vuln.productName ||
     software?.productName ||
+    vuln.productName ||
     rec?.productName ||
     guessProductFromText(vuln.description) ||
     'Unknown product';
   const publisher =
-    vuln.publisher ||
     software?.publisher ||
+    vuln.publisher ||
     rec?.publisher ||
     'Not provided by Defender payload';
   const affectedMachines = software?.affectedMachines || vuln.affectedMachines || [];
   const affectedMachineCount =
-    software?.affectedMachineCount || vuln.affectedMachineCount || affectedMachines.length || 0;
+    software?.affectedMachineCount ?? vuln.affectedMachineCount ?? affectedMachines.length ?? 0;
   return {
     ...vuln,
     productName,
     publisher,
+    relatedProducts: Array.isArray(software?.relatedProducts) ? software.relatedProducts : [],
     recommendation:
       vuln.recommendation ||
       rec?.description ||
       `Apply the vendor-provided update or mitigation path for the affected product.`,
     affectedMachines,
     affectedMachineCount,
+    inferenceSource: software?.productName ? 'machinesVulnerabilities' : (vuln.productName ? 'vulnerability-payload' : null),
   };
 }
 
+function prettifyProductName(value) {
+  const raw = normalizeText(value);
+  if (!raw) return null;
+  return raw
+    .replace(/_/g, ' ')
+    .replace(/chromium based/gi, 'Chromium-based')
+    .replace(/webview2/gi, 'WebView2')
+    .replace(/mac os/gi, 'Mac OS')
+    .replace(/[a-z]/g, (m) => m.toUpperCase());
+}
+
 async function listSoftwareVulnerabilitiesByMachine(config, top = 5000) {
-  const data = await defenderGet(config, `/api/machines/SoftwareVulnerabilitiesByMachine?$top=${top}`);
+  const data = await defenderGet(config, `/api/vulnerabilities/machinesVulnerabilities?$top=${top}`);
   return Array.isArray(data?.value) ? data.value : [];
 }
 
@@ -236,23 +249,58 @@ function buildSoftwareIndex(rows) {
   for (const row of rows) {
     const cveKey = String(row?.cveId || row?.CveId || '').toUpperCase();
     if (!cveKey) continue;
+
+    const machineName = normalizeText(
+      row?.computerDnsName || row?.deviceName || row?.machineName || row?.DeviceName || row?.MachineName
+    );
+    const machineId = normalizeText(row?.machineId || row?.deviceId || row?.MachineId || machineName);
+    const productName = prettifyProductName(row?.productName || row?.softwareName || row?.SoftwareName);
+    const publisher = normalizeText(row?.productVendor || row?.softwareVendor || row?.SoftwareVendor);
+
     const existing = map.get(cveKey) || {
       productName: null,
       publisher: null,
       affectedMachines: [],
       affectedMachineCount: 0,
+      relatedProducts: [],
+      machineIds: new Set(),
+      productFrequency: new Map(),
+      publisherFrequency: new Map(),
     };
-    const productName = existing.productName || normalizeText(row?.productName || row?.SoftwareName);
-    const publisher = existing.publisher || normalizeText(row?.productVendor || row?.SoftwareVendor);
-    const machineName = normalizeText(row?.computerDnsName || row?.deviceName || row?.DeviceName);
-    if (machineName && !existing.affectedMachines.includes(machineName)) {
-      existing.affectedMachines.push(machineName);
+
+    if (machineId && !existing.machineIds.has(machineId)) {
+      existing.machineIds.add(machineId);
+      if (machineName && !existing.affectedMachines.includes(machineName)) {
+        existing.affectedMachines.push(machineName);
+      }
     }
-    existing.productName = productName;
-    existing.publisher = publisher;
-    existing.affectedMachineCount = existing.affectedMachines.length;
+
+    if (productName) {
+      existing.productFrequency.set(productName, (existing.productFrequency.get(productName) || 0) + 1);
+      if (!existing.relatedProducts.includes(productName)) {
+        existing.relatedProducts.push(productName);
+      }
+    }
+
+    if (publisher) {
+      existing.publisherFrequency.set(publisher, (existing.publisherFrequency.get(publisher) || 0) + 1);
+    }
+
+    const topProduct = [...existing.productFrequency.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    const topPublisher = [...existing.publisherFrequency.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+    existing.productName = topProduct;
+    existing.publisher = topPublisher;
+    existing.affectedMachineCount = existing.machineIds.size;
     map.set(cveKey, existing);
   }
+
+  for (const value of map.values()) {
+    delete value.machineIds;
+    delete value.productFrequency;
+    delete value.publisherFrequency;
+  }
+
   return map;
 }
 
