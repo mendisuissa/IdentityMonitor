@@ -160,10 +160,10 @@ router.get('/vulnerabilities', async (req, res) => {
       return res.status(401).json({ ok: false, error: 'No authenticated tenant session was found for this request.' });
     }
 
-    const top = Number(req.query.top || 100);
+    const top = Number(req.query.top || 0);
     const items = await listTenantVulnerabilities(tenantId, top);
 
-    res.json({ ok: true, tenantId, count: items.length, items });
+    res.json({ ok: true, tenantId, count: items.length, totalCount: items.length, items });
   } catch (error) {
     const friendly = getFriendlyError(error);
     if (friendly.requiresAdminConsent) {
@@ -186,10 +186,10 @@ router.get('/recommendations', async (req, res) => {
       return res.status(401).json({ ok: false, error: 'No authenticated tenant session was found for this request.' });
     }
 
-    const top = Number(req.query.top || 100);
+    const top = Number(req.query.top || 0);
     const items = await listTenantRecommendations(tenantId, top);
 
-    res.json({ ok: true, tenantId, count: items.length, items });
+    res.json({ ok: true, tenantId, count: items.length, totalCount: items.length, items });
   } catch (error) {
     const friendly = getFriendlyError(error);
     if (friendly.requiresAdminConsent) {

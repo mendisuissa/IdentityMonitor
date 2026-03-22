@@ -1,5 +1,2 @@
 Apply these files into the matching paths in your repo.
-This delta fixes Defender vulnerability normalization and classification so findings do not default to application.
-Files included:
-- backend/src/services/tenantDefenderClient.js
-- backend/src/services/remediationCatalog.js
+This delta removes the hard 100-item cap, paginates through Defender results, and shows total counts correctly in the remediation workspace.

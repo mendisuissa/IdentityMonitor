@@ -439,11 +439,11 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  getDefenderVulnerabilities: (top = 50) =>
-    apiFetch<any>(`/defender/vulnerabilities?top=${top}`),
+  getDefenderVulnerabilities: (top = 0) =>
+    apiFetch<any>(top > 0 ? `/defender/vulnerabilities?top=${top}` : '/defender/vulnerabilities'),
 
-  getDefenderVulnerabilityMachines: (cveId: string, top = 100) =>
-    apiFetch<any>(`/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines?top=${top}`),
+  getDefenderVulnerabilityMachines: (cveId: string, top = 0) =>
+    apiFetch<any>(top > 0 ? `/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines?top=${top}` : `/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines`),
 
   getDefenderTenantConfig: () =>
     apiFetch<any>('/defender/tenant/config'),
@@ -457,9 +457,6 @@ export const api = {
   executiveExportUrl: (format: 'csv' | 'json' = 'csv') =>
     `${API_BASE_URL}/api/reports/executive/export?format=${format}`,
 
-  getRemediationHealth: () =>
-    apiFetch<any>('/remediation/health'),
-
   planRemediation: (body: {
     tenantId?: string;
     finding: any;
@@ -468,7 +465,6 @@ export const api = {
       rebootBehavior?: 'ifRequired' | 'force' | 'defer';
       targetDeviceIds?: string[];
       deviceIds?: string[];
-      affectedDeviceNames?: string[];
       policyTarget?: string;
       scriptName?: string;
       notes?: string;
@@ -490,7 +486,6 @@ export const api = {
       rebootBehavior?: 'ifRequired' | 'force' | 'defer';
       targetDeviceIds?: string[];
       deviceIds?: string[];
-      affectedDeviceNames?: string[];
       policyTarget?: string;
       scriptName?: string;
       notes?: string;

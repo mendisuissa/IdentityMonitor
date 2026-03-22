@@ -124,6 +124,54 @@ async function defenderGet(config, path) {
   return data;
 }
 
+
+function normalizeDefenderUrl(url) {
+  if (!url) return null;
+  const value = String(url).trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+  return `${DEFENDER_API_BASE}${value.startsWith('/') ? '' : '/'}${value}`;
+}
+
+function buildDefenderAbsoluteUrl(path) {
+  if (!path) return null;
+  return normalizeDefenderUrl(path);
+}
+
+function withTop(path, top) {
+  const absolute = buildDefenderAbsoluteUrl(path);
+  if (!absolute || !top || Number(top) <= 0) {
+    return absolute;
+  }
+  const url = new URL(absolute);
+  if (!url.searchParams.has('$top')) {
+    url.searchParams.set('$top', String(top));
+  }
+  return url.toString();
+}
+
+async function defenderGetAllPages(config, path, options = {}) {
+  const maxItems = Number(options.maxItems || 0);
+  let nextUrl = withTop(path, options.top);
+  const items = [];
+
+  while (nextUrl) {
+    const data = await defenderGet(config, nextUrl);
+    const pageItems = Array.isArray(data?.value) ? data.value : [];
+    items.push(...pageItems);
+
+    if (maxItems > 0 && items.length >= maxItems) {
+      return items.slice(0, maxItems);
+    }
+
+    nextUrl = normalizeDefenderUrl(data?.['@odata.nextLink'] || data?.nextLink || null);
+  }
+
+  return items;
+}
+
 function normalizeSeverity(value) {
   return value || 'unknown';
 }
@@ -156,52 +204,6 @@ function guessProductFromText(text) {
   return null;
 }
 
-
-function inferCategory(raw = {}, productName = null) {
-  const categoryHints = [
-    raw.category,
-    raw.vulnerabilityCategory,
-    raw.recommendationCategory,
-    raw.productName,
-    raw.name,
-    raw.description,
-    raw.recommendation,
-    productName,
-    raw.vendor,
-    raw.publisher,
-  ]
-    .filter(Boolean)
-    .map((v) => String(v).toLowerCase())
-    .join(' ');
-
-  const windowsHints = [
-    'windows update', 'security update', 'feature update', 'quality update', 'cumulative update',
-    'kb', 'operating system', 'windows server', 'windows 10', 'windows 11', 'microsoft windows',
-    'defender platform', 'monthly rollup', 'patch tuesday'
-  ];
-  const intuneHints = [
-    'intune', 'configuration profile', 'compliance policy', 'device policy', 'device configuration',
-    'settings catalog', 'administrative template'
-  ];
-  const scriptHints = [
-    'powershell', 'script', 'shell script', 'remediation script', 'proactive remediation', 'detection script'
-  ];
-  const identityHints = [
-    'identity', 'credential', 'authentication', 'conditional access', 'mfa', 'entra', 'azure ad'
-  ];
-  const applicationHints = [
-    'chrome', 'chromium', 'firefox', 'edge', 'webview', 'acrobat', 'adobe', 'java', 'office', 'vlc',
-    '7-zip', '7zip', 'browser', 'runtime', 'mongodb', 'openssl', 'app', 'application'
-  ];
-
-  if (windowsHints.some((hint) => categoryHints.includes(hint))) return 'windows-update';
-  if (intuneHints.some((hint) => categoryHints.includes(hint))) return 'intune-policy';
-  if (scriptHints.some((hint) => categoryHints.includes(hint))) return 'script';
-  if (identityHints.some((hint) => categoryHints.includes(hint))) return 'identity';
-  if (applicationHints.some((hint) => categoryHints.includes(hint))) return 'application';
-  return 'unknown';
-}
-
 function normalizeVulnerability(raw) {
   const cveId = normalizeText(raw.cveId || raw.id || null);
   const productName =
@@ -226,7 +228,7 @@ function normalizeVulnerability(raw) {
     exploitInKit: raw.exploitInKit === true,
     status: normalizeText(raw.status) || null,
     epss: raw.epss ?? null,
-    category: inferCategory(raw, productName),
+    category: 'application',
     affectedMachineCount: Number(raw.exposedMachines || raw.affectedMachineCount || 0),
     affectedMachines: Array.isArray(raw.affectedMachines) ? raw.affectedMachines : [],
     recommendation: normalizeText(raw.recommendation) || null,
@@ -290,8 +292,10 @@ function mergeEnrichment(vuln, recMap, softwareMap) {
 }
 
 async function listSoftwareVulnerabilitiesByMachine(config, top = 5000) {
-  const data = await defenderGet(config, `/api/vulnerabilities/machinesVulnerabilities?$top=${top}`);
-  return Array.isArray(data?.value) ? data.value : [];
+  return defenderGetAllPages(config, '/api/vulnerabilities/machinesVulnerabilities', {
+    top: 5000,
+    maxItems: Number(top || 5000),
+  });
 }
 
 function buildSoftwareIndex(rows) {
@@ -372,16 +376,23 @@ async function getTenantConfigOrThrow(tenantId) {
   return { integration, config };
 }
 
-async function listTenantVulnerabilities(tenantId, top = 100) {
+async function listTenantVulnerabilities(tenantId, top = 0) {
   const { config } = await getTenantConfigOrThrow(tenantId);
-  const [vulnData, recData, softwareRows] = await Promise.all([
-    defenderGet(config, `/api/vulnerabilities?$top=${top}`),
-    defenderGet(config, `/api/recommendations?$top=${Math.min(top, 200)}`).catch(() => ({ value: [] })),
+  const effectiveTop = Number(top || 0);
+  const [vulnRows, recRows, softwareRows] = await Promise.all([
+    defenderGetAllPages(config, '/api/vulnerabilities', {
+      top: effectiveTop > 0 ? Math.min(effectiveTop, 5000) : 5000,
+      maxItems: effectiveTop > 0 ? effectiveTop : 0,
+    }),
+    defenderGetAllPages(config, '/api/recommendations', {
+      top: effectiveTop > 0 ? Math.min(Math.max(effectiveTop, 200), 2000) : 1000,
+      maxItems: effectiveTop > 0 ? Math.min(Math.max(effectiveTop, 200), 2000) : 1000,
+    }).catch(() => []),
     listSoftwareVulnerabilitiesByMachine(config, 5000).catch(() => []),
   ]);
 
-  const baseItems = Array.isArray(vulnData?.value) ? vulnData.value.map(normalizeVulnerability) : [];
-  const recMap = buildRecommendationIndex(Array.isArray(recData?.value) ? recData.value : []);
+  const baseItems = Array.isArray(vulnRows) ? vulnRows.map(normalizeVulnerability) : [];
+  const recMap = buildRecommendationIndex(Array.isArray(recRows) ? recRows : []);
   const softwareMap = buildSoftwareIndex(Array.isArray(softwareRows) ? softwareRows : []);
   const items = baseItems.map((item) => mergeEnrichment(item, recMap, softwareMap));
 
@@ -393,33 +404,41 @@ async function listTenantVulnerabilities(tenantId, top = 100) {
   return items;
 }
 
-async function listTenantRecommendations(tenantId, top = 100) {
+async function listTenantRecommendations(tenantId, top = 0) {
   const { config } = await getTenantConfigOrThrow(tenantId);
-  const data = await defenderGet(config, `/api/recommendations?$top=${top}`);
-  const items = Array.isArray(data?.value) ? data.value.map(normalizeRecommendation) : [];
+  const effectiveTop = Number(top || 0);
+  const items = await defenderGetAllPages(config, '/api/recommendations', {
+    top: effectiveTop > 0 ? Math.min(effectiveTop, 1000) : 1000,
+    maxItems: effectiveTop > 0 ? effectiveTop : 0,
+  });
+  const normalizedItems = Array.isArray(items) ? items.map(normalizeRecommendation) : [];
 
   await writeTenantSnapshot(tenantId, 'defender/recommendations', {
-    count: items.length,
-    items,
+    count: normalizedItems.length,
+    items: normalizedItems,
   }).catch(() => {});
 
-  return items;
+  return normalizedItems;
 }
 
-async function listTenantVulnerabilityMachines(tenantId, cveId, top = 100) {
+async function listTenantVulnerabilityMachines(tenantId, cveId, top = 0) {
   const { config } = await getTenantConfigOrThrow(tenantId);
   const normalized = String(cveId || '').toUpperCase();
   if (!normalized.startsWith('CVE-')) {
     return { count: 0, items: [], unsupportedIdentifier: cveId };
   }
 
-  const data = await defenderGet(
+  const rows = await defenderGetAllPages(
     config,
-    `/api/vulnerabilities/${encodeURIComponent(normalized)}/machineReferences?$top=${top}`
+    `/api/vulnerabilities/${encodeURIComponent(normalized)}/machineReferences`,
+    {
+      top: Number(top || 0) > 0 ? Math.min(Number(top), 1000) : 1000,
+      maxItems: Number(top || 0) > 0 ? Number(top) : 0,
+    }
   );
 
-  const items = Array.isArray(data?.value)
-    ? data.value.map((row) => ({
+  const items = Array.isArray(rows)
+    ? rows.map((row) => ({
         id: row.id || null,
         computerDnsName: row.computerDnsName || row.deviceName || null,
         osPlatform: row.osPlatform || null,
