@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 
 type Finding = {
+  productNames?: string[];
+  relatedProducts?: Array<{ productName?: string; publisher?: string; productVersion?: string }>;
   id?: string;
   cveId?: string;
   productName?: string;
@@ -78,7 +80,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [filterSeverity, setFilterSeverity] = useState('');
   const [remediationRequiredOnly, setRemediationRequiredOnly] = useState(true);
   const [exposedDevicesOnly, setExposedDevicesOnly] = useState(true);
-  const [remediationHealth, setRemediationHealth] = useState<any>(null);
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [affectedMachines, setAffectedMachines] = useState<string[]>([]);
   const [affectedMachinesError, setAffectedMachinesError] = useState('');
@@ -88,6 +89,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [policyTarget, setPolicyTarget] = useState('');
   const [scriptName, setScriptName] = useState('');
   const [executionNotes, setExecutionNotes] = useState('');
+  const [health, setHealth] = useState<any>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -113,17 +115,15 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       setNeedsAdminConsent(false);
       setAdminConsentUrl('');
       try {
-        const [config, result, health] = await Promise.all([
+        const [config, result] = await Promise.all([
           api.getDefenderTenantConfig(),
-          api.getDefenderVulnerabilities(100),
-          api.getRemediationHealth().catch(() => null)
+          api.getDefenderVulnerabilities(100)
         ]);
         if (!mounted) return;
         const items = Array.isArray(result?.items) ? result.items : [];
         setTenantConfig(config || null);
         setNeedsAdminConsent(!!config?.needsAdminConsent);
         setAdminConsentUrl(config?.adminConsentUrl || '');
-        setRemediationHealth(health || null);
         setFindings(items);
         setSelectedIndex(0);
       } catch (err: any) {
@@ -131,7 +131,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         setError(getFriendlyErrorMessage(err));
         setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : (err?.message || ''));
         setTenantConfig(null);
-        setRemediationHealth(null);
         setFindings([]);
         setNeedsAdminConsent(!!err?.needsAdminConsent);
         setAdminConsentUrl(err?.adminConsentUrl || '');
@@ -142,6 +141,20 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     loadFindings();
     return () => { mounted = false; };
   }, [tenantId]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadHealth() {
+      try {
+        const result = await api.getRemediationHealth();
+        if (mounted) setHealth(result);
+      } catch (_err) {
+        if (mounted) setHealth(null);
+      }
+    }
+    loadHealth();
+    return () => { mounted = false; };
+  }, []);
 
   const filteredFindings = useMemo(() => {
     return findings.filter((f) => {
@@ -170,6 +183,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
   const selectedFinding = useMemo(() => filteredFindings[selectedIndex] || null, [filteredFindings, selectedIndex]);
   const selectedExecutor = planResult?.plan?.executor || null;
+  const externalHealth = health?.external || null;
   const isWindowsExecutor = selectedExecutor === 'native-windows-update';
   const isIntuneExecutor = selectedExecutor === 'native-intune-policy';
   const isScriptExecutor = selectedExecutor === 'native-script';
@@ -275,14 +289,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setExposedDevicesOnly(true);
   };
 
-  async function refreshRemediationHealth() {
-    try {
-      const health = await api.getRemediationHealth();
-      setRemediationHealth(health);
-    } catch (_err) {
-      setRemediationHealth(null);
-    }
-  }
+  const primaryRelatedProduct = selectedFinding?.relatedProducts?.[0] || null;
+  const connectedLabel = externalHealth?.ok === false ? 'Not connected' : externalHealth?.sharedTokenAccepted ? 'Connected' : 'Unknown';
 
   return (
     <div className="page-shell">
@@ -294,6 +302,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             <div className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>
               Active tenant: <strong>{tenantName || tenantId || 'Current connected tenant'}</strong>
               {tenantConfig ? ` · Defender ${tenantConfig.defenderEnabled ? 'enabled' : 'disabled'}` : ''}
+              {` · Showing ${filteredFindings.length} of ${findings.length} findings`}
             </div>
           </div>
           <button className="btn btn-primary" onClick={handlePlan} disabled={planning || !selectedFinding || needsAdminConsent}>
@@ -310,6 +319,24 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           </div>
         ) : null}
 
+        <div className="detail-card" style={{ marginBottom: 16 }}>
+          <div className="label">External remediation service</div>
+          <div className="value">{connectedLabel}</div>
+          <div className="muted">{externalHealth?.baseUrl || 'No external remediation base URL configured.'}</div>
+          {externalHealth?.error ? <div className="muted" style={{ marginTop: 8 }}>{externalHealth.error}</div> : null}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+              <input type="checkbox" checked={remediationRequiredOnly} onChange={(e) => setRemediationRequiredOnly(e.target.checked)} />
+              <span>Remediation required only</span>
+            </label>
+            <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+              <input type="checkbox" checked={exposedDevicesOnly} onChange={(e) => setExposedDevicesOnly(e.target.checked)} />
+              <span>Exposed devices only</span>
+            </label>
+            <button className="btn btn-secondary" onClick={async () => { const result = await api.getRemediationHealth(); setHealth(result); }}>Retry connection</button>
+          </div>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 16 }}>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search vulnerabilities" />
           <input value={filterCve} onChange={(e) => setFilterCve(e.target.value)} placeholder="Filter by CVE" />
@@ -323,17 +350,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             <option value="medium">Medium</option>
             <option value="low">Low</option>
           </select>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 16 }}>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <input type="checkbox" checked={remediationRequiredOnly} onChange={(e) => setRemediationRequiredOnly(e.target.checked)} />
-            <span>Remediation required only</span>
-          </label>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <input type="checkbox" checked={exposedDevicesOnly} onChange={(e) => setExposedDevicesOnly(e.target.checked)} />
-            <span>Exposed devices only</span>
-          </label>
-          <span className="text-muted" style={{ fontSize: 12 }}>Showing {filteredFindings.length} of {findings.length} findings</span>
         </div>
         <div style={{ marginBottom: 16 }}><button className="btn btn-secondary" onClick={clearFilters}>Clear filters</button></div>
 
@@ -370,21 +386,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             </div>
           ) : null}
 
-          {remediationHealth ? (
-            <div className="detail-card" style={{ borderColor: remediationHealth?.external?.ok ? '#14532d' : '#7f1d1d' }}>
-              <div className="label">External remediation service</div>
-              <div className="value">{remediationHealth?.external?.ok ? 'Connected' : 'Not connected'}</div>
-              <div className="muted" style={{ marginTop: 6 }}>
-                {remediationHealth?.external?.ok
-                  ? `Base URL: ${remediationHealth?.external?.baseUrl || '-'}`
-                  : (remediationHealth?.external?.details?.message || remediationHealth?.external?.error || 'The external remediation connector is unavailable.')}
-              </div>
-              <div style={{ marginTop: 12 }}>
-                <button className="btn btn-secondary" onClick={refreshRemediationHealth}>Retry connection</button>
-              </div>
-            </div>
-          ) : null}
-
           {selectedFinding ? (
             <div className="detail-card">
               <div className="label">Problem summary</div>
@@ -409,7 +410,11 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
               <div className="label" style={{ marginTop: 12 }}>Recommended action</div>
               <div className="value">{selectedFinding.recommendation || 'Apply the vendor-provided update or mitigation path for the affected product.'}</div>
 
+              <div className="label" style={{ marginTop: 12 }}>Primary product evidence</div>
+              <div className="value">{primaryRelatedProduct ? `${primaryRelatedProduct.productName || '-'}${primaryRelatedProduct.productVersion ? ` ${primaryRelatedProduct.productVersion}` : ''} · ${primaryRelatedProduct.publisher || '-'}` : 'No related product evidence returned.'}</div>
+
               <div className="label" style={{ marginTop: 12 }}>Affected devices</div>
+              <div className="value" style={{ marginBottom: 8 }}>{selectedFinding.affectedMachineCount ?? 0}</div>
               {machinesLoading ? <div className="value">Loading affected devices...</div> : affectedMachines.length ? (
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
                   {affectedMachines.map((name) => <li key={name}>{name}</li>)}
@@ -422,6 +427,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             <div className="detail-card">
               <div className="label">Executor</div><div className="value">{planResult.plan?.executor || 'n/a'}</div>
               <div className="label" style={{ marginTop: 12 }}>Execution mode</div><div className="value">{planResult.plan?.executionMode || 'n/a'}</div>
+              <div className="label" style={{ marginTop: 12 }}>Execution path</div><div className="value">{planResult.plan?.executionPath?.route || '-'}</div>
               <div className="label" style={{ marginTop: 12 }}>Plan status</div><div className="value">{planResult.plan?.message || planResult.warning || '-'}</div>
 
               {isWindowsExecutor ? (
@@ -456,13 +462,10 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                 </div>
               ) : null}
 
-              <div style={{ marginTop: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ marginTop: 16 }}>
                 <button className="btn btn-secondary" onClick={handleExecute} disabled={executing || needsAdminConsent}>
                   {executing ? 'Executing...' : 'Execute Remediation'}
                 </button>
-                {planResult?.plan?.executionMode === 'external-not-connected' ? (
-                  <button className="btn btn-secondary" onClick={refreshRemediationHealth}>Retry connection</button>
-                ) : null}
               </div>
 
               <details style={{ marginTop: 12 }}>
@@ -472,7 +475,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             </div>
           ) : <div className="detail-card">Run planning to generate a remediation path.</div>}
 
-          {execResult ? <div className="detail-card"><div className="label">Execution result</div><details style={{ marginTop: 8 }} open><summary>View result</summary><pre className="json-box">{JSON.stringify(execResult, null, 2)}</pre></details></div> : null}
+          {execResult ? <div className="detail-card"><div className="label">Execution result</div><div className="value">{execResult?.result?.message || execResult?.message || 'Execution completed.'}</div><details style={{ marginTop: 12 }}><summary>Technical details</summary><pre className="json-box">{JSON.stringify(execResult, null, 2)}</pre></details></div> : null}
         </div>
       </section>
     </div>

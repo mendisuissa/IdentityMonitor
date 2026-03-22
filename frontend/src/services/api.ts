@@ -448,10 +448,6 @@ export const api = {
   getDefenderTenantConfig: () =>
     apiFetch<any>('/defender/tenant/config'),
 
-
-  getRemediationHealth: () =>
-    apiFetch<any>('/remediation/health'),
-
   getRiskPosture: () =>
     apiFetch<any>('/reports/risk-posture'),
 
@@ -478,6 +474,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  getRemediationHealth: () =>
+    apiFetch<any>('/remediation/health'),
 
   executeRemediation: (body: {
     tenantId?: string;

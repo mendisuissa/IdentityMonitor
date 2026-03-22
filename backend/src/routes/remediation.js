@@ -32,25 +32,8 @@ function getTenantIdFromRequest(req) {
 }
 
 router.get('/health', async (_req, res) => {
-  try {
-    const external = await getExternalHealth();
-    res.json({
-      ok: true,
-      service: 'identity-remediation-orchestrator',
-      external
-    });
-  } catch (error) {
-    res.json({
-      ok: true,
-      service: 'identity-remediation-orchestrator',
-      external: {
-        ok: false,
-        status: error.status || 500,
-        error: error.message,
-        details: error.details || null
-      }
-    });
-  }
+  const external = await getExternalHealth();
+  res.json({ ok: true, service: 'identity-remediation-orchestrator', external });
 });
 
 router.post('/plan', async (req, res) => {
