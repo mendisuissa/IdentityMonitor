@@ -1,7 +1,6 @@
 const express = require('express');
 const { classifyFinding } = require('../services/remediationCatalog');
 const {
-  getExternalHealth,
   resolveApplicationRemediation,
   executeApplicationRemediation
 } = require('../services/webappExecutionClient');
@@ -31,9 +30,8 @@ function getTenantIdFromRequest(req) {
   return sessionTenantId;
 }
 
-router.get('/health', async (_req, res) => {
-  const external = await getExternalHealth();
-  res.json({ ok: true, service: 'identity-remediation-orchestrator', external });
+router.get('/health', (_req, res) => {
+  res.json({ ok: true, service: 'identity-remediation-orchestrator' });
 });
 
 router.post('/plan', async (req, res) => {

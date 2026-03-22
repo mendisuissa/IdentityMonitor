@@ -115,16 +115,11 @@ async function getLatestFeatureCatalogEntry(tenantId) {
   return entry;
 }
 
-function buildDeploymentSettings({ rebootBehavior = 'ifRequired' } = {}) {
-  const normalized = String(rebootBehavior || 'ifRequired');
+function buildDeploymentSettings({ rebootBehavior = 'reboot-if-required' } = {}) {
   const userExperience = {
     offerAsOptional: false,
-    daysUntilForcedReboot: normalized === 'force' ? 0 : null
+    daysUntilForcedReboot: rebootBehavior === 'force-reboot' ? 0 : null
   };
-
-  if (normalized === 'defer') {
-    userExperience.daysUntilForcedReboot = 7;
-  }
 
   return {
     '@odata.type': 'microsoft.graph.windowsUpdates.deploymentSettings',
@@ -178,15 +173,6 @@ function buildStatusCard(code, label, tone, message) {
   return { code, label, tone, message };
 }
 
-function buildGuidedTask(type, payload = {}) {
-  const now = Date.now();
-  return {
-    taskId: `${type}-${now}`,
-    queuedAt: new Date(now).toISOString(),
-    ...payload
-  };
-}
-
 function buildPlanForWindowsUpdate(classification, finding, options = {}) {
   return {
     executor: 'native-windows-update',
@@ -195,7 +181,7 @@ function buildPlanForWindowsUpdate(classification, finding, options = {}) {
     autoRemediate: true,
     executionMode: 'native-update-now',
     recommendedUpdateType: options.updateType || 'security',
-    rebootBehavior: options.rebootBehavior || 'ifRequired',
+    rebootBehavior: options.rebootBehavior || 'reboot-if-required',
     targetHint: finding?.productName || finding?.name || finding?.cveId || 'Windows update exposure',
     message: 'Windows Update native executor is ready. Provide device IDs and run Update now.',
     statusCard: buildStatusCard('native-ready', 'native ready', 'success', 'Windows Update execution is ready.'),
@@ -319,9 +305,7 @@ async function planNativeRemediation({ classification, finding = {}, options = {
 
 async function executeWindowsUpdate({ tenantId, finding = {}, options = {} }) {
   const updateType = String(options.updateType || 'security').toLowerCase() === 'feature' ? 'feature' : 'security';
-  const rebootBehavior = ['ifRequired', 'force', 'defer'].includes(String(options.rebootBehavior || 'ifRequired'))
-    ? String(options.rebootBehavior || 'ifRequired')
-    : 'ifRequired';
+  const rebootBehavior = String(options.rebootBehavior || 'reboot-if-required');
   const deviceIds = toArray(options.targetDeviceIds || options.deviceIds || []);
 
   if (!deviceIds.length) {
@@ -367,39 +351,25 @@ async function executeWindowsUpdate({ tenantId, finding = {}, options = {} }) {
 }
 
 async function executeIntunePolicy({ finding = {}, options = {} }) {
-  const target = options.policyTarget || finding?.productName || finding?.name || 'Policy target not specified';
   return {
     queued: true,
     supported: true,
     status: 'native-queued',
     executionMode: 'native-queued',
-    target,
+    target: options.policyTarget || finding?.productName || finding?.name || 'Policy target not specified',
     notes: options.notes || '',
-    task: buildGuidedTask('intune-policy', {
-      type: 'intune-policy',
-      target,
-      notes: options.notes || '',
-      summary: `Review and apply Intune policy changes for ${target}`
-    }),
     message: 'Intune policy remediation was queued as a guided native task. Live Graph policy mutation is not enabled yet.'
   };
 }
 
 async function executeScriptRemediation({ finding = {}, options = {} }) {
-  const scriptName = options.scriptName || finding?.productName || finding?.name || 'Script target not specified';
   return {
     queued: true,
     supported: true,
     status: 'native-queued',
     executionMode: 'native-queued',
-    scriptName,
+    scriptName: options.scriptName || finding?.productName || finding?.name || 'Script target not specified',
     notes: options.notes || '',
-    task: buildGuidedTask('script', {
-      type: 'script',
-      scriptName,
-      notes: options.notes || '',
-      summary: `Review and assign remediation script ${scriptName}`
-    }),
     message: 'Script / proactive remediation was queued as a guided native task. Live Intune script assignment is not enabled yet.'
   };
 }
