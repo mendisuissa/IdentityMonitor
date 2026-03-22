@@ -1,10 +1,5 @@
-Apply these files over your current IdentityMonitor project.
-
+Apply these files into the matching paths in your repo.
+This delta fixes Defender vulnerability normalization and classification so findings do not default to application.
 Files included:
 - backend/src/services/tenantDefenderClient.js
 - backend/src/services/remediationCatalog.js
-
-What this fixes:
-- Stops forcing every Defender vulnerability into category=application
-- Improves classification order so windows-update / intune-policy / script are matched before application
-- Preserves the current UI

@@ -156,44 +156,50 @@ function guessProductFromText(text) {
   return null;
 }
 
-function inferCategory(raw = {}, productName = null, publisher = null) {
-  const explicitCategory = normalizeText(raw.category || raw.vulnerabilityCategory || raw.assetCategory);
-  if (explicitCategory) {
-    return explicitCategory.toLowerCase();
-  }
 
-  const text = [
+function inferCategory(raw = {}, productName = null) {
+  const categoryHints = [
+    raw.category,
+    raw.vulnerabilityCategory,
+    raw.recommendationCategory,
+    raw.productName,
     raw.name,
     raw.description,
-    productName,
-    publisher,
     raw.recommendation,
+    productName,
+    raw.vendor,
+    raw.publisher,
   ]
     .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
+    .map((v) => String(v).toLowerCase())
+    .join(' ');
 
-  const windowsUpdateHints = [
-    'windows update',
-    'security update',
-    'feature update',
-    'quality update',
-    'cumulative update',
-    'servicing stack',
-    'kb',
-    'microsoft windows',
-    'windows server',
-    'operating system',
+  const windowsHints = [
+    'windows update', 'security update', 'feature update', 'quality update', 'cumulative update',
+    'kb', 'operating system', 'windows server', 'windows 10', 'windows 11', 'microsoft windows',
+    'defender platform', 'monthly rollup', 'patch tuesday'
   ];
-  const intuneHints = ['intune', 'configuration profile', 'compliance policy', 'device policy', 'settings catalog'];
-  const scriptHints = ['script', 'powershell', 'bash', 'proactive remediation', 'remediation script'];
-  const identityHints = ['identity', 'entra', 'azure ad', 'conditional access', 'mfa', 'authentication'];
+  const intuneHints = [
+    'intune', 'configuration profile', 'compliance policy', 'device policy', 'device configuration',
+    'settings catalog', 'administrative template'
+  ];
+  const scriptHints = [
+    'powershell', 'script', 'shell script', 'remediation script', 'proactive remediation', 'detection script'
+  ];
+  const identityHints = [
+    'identity', 'credential', 'authentication', 'conditional access', 'mfa', 'entra', 'azure ad'
+  ];
+  const applicationHints = [
+    'chrome', 'chromium', 'firefox', 'edge', 'webview', 'acrobat', 'adobe', 'java', 'office', 'vlc',
+    '7-zip', '7zip', 'browser', 'runtime', 'mongodb', 'openssl', 'app', 'application'
+  ];
 
-  if (windowsUpdateHints.some((hint) => text.includes(hint))) return 'windows-update';
-  if (intuneHints.some((hint) => text.includes(hint))) return 'intune-policy';
-  if (scriptHints.some((hint) => text.includes(hint))) return 'script';
-  if (identityHints.some((hint) => text.includes(hint))) return 'identity';
-  return 'application';
+  if (windowsHints.some((hint) => categoryHints.includes(hint))) return 'windows-update';
+  if (intuneHints.some((hint) => categoryHints.includes(hint))) return 'intune-policy';
+  if (scriptHints.some((hint) => categoryHints.includes(hint))) return 'script';
+  if (identityHints.some((hint) => categoryHints.includes(hint))) return 'identity';
+  if (applicationHints.some((hint) => categoryHints.includes(hint))) return 'application';
+  return 'unknown';
 }
 
 function normalizeVulnerability(raw) {
@@ -203,7 +209,6 @@ function normalizeVulnerability(raw) {
     guessProductFromText(raw.description) ||
     (cveId && cveId.toUpperCase().startsWith('CVE-') ? null : normalizeText(raw.name));
   const publisher = normalizeText(raw.vendor || raw.publisher || null);
-  const category = inferCategory(raw, productName, publisher);
   return {
     id: normalizeText(raw.id || cveId),
     cveId,
@@ -221,7 +226,7 @@ function normalizeVulnerability(raw) {
     exploitInKit: raw.exploitInKit === true,
     status: normalizeText(raw.status) || null,
     epss: raw.epss ?? null,
-    category,
+    category: inferCategory(raw, productName),
     affectedMachineCount: Number(raw.exposedMachines || raw.affectedMachineCount || 0),
     affectedMachines: Array.isArray(raw.affectedMachines) ? raw.affectedMachines : [],
     recommendation: normalizeText(raw.recommendation) || null,
