@@ -413,34 +413,22 @@ async function getTenantConfigOrThrow(tenantId) {
 
 async function listTenantVulnerabilities(tenantId, top = 0) {
   const { config } = await getTenantConfigOrThrow(tenantId);
-  const requestedTop = Number(top) > 0 ? Number(top) : 0;
 
-  const [vulnRows, recRows] = await Promise.all([
-    fetchDefenderCollectionWithSkip(config, '/api/vulnerabilities', {
-      pageSize: 200,
-      maxPageSize: 8000,
-      maxPages: 50,
-      top: requestedTop,
-    }),
-    fetchDefenderCollectionWithSkip(config, '/api/recommendations', {
-      pageSize: 200,
-      maxPageSize: 10000,
-      maxPages: 10,
-      top: 2000,
-    }).catch(() => []),
-  ]);
+  const requestedTop = Number(top) > 0 ? Number(top) : 200;
+  const page = await defenderGet(
+    config,
+    `/api/vulnerabilities?$top=${Math.min(requestedTop, 200)}&$skip=0`
+  );
 
-  const baseItems = Array.isArray(vulnRows) ? vulnRows.map(normalizeVulnerability) : [];
-  const recMap = buildRecommendationIndex(Array.isArray(recRows) ? recRows : []);
-  const items = baseItems.map((item) => mergeEnrichment(item, recMap, new Map()));
-  const finalItems = requestedTop > 0 ? items.slice(0, requestedTop) : items;
+  const vulnRows = Array.isArray(page?.value) ? page.value : [];
+  const items = vulnRows.map(normalizeVulnerability);
 
   await writeTenantSnapshot(tenantId, 'defender/vulnerabilities', {
-    count: finalItems.length,
-    items: finalItems,
+    count: items.length,
+    items,
   }).catch(() => {});
 
-  return finalItems;
+  return items;
 }
 
 async function listTenantRecommendations(tenantId, top = 0) {
