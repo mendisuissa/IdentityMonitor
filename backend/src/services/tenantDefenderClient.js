@@ -121,58 +121,73 @@ async function defenderGet(config, path) {
     throw error;
   }
 
+  
+return data;
+}
+
+async function defenderGetUrl(config, url) {
+  const cacheKey = getCacheKey(config);
+  let token = await getAccessToken(config);
+
+  let response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+    },
+  });
+
+  let data = await response.json().catch(() => ({}));
+
+  const missingRoles =
+    response.status === 403 &&
+    String(data?.error?.message || '').includes('Missing application roles');
+
+  if (missingRoles) {
+    tokenCache.delete(cacheKey);
+    token = await getAccessToken(config);
+
+    response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+    });
+
+    data = await response.json().catch(() => ({}));
+  }
+
+  if (!response.ok) {
+    const apiMessage = data?.error?.message || `Defender API failed: ${response.status}`;
+    const error = new Error(apiMessage);
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+
   return data;
 }
 
+async function defenderGetAll(config, path, { maxPages = 20 } = {}) {
+  const firstUrl = path.startsWith('http') ? path : `${DEFENDER_API_BASE}${path}`;
+  let nextUrl = firstUrl;
+  let pages = 0;
+  const collected = [];
 
-function normalizeDefenderUrl(url) {
-  if (!url) return null;
-  const value = String(url).trim();
-  if (!value) return null;
-  if (/^https?:\/\//i.test(value)) {
-    return value;
-  }
-  return `${DEFENDER_API_BASE}${value.startsWith('/') ? '' : '/'}${value}`;
-}
-
-function buildDefenderAbsoluteUrl(path) {
-  if (!path) return null;
-  return normalizeDefenderUrl(path);
-}
-
-function withTop(path, top) {
-  const absolute = buildDefenderAbsoluteUrl(path);
-  if (!absolute || !top || Number(top) <= 0) {
-    return absolute;
-  }
-  const url = new URL(absolute);
-  if (!url.searchParams.has('$top')) {
-    url.searchParams.set('$top', String(top));
-  }
-  return url.toString();
-}
-
-async function defenderGetAllPages(config, path, options = {}) {
-  const maxItems = Number(options.maxItems || 0);
-  let nextUrl = withTop(path, options.top);
-  const items = [];
-
-  while (nextUrl) {
-    const data = await defenderGet(config, nextUrl);
-    const pageItems = Array.isArray(data?.value) ? data.value : [];
-    items.push(...pageItems);
-
-    if (maxItems > 0 && items.length >= maxItems) {
-      return items.slice(0, maxItems);
-    }
-
-    nextUrl = normalizeDefenderUrl(data?.['@odata.nextLink'] || data?.nextLink || null);
+  while (nextUrl && pages < maxPages) {
+    const data = await defenderGetUrl(config, nextUrl);
+    const batch = Array.isArray(data?.value) ? data.value : [];
+    collected.push(...batch);
+    nextUrl = data?.['@odata.nextLink'] || null;
+    pages += 1;
   }
 
-  return items;
+  return collected;
 }
 
 function normalizeSeverity(value) {
+
   return value || 'unknown';
 }
 
@@ -292,10 +307,7 @@ function mergeEnrichment(vuln, recMap, softwareMap) {
 }
 
 async function listSoftwareVulnerabilitiesByMachine(config, top = 5000) {
-  return defenderGetAllPages(config, '/api/vulnerabilities/machinesVulnerabilities', {
-    top: 5000,
-    maxItems: Number(top || 5000),
-  });
+  return defenderGetAll(config, `/api/vulnerabilities/machinesVulnerabilities?$top=${top}`, { maxPages: 20 });
 }
 
 function buildSoftwareIndex(rows) {
@@ -376,18 +388,13 @@ async function getTenantConfigOrThrow(tenantId) {
   return { integration, config };
 }
 
-async function listTenantVulnerabilities(tenantId, top = 0) {
+async function listTenantVulnerabilities(tenantId, top = 100) {
   const { config } = await getTenantConfigOrThrow(tenantId);
-  const effectiveTop = Number(top || 0);
+  const safeTop = Number.isFinite(Number(top)) && Number(top) > 0 ? Number(top) : 100;
+  const effectiveTop = Math.max(safeTop, 500);
   const [vulnRows, recRows, softwareRows] = await Promise.all([
-    defenderGetAllPages(config, '/api/vulnerabilities', {
-      top: effectiveTop > 0 ? Math.min(effectiveTop, 5000) : 5000,
-      maxItems: effectiveTop > 0 ? effectiveTop : 0,
-    }),
-    defenderGetAllPages(config, '/api/recommendations', {
-      top: effectiveTop > 0 ? Math.min(Math.max(effectiveTop, 200), 2000) : 1000,
-      maxItems: effectiveTop > 0 ? Math.min(Math.max(effectiveTop, 200), 2000) : 1000,
-    }).catch(() => []),
+    defenderGetAll(config, `/api/vulnerabilities?$top=${effectiveTop}`, { maxPages: 20 }),
+    defenderGetAll(config, `/api/recommendations?$top=${Math.min(effectiveTop, 500)}`, { maxPages: 10 }).catch(() => []),
     listSoftwareVulnerabilitiesByMachine(config, 5000).catch(() => []),
   ]);
 
@@ -404,37 +411,31 @@ async function listTenantVulnerabilities(tenantId, top = 0) {
   return items;
 }
 
-async function listTenantRecommendations(tenantId, top = 0) {
+async function listTenantRecommendations(tenantId, top = 100) {
   const { config } = await getTenantConfigOrThrow(tenantId);
-  const effectiveTop = Number(top || 0);
-  const items = await defenderGetAllPages(config, '/api/recommendations', {
-    top: effectiveTop > 0 ? Math.min(effectiveTop, 1000) : 1000,
-    maxItems: effectiveTop > 0 ? effectiveTop : 0,
-  });
-  const normalizedItems = Array.isArray(items) ? items.map(normalizeRecommendation) : [];
+  const safeTop = Number.isFinite(Number(top)) && Number(top) > 0 ? Number(top) : 100;
+  const rows = await defenderGetAll(config, `/api/recommendations?$top=${Math.max(safeTop, 500)}`, { maxPages: 10 });
+  const items = Array.isArray(rows) ? rows.map(normalizeRecommendation) : [];
 
   await writeTenantSnapshot(tenantId, 'defender/recommendations', {
-    count: normalizedItems.length,
-    items: normalizedItems,
+    count: items.length,
+    items,
   }).catch(() => {});
 
-  return normalizedItems;
+  return items;
 }
 
-async function listTenantVulnerabilityMachines(tenantId, cveId, top = 0) {
+async function listTenantVulnerabilityMachines(tenantId, cveId, top = 100) {
   const { config } = await getTenantConfigOrThrow(tenantId);
   const normalized = String(cveId || '').toUpperCase();
   if (!normalized.startsWith('CVE-')) {
     return { count: 0, items: [], unsupportedIdentifier: cveId };
   }
 
-  const rows = await defenderGetAllPages(
+  const rows = await defenderGetAll(
     config,
-    `/api/vulnerabilities/${encodeURIComponent(normalized)}/machineReferences`,
-    {
-      top: Number(top || 0) > 0 ? Math.min(Number(top), 1000) : 1000,
-      maxItems: Number(top || 0) > 0 ? Number(top) : 0,
-    }
+    `/api/vulnerabilities/${encodeURIComponent(normalized)}/machineReferences?$top=${Math.max(Number(top) || 100, 500)}`,
+    { maxPages: 20 }
   );
 
   const items = Array.isArray(rows)
