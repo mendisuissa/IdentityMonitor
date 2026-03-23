@@ -149,6 +149,35 @@ async function defenderGetAllPages(config, initialPathOrUrl, options = {}) {
   return allItems;
 }
 
+async function defenderGetAllPagesWithSkip(config, resourcePath, options = {}) {
+  const maxPages = Number(options.maxPages || 100);
+  const pageSize = Math.min(Math.max(Number(options.pageSize || 200), 1), 8000);
+  const requestedTop = Number(options.top || 0) > 0 ? Number(options.top) : 0;
+  const allItems = [];
+  let skip = 0;
+  let page = 0;
+
+  while (page < maxPages) {
+    page += 1;
+    const separator = resourcePath.includes('?') ? '&' : '?';
+    const url = `${resourcePath}${separator}$top=${pageSize}&$skip=${skip}`;
+    const data = await defenderGet(config, url);
+    const items = Array.isArray(data?.value) ? data.value : [];
+
+    if (!items.length) break;
+    allItems.push(...items);
+
+    if (requestedTop > 0 && allItems.length >= requestedTop) {
+      return allItems.slice(0, requestedTop);
+    }
+
+    if (items.length < pageSize) break;
+    skip += pageSize;
+  }
+
+  return requestedTop > 0 ? allItems.slice(0, requestedTop) : allItems;
+}
+
 function normalizeSeverity(value) {
   return value || 'unknown';
 }
@@ -181,6 +210,28 @@ function guessProductFromText(text) {
   return null;
 }
 
+function inferCategory({ productName, publisher, description, recommendation, name }) {
+  const text = [productName, publisher, description, recommendation, name]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  const windowsHints = [
+    'windows 10', 'windows 11', 'windows server', 'security update', 'feature update',
+    'cumulative update', 'quality update', 'kb', 'microsoft windows'
+  ];
+  const intuneHints = ['intune', 'compliance policy', 'configuration profile', 'device policy'];
+  const scriptHints = ['powershell', 'script', 'proactive remediation', 'remediation script'];
+  const identityHints = ['entra', 'azure ad', 'identity', 'mfa', 'authentication'];
+
+  if (windowsHints.some((hint) => text.includes(hint))) return 'windows-update';
+  if (intuneHints.some((hint) => text.includes(hint))) return 'intune-policy';
+  if (scriptHints.some((hint) => text.includes(hint))) return 'script';
+  if (identityHints.some((hint) => text.includes(hint))) return 'identity';
+  if (productName || publisher) return 'application';
+  return 'unknown';
+}
+
 function normalizeVulnerability(raw) {
   const cveId = normalizeText(raw.cveId || raw.id || null);
   const productName =
@@ -188,13 +239,15 @@ function normalizeVulnerability(raw) {
     guessProductFromText(raw.description) ||
     (cveId && cveId.toUpperCase().startsWith('CVE-') ? null : normalizeText(raw.name));
   const publisher = normalizeText(raw.vendor || raw.publisher || null);
+  const description = normalizeText(raw.description) || '';
+  const recommendation = normalizeText(raw.recommendation) || null;
   return {
     id: normalizeText(raw.id || cveId),
     cveId,
     name: normalizeText(raw.name || cveId),
     productName,
     publisher,
-    description: normalizeText(raw.description) || '',
+    description,
     severity: normalizeSeverity(raw.severity || raw.severityName),
     cvss: raw.cvssV3 || raw.cvssScore || null,
     publishedOn: raw.publishedOn || null,
@@ -205,10 +258,10 @@ function normalizeVulnerability(raw) {
     exploitInKit: raw.exploitInKit === true,
     status: normalizeText(raw.status) || null,
     epss: raw.epss ?? null,
-    category: 'application',
+    category: inferCategory({ productName, publisher, description, recommendation, name: raw.name }),
     affectedMachineCount: Number(raw.exposedMachines || raw.affectedMachineCount || 0),
     affectedMachines: Array.isArray(raw.affectedMachines) ? raw.affectedMachines : [],
-    recommendation: normalizeText(raw.recommendation) || null,
+    recommendation,
   };
 }
 
@@ -269,7 +322,7 @@ function mergeEnrichment(vuln, recMap, softwareMap) {
 }
 
 async function listSoftwareVulnerabilitiesByMachine(config) {
-  return defenderGetAllPages(config, '/api/vulnerabilities/machinesVulnerabilities?$top=200', { maxPages: 100 });
+  return defenderGetAllPagesWithSkip(config, '/api/vulnerabilities/machinesVulnerabilities', { pageSize: 200, maxPages: 100 });
 }
 
 function buildSoftwareIndex(rows) {
@@ -354,19 +407,10 @@ async function listTenantVulnerabilities(tenantId, top = 0) {
   const { config } = await getTenantConfigOrThrow(tenantId);
 
   const requestedTop = Number(top) > 0 ? Number(top) : 0;
-  const firstPageTop = requestedTop > 0 ? Math.min(requestedTop, 200) : 200;
 
   const [vulnRows, recRows, softwareRows] = await Promise.all([
-    defenderGetAllPages(
-      config,
-      `/api/vulnerabilities?$top=${firstPageTop}`,
-      { maxPages: 100 }
-    ),
-    defenderGetAllPages(
-      config,
-      '/api/recommendations?$top=200',
-      { maxPages: 25 }
-    ).catch(() => []),
+    defenderGetAllPagesWithSkip(config, '/api/vulnerabilities', { pageSize: 200, top: requestedTop, maxPages: 100 }),
+    defenderGetAllPagesWithSkip(config, '/api/recommendations', { pageSize: 200, maxPages: 25 }).catch(() => []),
     listSoftwareVulnerabilitiesByMachine(config).catch(() => []),
   ]);
 
@@ -374,7 +418,6 @@ async function listTenantVulnerabilities(tenantId, top = 0) {
   const recMap = buildRecommendationIndex(Array.isArray(recRows) ? recRows : []);
   const softwareMap = buildSoftwareIndex(Array.isArray(softwareRows) ? softwareRows : []);
   const items = baseItems.map((item) => mergeEnrichment(item, recMap, softwareMap));
-
   const finalItems = requestedTop > 0 ? items.slice(0, requestedTop) : items;
 
   await writeTenantSnapshot(tenantId, 'defender/vulnerabilities', {
@@ -384,17 +427,12 @@ async function listTenantVulnerabilities(tenantId, top = 0) {
 
   return finalItems;
 }
+
 async function listTenantRecommendations(tenantId, top = 0) {
   const { config } = await getTenantConfigOrThrow(tenantId);
 
   const requestedTop = Number(top) > 0 ? Number(top) : 0;
-  const firstPageTop = requestedTop > 0 ? Math.min(requestedTop, 200) : 200;
-
-  const items = await defenderGetAllPages(
-    config,
-    `/api/recommendations?$top=${firstPageTop}`,
-    { maxPages: 25 }
-  );
+  const items = await defenderGetAllPagesWithSkip(config, '/api/recommendations', { pageSize: 200, top: requestedTop, maxPages: 25 });
 
   const normalized = Array.isArray(items) ? items.map(normalizeRecommendation) : [];
   const finalItems = requestedTop > 0 ? normalized.slice(0, requestedTop) : normalized;
@@ -414,10 +452,11 @@ async function listTenantVulnerabilityMachines(tenantId, cveId, top = 100) {
     return { count: 0, items: [], unsupportedIdentifier: cveId };
   }
 
-  const rows = await defenderGetAllPages(
+  const requestedTop = Number(top) > 0 ? Number(top) : 0;
+  const rows = await defenderGetAllPagesWithSkip(
     config,
-    `/api/vulnerabilities/${encodeURIComponent(normalized)}/machineReferences?$top=${Math.min(Number(top) || 100, 200)}`,
-    { maxPages: 50 }
+    `/api/vulnerabilities/${encodeURIComponent(normalized)}/machineReferences`,
+    { pageSize: 200, top: requestedTop, maxPages: 50 }
   );
 
   const items = Array.isArray(rows)
