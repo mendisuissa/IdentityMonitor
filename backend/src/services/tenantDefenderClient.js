@@ -1,4 +1,3 @@
-
 const { getTenantIntegration } = require('./tenantIntegrationStore');
 const { writeTenantSnapshot } = require('./tenantBlobSnapshotStore');
 
@@ -80,54 +79,18 @@ async function getAccessToken(config) {
   return data.access_token;
 }
 
-async function defenderGet(config, path) {
-  const cacheKey = getCacheKey(config);
-  let token = await getAccessToken(config);
-
-  let response = await fetch(`${DEFENDER_API_BASE}${path}`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
-    },
-  });
-
-  let data = await response.json().catch(() => ({}));
-
-  const missingRoles =
-    response.status === 403 &&
-    String(data?.error?.message || '').includes('Missing application roles');
-
-  if (missingRoles) {
-    tokenCache.delete(cacheKey);
-    token = await getAccessToken(config);
-
-    response = await fetch(`${DEFENDER_API_BASE}${path}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-      },
-    });
-
-    data = await response.json().catch(() => ({}));
+function normalizeDefenderUrl(pathOrUrl) {
+  if (!pathOrUrl) return null;
+  if (/^https?:\/\//i.test(pathOrUrl)) {
+    return pathOrUrl;
   }
-
-  if (!response.ok) {
-    const apiMessage = data?.error?.message || `Defender API failed: ${response.status}`;
-    const error = new Error(apiMessage);
-    error.status = response.status;
-    error.details = data;
-    throw error;
-  }
-
-  
-return data;
+  return `${DEFENDER_API_BASE}${pathOrUrl}`;
 }
 
-async function defenderGetUrl(config, url) {
+async function defenderGet(config, pathOrUrl) {
   const cacheKey = getCacheKey(config);
   let token = await getAccessToken(config);
+  const url = normalizeDefenderUrl(pathOrUrl);
 
   let response = await fetch(url, {
     method: 'GET',
@@ -169,25 +132,24 @@ async function defenderGetUrl(config, url) {
   return data;
 }
 
-async function defenderGetAll(config, path, { maxPages = 20 } = {}) {
-  const firstUrl = path.startsWith('http') ? path : `${DEFENDER_API_BASE}${path}`;
-  let nextUrl = firstUrl;
-  let pages = 0;
-  const collected = [];
+async function defenderGetAllPages(config, initialPathOrUrl, options = {}) {
+  const maxPages = Number(options.maxPages || 50);
+  const allItems = [];
+  let nextUrl = initialPathOrUrl;
+  let page = 0;
 
-  while (nextUrl && pages < maxPages) {
-    const data = await defenderGetUrl(config, nextUrl);
-    const batch = Array.isArray(data?.value) ? data.value : [];
-    collected.push(...batch);
-    nextUrl = data?.['@odata.nextLink'] || null;
-    pages += 1;
+  while (nextUrl && page < maxPages) {
+    page += 1;
+    const data = await defenderGet(config, nextUrl);
+    const items = Array.isArray(data?.value) ? data.value : [];
+    allItems.push(...items);
+    nextUrl = data?.['@odata.nextLink'] || data?.odataNextLink || null;
   }
 
-  return collected;
+  return allItems;
 }
 
 function normalizeSeverity(value) {
-
   return value || 'unknown';
 }
 
@@ -306,8 +268,8 @@ function mergeEnrichment(vuln, recMap, softwareMap) {
   };
 }
 
-async function listSoftwareVulnerabilitiesByMachine(config, top = 5000) {
-  return defenderGetAll(config, `/api/vulnerabilities/machinesVulnerabilities?$top=${top}`, { maxPages: 20 });
+async function listSoftwareVulnerabilitiesByMachine(config) {
+  return defenderGetAllPages(config, '/api/vulnerabilities/machinesVulnerabilities?$top=200', { maxPages: 100 });
 }
 
 function buildSoftwareIndex(rows) {
@@ -388,14 +350,12 @@ async function getTenantConfigOrThrow(tenantId) {
   return { integration, config };
 }
 
-async function listTenantVulnerabilities(tenantId, top = 100) {
+async function listTenantVulnerabilities(tenantId, top = 500) {
   const { config } = await getTenantConfigOrThrow(tenantId);
-  const safeTop = Number.isFinite(Number(top)) && Number(top) > 0 ? Number(top) : 100;
-  const effectiveTop = Math.max(safeTop, 500);
   const [vulnRows, recRows, softwareRows] = await Promise.all([
-    defenderGetAll(config, `/api/vulnerabilities?$top=${effectiveTop}`, { maxPages: 20 }),
-    defenderGetAll(config, `/api/recommendations?$top=${Math.min(effectiveTop, 500)}`, { maxPages: 10 }).catch(() => []),
-    listSoftwareVulnerabilitiesByMachine(config, 5000).catch(() => []),
+    defenderGetAllPages(config, `/api/vulnerabilities?$top=${Math.min(Number(top) || 500, 200)}`, { maxPages: 100 }),
+    defenderGetAllPages(config, '/api/recommendations?$top=200', { maxPages: 25 }).catch(() => []),
+    listSoftwareVulnerabilitiesByMachine(config).catch(() => []),
   ]);
 
   const baseItems = Array.isArray(vulnRows) ? vulnRows.map(normalizeVulnerability) : [];
@@ -413,16 +373,15 @@ async function listTenantVulnerabilities(tenantId, top = 100) {
 
 async function listTenantRecommendations(tenantId, top = 100) {
   const { config } = await getTenantConfigOrThrow(tenantId);
-  const safeTop = Number.isFinite(Number(top)) && Number(top) > 0 ? Number(top) : 100;
-  const rows = await defenderGetAll(config, `/api/recommendations?$top=${Math.max(safeTop, 500)}`, { maxPages: 10 });
-  const items = Array.isArray(rows) ? rows.map(normalizeRecommendation) : [];
+  const items = await defenderGetAllPages(config, `/api/recommendations?$top=${Math.min(Number(top) || 100, 200)}`, { maxPages: 25 });
+  const normalized = Array.isArray(items) ? items.map(normalizeRecommendation) : [];
 
   await writeTenantSnapshot(tenantId, 'defender/recommendations', {
-    count: items.length,
-    items,
+    count: normalized.length,
+    items: normalized,
   }).catch(() => {});
 
-  return items;
+  return normalized;
 }
 
 async function listTenantVulnerabilityMachines(tenantId, cveId, top = 100) {
@@ -432,10 +391,10 @@ async function listTenantVulnerabilityMachines(tenantId, cveId, top = 100) {
     return { count: 0, items: [], unsupportedIdentifier: cveId };
   }
 
-  const rows = await defenderGetAll(
+  const rows = await defenderGetAllPages(
     config,
-    `/api/vulnerabilities/${encodeURIComponent(normalized)}/machineReferences?$top=${Math.max(Number(top) || 100, 500)}`,
-    { maxPages: 20 }
+    `/api/vulnerabilities/${encodeURIComponent(normalized)}/machineReferences?$top=${Math.min(Number(top) || 100, 200)}`,
+    { maxPages: 50 }
   );
 
   const items = Array.isArray(rows)
