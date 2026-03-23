@@ -132,56 +132,49 @@ async function defenderGet(config, pathOrUrl) {
   return data;
 }
 
-
 async function defenderGetAllPages(config, initialPathOrUrl, options = {}) {
   const maxPages = Number(options.maxPages || 50);
   const allItems = [];
   let nextUrl = initialPathOrUrl;
   let page = 0;
 
-  const initialUrl = normalizeDefenderUrl(initialPathOrUrl);
-  let skipMode = false;
-  let pageSize = 0;
-  let skip = 0;
-
-  try {
-    const u = new URL(initialUrl);
-    pageSize = Number(u.searchParams.get('$top') || 0);
-    skip = Number(u.searchParams.get('$skip') || 0);
-    if (pageSize > 0 && /\/api\/(vulnerabilities|recommendations)(\?|$)/i.test(u.pathname)) {
-      skipMode = true;
-    }
-  } catch (_) {}
-
   while (nextUrl && page < maxPages) {
     page += 1;
     const data = await defenderGet(config, nextUrl);
     const items = Array.isArray(data?.value) ? data.value : [];
     allItems.push(...items);
-
-    const rawNext = data?.['@odata.nextLink'] || data?.odataNextLink || null;
-    if (rawNext) {
-      nextUrl = rawNext;
-      continue;
-    }
-
-    if (skipMode && pageSize > 0 && items.length === pageSize) {
-      skip += pageSize;
-      try {
-        const u = new URL(initialUrl);
-        u.searchParams.set('$top', String(pageSize));
-        u.searchParams.set('$skip', String(skip));
-        nextUrl = `${u.pathname}${u.search}`;
-      } catch (_) {
-        nextUrl = null;
-      }
-      continue;
-    }
-
-    nextUrl = null;
+    nextUrl = data?.['@odata.nextLink'] || data?.odataNextLink || null;
   }
 
   return allItems;
+}
+
+async function fetchDefenderCollectionWithSkip(config, collectionPath, options = {}) {
+  const maxPages = Number(options.maxPages || 50);
+  const pageSize = Math.max(1, Math.min(Number(options.pageSize || 200), Number(options.maxPageSize || 8000) || 8000));
+  const requestedTop = Number(options.top || 0);
+
+  let page = 0;
+  let skip = 0;
+  const rows = [];
+
+  while (page < maxPages) {
+    page += 1;
+    const remaining = requestedTop > 0 ? requestedTop - rows.length : pageSize;
+    if (requestedTop > 0 && remaining <= 0) break;
+
+    const currentTop = requestedTop > 0 ? Math.min(pageSize, remaining) : pageSize;
+    const separator = collectionPath.includes('?') ? '&' : '?';
+    const path = `${collectionPath}${separator}$top=${currentTop}&$skip=${skip}`;
+    const data = await defenderGet(config, path);
+    const items = Array.isArray(data?.value) ? data.value : [];
+    rows.push(...items);
+
+    if (items.length < currentTop) break;
+    skip += items.length;
+  }
+
+  return rows;
 }
 
 function normalizeSeverity(value) {
@@ -216,34 +209,32 @@ function guessProductFromText(text) {
   return null;
 }
 
-function inferCategory(raw = {}, productName = null) {
+function inferCategory(raw) {
   const text = [
     raw?.name,
     raw?.description,
+    raw?.productName,
     raw?.vendor,
     raw?.publisher,
-    productName,
-    raw?.category,
-    raw?.vulnerabilityCategory,
     raw?.recommendation,
   ]
     .filter(Boolean)
-    .map((v) => String(v).toLowerCase())
-    .join(' ');
+    .join(' ')
+    .toLowerCase();
 
-  const windowsHints = [
-    'windows update', 'security update', 'feature update', 'quality update', 'kb', 'cumulative update',
-    'windows component', 'operating system', 'windows server', 'windows 10', 'windows 11', 'monthly rollup',
-    'servicing stack', 'microsoft windows'
-  ];
-  const intuneHints = ['intune', 'configuration profile', 'compliance policy', 'device policy', 'settings catalog'];
-  const scriptHints = ['script', 'powershell', 'remediation script', 'proactive remediation', 'detection script'];
-  const identityHints = ['identity', 'conditional access', 'entra', 'azure ad', 'authentication', 'mfa'];
-
-  if (windowsHints.some((hint) => text.includes(hint))) return 'windows-update';
-  if (intuneHints.some((hint) => text.includes(hint))) return 'intune-policy';
-  if (scriptHints.some((hint) => text.includes(hint))) return 'script';
-  if (identityHints.some((hint) => text.includes(hint))) return 'identity';
+  if (!text) return 'unknown';
+  if (/(windows 10|windows 11|windows server|kb\d+|cumulative update|security update|feature update|patch tuesday|microsoft windows)/i.test(text)) {
+    return 'windows-update';
+  }
+  if (/(intune|configuration profile|compliance policy|device management|endpoint manager|mobile device management)/i.test(text)) {
+    return 'intune-policy';
+  }
+  if (/(powershell|script|remediation script|proactive remediation|bash|shell script)/i.test(text)) {
+    return 'script';
+  }
+  if (/(identity|authentication|credential|privilege|entra|azure ad|active directory|mfa)/i.test(text)) {
+    return 'identity';
+  }
   return 'application';
 }
 
@@ -271,7 +262,7 @@ function normalizeVulnerability(raw) {
     exploitInKit: raw.exploitInKit === true,
     status: normalizeText(raw.status) || null,
     epss: raw.epss ?? null,
-    category: inferCategory(raw, productName),
+    category: inferCategory(raw),
     affectedMachineCount: Number(raw.exposedMachines || raw.affectedMachineCount || 0),
     affectedMachines: Array.isArray(raw.affectedMachines) ? raw.affectedMachines : [],
     recommendation: normalizeText(raw.recommendation) || null,
@@ -335,7 +326,11 @@ function mergeEnrichment(vuln, recMap, softwareMap) {
 }
 
 async function listSoftwareVulnerabilitiesByMachine(config) {
-  return defenderGetAllPages(config, '/api/vulnerabilities/machinesVulnerabilities?$top=200', { maxPages: 25 });
+  return fetchDefenderCollectionWithSkip(config, '/api/vulnerabilities/machinesVulnerabilities', {
+    pageSize: 200,
+    maxPageSize: 200,
+    maxPages: 25,
+  });
 }
 
 function buildSoftwareIndex(rows) {
@@ -416,31 +411,28 @@ async function getTenantConfigOrThrow(tenantId) {
   return { integration, config };
 }
 
-
-async function fetchAllVulnerabilities(config, requestedTop = 0) {
-  const pageSize = requestedTop > 0 ? Math.min(requestedTop, 200) : 200;
-  return defenderGetAllPages(config, `/api/vulnerabilities?$top=${pageSize}&$skip=0`, { maxPages: 100 });
-}
-
-async function fetchAllRecommendations(config, requestedTop = 0) {
-  const pageSize = requestedTop > 0 ? Math.min(requestedTop, 200) : 200;
-  return defenderGetAllPages(config, `/api/recommendations?$top=${pageSize}&$skip=0`, { maxPages: 50 });
-}
-
 async function listTenantVulnerabilities(tenantId, top = 0) {
   const { config } = await getTenantConfigOrThrow(tenantId);
-
   const requestedTop = Number(top) > 0 ? Number(top) : 0;
 
   const [vulnRows, recRows] = await Promise.all([
-    fetchAllVulnerabilities(config, requestedTop),
-    fetchAllRecommendations(config, 0).catch(() => []),
+    fetchDefenderCollectionWithSkip(config, '/api/vulnerabilities', {
+      pageSize: 200,
+      maxPageSize: 8000,
+      maxPages: 50,
+      top: requestedTop,
+    }),
+    fetchDefenderCollectionWithSkip(config, '/api/recommendations', {
+      pageSize: 200,
+      maxPageSize: 10000,
+      maxPages: 10,
+      top: 2000,
+    }).catch(() => []),
   ]);
 
   const baseItems = Array.isArray(vulnRows) ? vulnRows.map(normalizeVulnerability) : [];
   const recMap = buildRecommendationIndex(Array.isArray(recRows) ? recRows : []);
   const items = baseItems.map((item) => mergeEnrichment(item, recMap, new Map()));
-
   const finalItems = requestedTop > 0 ? items.slice(0, requestedTop) : items;
 
   await writeTenantSnapshot(tenantId, 'defender/vulnerabilities', {
@@ -450,11 +442,17 @@ async function listTenantVulnerabilities(tenantId, top = 0) {
 
   return finalItems;
 }
+
 async function listTenantRecommendations(tenantId, top = 0) {
   const { config } = await getTenantConfigOrThrow(tenantId);
-
   const requestedTop = Number(top) > 0 ? Number(top) : 0;
-  const items = await fetchAllRecommendations(config, requestedTop);
+
+  const items = await fetchDefenderCollectionWithSkip(config, '/api/recommendations', {
+    pageSize: 200,
+    maxPageSize: 10000,
+    maxPages: 10,
+    top: requestedTop,
+  });
 
   const normalized = Array.isArray(items) ? items.map(normalizeRecommendation) : [];
   const finalItems = requestedTop > 0 ? normalized.slice(0, requestedTop) : normalized;
@@ -474,13 +472,10 @@ async function listTenantVulnerabilityMachines(tenantId, cveId, top = 100) {
     return { count: 0, items: [], unsupportedIdentifier: cveId };
   }
 
-  const requestedTop = Number(top) > 0 ? Number(top) : 0;
-  const pageSize = requestedTop > 0 ? Math.min(requestedTop, 200) : 200;
-
-  const rows = await defenderGetAllPages(
+  const rows = await fetchDefenderCollectionWithSkip(
     config,
-    `/api/vulnerabilities/${encodeURIComponent(normalized)}/machineReferences?$top=${pageSize}`,
-    { maxPages: 50 }
+    `/api/vulnerabilities/${encodeURIComponent(normalized)}/machineReferences`,
+    { pageSize: 100, maxPageSize: 200, maxPages: 20, top }
   );
 
   const items = Array.isArray(rows)
@@ -492,8 +487,7 @@ async function listTenantVulnerabilityMachines(tenantId, cveId, top = 100) {
       }))
     : [];
 
-  const finalItems = requestedTop > 0 ? items.slice(0, requestedTop) : items;
-  return { count: finalItems.length, items: finalItems };
+  return { count: items.length, items };
 }
 
 module.exports = {
