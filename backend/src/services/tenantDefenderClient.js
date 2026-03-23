@@ -384,18 +384,27 @@ async function listTenantVulnerabilities(tenantId, top = 0) {
 
   return finalItems;
 }
-
-async function listTenantRecommendations(tenantId, top = 100) {
+async function listTenantRecommendations(tenantId, top = 0) {
   const { config } = await getTenantConfigOrThrow(tenantId);
-  const items = await defenderGetAllPages(config, `/api/recommendations?$top=${Math.min(Number(top) || 100, 200)}`, { maxPages: 25 });
+
+  const requestedTop = Number(top) > 0 ? Number(top) : 0;
+  const firstPageTop = requestedTop > 0 ? Math.min(requestedTop, 200) : 200;
+
+  const items = await defenderGetAllPages(
+    config,
+    `/api/recommendations?$top=${firstPageTop}`,
+    { maxPages: 25 }
+  );
+
   const normalized = Array.isArray(items) ? items.map(normalizeRecommendation) : [];
+  const finalItems = requestedTop > 0 ? normalized.slice(0, requestedTop) : normalized;
 
   await writeTenantSnapshot(tenantId, 'defender/recommendations', {
-    count: normalized.length,
-    items: normalized,
+    count: finalItems.length,
+    items: finalItems,
   }).catch(() => {});
 
-  return normalized;
+  return finalItems;
 }
 
 async function listTenantVulnerabilityMachines(tenantId, cveId, top = 100) {
