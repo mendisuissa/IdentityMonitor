@@ -115,6 +115,523 @@ function toCsvLines(input: string) {
 }
 
 export default function RemediationPage({ tenantId, tenantName }: Props) {
+
+  const componentStyles = `
+    .remediation-shell{
+      color:#e8eefc;
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+    .remediation-shell *{ box-sizing:border-box; }
+    .remediation-hero,
+    .remediation-banner,
+    .remediation-filters,
+    .remediation-list-card,
+    .remediation-detail-card,
+    .remediation-stat-card,
+    .card-block{
+      background:linear-gradient(180deg, rgba(12,31,72,.96) 0%, rgba(6,19,50,.96) 100%);
+      border:1px solid rgba(88,130,255,.22);
+      border-radius:18px;
+      box-shadow:0 10px 32px rgba(0,0,0,.28);
+    }
+    .remediation-hero{
+      display:flex;
+      justify-content:space-between;
+      gap:20px;
+      padding:22px 20px;
+      align-items:flex-start;
+    }
+    .remediation-breadcrumb{
+      color:#8fb6ff;
+      font-size:12px;
+      font-weight:700;
+      margin-bottom:8px;
+    }
+    .remediation-hero h1{
+      margin:0 0 8px;
+      font-size:22px;
+      line-height:1.15;
+      color:#fff;
+    }
+    .remediation-hero p{
+      margin:0 0 14px;
+      color:#bdd2ff;
+      max-width:760px;
+      line-height:1.55;
+    }
+    .remediation-tenant-line{
+      display:flex;
+      flex-wrap:wrap;
+      gap:16px;
+      color:#a8c0ef;
+      font-size:13px;
+    }
+    .remediation-hero-actions{ display:flex; align-items:flex-start; }
+    .btn{
+      border:none;
+      border-radius:12px;
+      padding:10px 16px;
+      font-weight:700;
+      cursor:pointer;
+      transition:.18s ease;
+    }
+    .btn:hover{ transform:translateY(-1px); }
+    .btn:disabled{ opacity:.55; cursor:not-allowed; transform:none; }
+    .btn-primary{
+      background:#ffb527;
+      color:#111827;
+    }
+    .btn-secondary{
+      background:rgba(22,45,92,.9);
+      color:#d7e4ff;
+      border:1px solid rgba(109,151,255,.25);
+    }
+    .remediation-stats-grid{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:14px;
+    }
+    .remediation-stat-card{
+      padding:16px 18px;
+      min-height:84px;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+    }
+    .remediation-stat-card span{
+      color:#a9c0ef;
+      font-size:13px;
+    }
+    .remediation-stat-card strong{
+      font-size:20px;
+      color:#fff;
+    }
+    .remediation-banner{
+      padding:16px 18px;
+    }
+    .remediation-banner.warning{ border-color:rgba(255,183,77,.35); }
+    .remediation-banner.success{ border-color:rgba(52,211,153,.35); }
+    .remediation-banner.danger{ border-color:rgba(248,113,113,.35); }
+    .remediation-banner-actions{ margin-top:12px; }
+    .remediation-banner details{ margin-top:10px; }
+    .remediation-banner pre,
+    .detail-summary-block pre{
+      white-space:pre-wrap;
+      word-break:break-word;
+      max-height:320px;
+      overflow:auto;
+      background:rgba(2,10,31,.5);
+      padding:12px;
+      border-radius:12px;
+      border:1px solid rgba(109,151,255,.16);
+      color:#d5e3ff;
+      font-size:12px;
+    }
+    .remediation-filters{
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+    .filters-headline{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:16px;
+    }
+    .filters-headline h3{
+      margin:0 0 4px;
+      color:#fff;
+      font-size:18px;
+    }
+    .filters-headline p{
+      margin:0;
+      color:#aac3f2;
+    }
+    .filters-inline{
+      display:flex;
+      flex-wrap:wrap;
+      gap:16px;
+    }
+    .filters-inline label{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      color:#e4ecff;
+      font-size:14px;
+    }
+    .filters-grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:12px;
+    }
+    .filters-grid input,
+    .filters-grid select,
+    .plan-form-grid input,
+    .plan-form-grid select,
+    .plan-form-grid textarea{
+      width:100%;
+      background:#071a45;
+      color:#eff5ff;
+      border:1px solid rgba(110,153,255,.22);
+      border-radius:10px;
+      padding:11px 12px;
+      outline:none;
+    }
+    .filters-grid input::placeholder,
+    .plan-form-grid input::placeholder,
+    .plan-form-grid textarea::placeholder{
+      color:#7f9acb;
+    }
+    .remediation-layout{
+      display:grid;
+      grid-template-columns:300px minmax(0,1fr);
+      gap:16px;
+      align-items:start;
+    }
+    .remediation-list-card{
+      padding:16px;
+      position:sticky;
+      top:16px;
+      min-height:560px;
+    }
+    .list-card-header h3{
+      margin:0 0 6px;
+      color:#fff;
+    }
+    .list-card-header p{
+      margin:0;
+      color:#a8c0ef;
+      font-size:13px;
+    }
+    .finding-list{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      margin-top:14px;
+      max-height:920px;
+      overflow:auto;
+      padding-right:4px;
+    }
+    .finding-card{
+      width:100%;
+      text-align:left;
+      padding:14px;
+      background:rgba(11,35,82,.82);
+      border:1px solid rgba(93,136,242,.22);
+      border-radius:16px;
+      color:#eff4ff;
+      cursor:pointer;
+      transition:.18s ease;
+    }
+    .finding-card:hover{
+      border-color:rgba(123,165,255,.45);
+      transform:translateY(-1px);
+    }
+    .finding-card.active{
+      border-color:#6ca2ff;
+      box-shadow:0 0 0 1px rgba(108,162,255,.24) inset;
+      background:rgba(15,45,104,.96);
+    }
+    .finding-card-topline,
+    .finding-card-footer{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:center;
+    }
+    .finding-card-cve{
+      font-size:13px;
+      font-weight:700;
+      color:#fff;
+    }
+    .finding-card-title{
+      margin:10px 0 8px;
+      font-size:15px;
+      line-height:1.3;
+      color:#fff;
+      font-weight:800;
+    }
+    .finding-card-meta,
+    .finding-card-footer{
+      color:#a7c1f0;
+      font-size:12px;
+      line-height:1.45;
+    }
+    .severity-pill,
+    .status-badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:24px;
+      padding:4px 9px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.03em;
+    }
+    .severity-pill.high,
+    .status-badge.warning{
+      background:rgba(251,146,60,.15);
+      color:#ffb366;
+      border:1px solid rgba(251,146,60,.26);
+    }
+    .severity-pill.critical{
+      background:rgba(244,63,94,.16);
+      color:#ff8ca0;
+      border:1px solid rgba(244,63,94,.28);
+    }
+    .severity-pill.medium{
+      background:rgba(96,165,250,.15);
+      color:#8ec4ff;
+      border:1px solid rgba(96,165,250,.24);
+    }
+    .severity-pill.low,
+    .severity-pill.neutral,
+    .status-badge.neutral{
+      background:rgba(148,163,184,.14);
+      color:#d3deef;
+      border:1px solid rgba(148,163,184,.22);
+    }
+    .status-badge.success{
+      background:rgba(34,197,94,.15);
+      color:#83f0a5;
+      border:1px solid rgba(34,197,94,.22);
+    }
+    .status-badge.danger{
+      background:rgba(244,63,94,.16);
+      color:#ff91a4;
+      border:1px solid rgba(244,63,94,.28);
+    }
+    .remediation-detail-card{
+      padding:18px;
+      min-height:720px;
+    }
+    .detail-header{
+      display:flex;
+      justify-content:space-between;
+      gap:16px;
+      align-items:flex-start;
+    }
+    .detail-header h2{
+      margin:0 0 8px;
+      font-size:22px;
+      color:#fff;
+    }
+    .detail-status-line{
+      color:#f4f7ff;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:14px;
+    }
+    .detail-status-dot{
+      width:9px;
+      height:9px;
+      border-radius:999px;
+      background:#f43f5e;
+      display:inline-block;
+    }
+    .detail-header-actions,
+    .detail-tab-strip{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .chip-button,
+    .detail-tab-strip button{
+      border-radius:999px;
+      border:1px solid rgba(109,151,255,.22);
+      background:rgba(7,26,69,.72);
+      color:#d7e4ff;
+      padding:8px 12px;
+      cursor:pointer;
+      font-weight:700;
+    }
+    .chip-button.active,
+    .detail-tab-strip button.active{
+      background:rgba(14,49,111,.95);
+      border-color:#6ca2ff;
+      color:#fff;
+    }
+    .detail-tab-strip{
+      margin-top:14px;
+      padding-bottom:12px;
+      border-bottom:1px solid rgba(112,147,230,.18);
+    }
+    .detail-banner{
+      margin-top:16px;
+      padding:12px 14px;
+      border-radius:12px;
+      background:rgba(255,255,255,.04);
+      color:#dce8ff;
+      border:1px solid rgba(109,151,255,.12);
+    }
+    .detail-banner.slim{ margin-top:0; }
+    .detail-banner.subtle-error{
+      background:rgba(127,29,29,.2);
+      color:#ffd0d0;
+      border-color:rgba(248,113,113,.18);
+    }
+    .detail-section{ margin-top:16px; }
+    .card-block{ padding:18px; }
+    .detail-grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:16px 20px;
+    }
+    .detail-grid.compact{ margin-top:14px; }
+    .detail-grid > div{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      min-width:0;
+    }
+    .detail-grid span,
+    .plan-form-grid label span{
+      color:#8fb0ea;
+      font-size:12px;
+    }
+    .detail-grid strong{
+      color:#fff;
+      line-height:1.45;
+      word-break:break-word;
+    }
+    .detail-summary-block{
+      margin-top:18px;
+      padding:14px;
+      border-radius:14px;
+      background:rgba(255,255,255,.035);
+      border:1px solid rgba(109,151,255,.12);
+    }
+    .detail-summary-block.compact{ margin-top:16px; }
+    .detail-summary-block h4,
+    .detail-related-products h4{
+      margin:0 0 8px;
+      color:#fff;
+    }
+    .detail-summary-block p,
+    .detail-related-products li{
+      margin:0;
+      color:#dbe8ff;
+      line-height:1.6;
+    }
+    .detail-related-products{
+      margin-top:18px;
+    }
+    .detail-related-grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:12px;
+    }
+    .detail-related-card,
+    .device-list-item{
+      padding:12px 14px;
+      border-radius:12px;
+      background:rgba(255,255,255,.035);
+      border:1px solid rgba(109,151,255,.12);
+      color:#e8efff;
+    }
+    .device-list{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      margin-top:8px;
+    }
+    .device-list-item{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:center;
+    }
+    .muted{ color:#8fb0ea; }
+    .plan-header-row,
+    .section-headline,
+    .section-headline.inline,
+    .plan-actions-row{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+    }
+    .plan-header-row h3,
+    .section-headline h3{
+      margin:0;
+      color:#fff;
+      font-size:17px;
+    }
+    .plan-header-row p,
+    .section-headline span{
+      margin:6px 0 0;
+      color:#a8c0ef;
+    }
+    .plan-execution-path{ margin-top:18px; }
+    .plan-form-grid{
+      margin-top:18px;
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:14px;
+    }
+    .plan-form-grid label{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .plan-form-grid .span-2{ grid-column:span 2; }
+    .plan-actions-row{ margin-top:18px; }
+    .finding-empty{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      min-height:120px;
+      color:#a9c0ef;
+      border:1px dashed rgba(109,151,255,.18);
+      border-radius:14px;
+      background:rgba(255,255,255,.025);
+      padding:16px;
+    }
+    .success-block{ border-color:rgba(34,197,94,.22); }
+    @media (max-width: 1100px){
+      .remediation-layout{ grid-template-columns:1fr; }
+      .remediation-list-card{ position:static; min-height:unset; }
+      .remediation-stats-grid,
+      .filters-grid,
+      .detail-grid,
+      .detail-related-grid,
+      .plan-form-grid{
+        grid-template-columns:1fr 1fr;
+      }
+    }
+    @media (max-width: 760px){
+      .remediation-hero,
+      .filters-headline,
+      .detail-header,
+      .plan-header-row,
+      .section-headline,
+      .plan-actions-row{
+        flex-direction:column;
+      }
+      .remediation-stats-grid,
+      .filters-grid,
+      .detail-grid,
+      .detail-related-grid,
+      .plan-form-grid{
+        grid-template-columns:1fr;
+      }
+      .plan-form-grid .span-2{ grid-column:span 1; }
+      .device-list-item,
+      .finding-card-topline,
+      .finding-card-footer{
+        flex-direction:column;
+        align-items:flex-start;
+      }
+    }
+  `;
+
   const [findings, setFindings] = useState<Finding[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loadingFindings, setLoadingFindings] = useState(true);
@@ -367,7 +884,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const highOrCriticalCount = findings.filter((f) => ['high', 'critical'].includes(String(f.severity || '').toLowerCase())).length;
 
   return (
-    <div className="remediation-shell">
+    <>
+      <style>{componentStyles}</style>
+      <div className="remediation-shell">
       <section className="remediation-hero">
         <div>
           <div className="remediation-breadcrumb">Defender-informed remediation workspace</div>
@@ -679,5 +1198,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         </article>
       </section>
     </div>
+    </>
   );
 }
