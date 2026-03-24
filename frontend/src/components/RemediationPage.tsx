@@ -110,6 +110,8 @@ function toCsvLines(input: string) {
 
 export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [findings, setFindings] = useState<Finding[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [pageSize, setPageSize] = useState(250);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loadingFindings, setLoadingFindings] = useState(true);
   const [planning, setPlanning] = useState(false);
@@ -140,6 +142,22 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [policyTarget, setPolicyTarget] = useState('');
   const [scriptName, setScriptName] = useState('');
   const [executionNotes, setExecutionNotes] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [debouncedFilterCve, setDebouncedFilterCve] = useState('');
+  const [debouncedFilterProduct, setDebouncedFilterProduct] = useState('');
+  const [debouncedFilterPublisher, setDebouncedFilterPublisher] = useState('');
+  const [debouncedFilterCategory, setDebouncedFilterCategory] = useState('');
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+      setDebouncedFilterCve(filterCve);
+      setDebouncedFilterProduct(filterProduct);
+      setDebouncedFilterPublisher(filterPublisher);
+      setDebouncedFilterCategory(filterCategory);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search, filterCve, filterProduct, filterPublisher, filterCategory]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -167,7 +185,17 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       try {
         const [config, result] = await Promise.all([
           api.getDefenderTenantConfig(),
-          api.getDefenderVulnerabilities()
+          api.getDefenderVulnerabilities({
+            top: pageSize,
+            search: debouncedSearch,
+            cve: debouncedFilterCve,
+            product: debouncedFilterProduct,
+            publisher: debouncedFilterPublisher,
+            category: debouncedFilterCategory,
+            severity: filterSeverity || undefined,
+            remediationRequiredOnly,
+            exposedDevicesOnly,
+          })
         ]);
         if (!mounted) return;
         const items = Array.isArray(result?.items) ? result.items : [];
@@ -175,6 +203,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         setNeedsAdminConsent(!!config?.needsAdminConsent);
         setAdminConsentUrl(config?.adminConsentUrl || '');
         setFindings(items);
+        setTotalCount(Number(result?.totalCount || items.length || 0));
         setSelectedIndex(0);
       } catch (err: any) {
         if (!mounted) return;
@@ -182,6 +211,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : (err?.message || ''));
         setTenantConfig(null);
         setFindings([]);
+        setTotalCount(0);
         setNeedsAdminConsent(!!err?.needsAdminConsent);
         setAdminConsentUrl(err?.adminConsentUrl || '');
       } finally {
@@ -190,32 +220,18 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     }
     loadFindings();
     return () => { mounted = false; };
-  }, [tenantId]);
+  }, [tenantId, pageSize, debouncedSearch, debouncedFilterCve, debouncedFilterProduct, debouncedFilterPublisher, debouncedFilterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
 
-  const filteredFindings = useMemo(() => {
-    return findings.filter((f) => {
-      const cve = (f.cveId || f.id || '').toLowerCase();
-      const product = getDisplayProduct(f).toLowerCase();
-      const publisher = getDisplayPublisher(f).toLowerCase();
-      const category = (f.category || '').toLowerCase();
-      const severity = (f.severity || '').toLowerCase();
-      const status = (f.status || '').toLowerCase();
-      const haystack = `${cve} ${product} ${publisher} ${category} ${severity} ${status} ${f.description || ''}`.toLowerCase();
-      if (search && !haystack.includes(search.toLowerCase())) return false;
-      if (filterCve && !cve.includes(filterCve.toLowerCase())) return false;
-      if (filterProduct && !product.includes(filterProduct.toLowerCase())) return false;
-      if (filterPublisher && !publisher.includes(filterPublisher.toLowerCase())) return false;
-      if (filterCategory && !category.includes(filterCategory.toLowerCase())) return false;
-      if (filterSeverity && severity !== filterSeverity.toLowerCase()) return false;
-      if (remediationRequiredOnly && String(f.status || '').toLowerCase() !== 'remediationrequired') return false;
-      if (exposedDevicesOnly && (f.affectedMachineCount ?? 0) <= 0) return false;
-      return true;
-    });
-  }, [findings, search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
+  const filteredFindings = useMemo(() => findings, [findings]);
 
   useEffect(() => {
     setSelectedIndex(0);
-  }, [search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
+    setPageSize(250);
+  }, [tenantId]);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [debouncedSearch, debouncedFilterCve, debouncedFilterProduct, debouncedFilterPublisher, debouncedFilterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
 
   const selectedFinding = useMemo(() => filteredFindings[selectedIndex] || null, [filteredFindings, selectedIndex]);
   const selectedExecutor = planResult?.plan?.executor || null;
@@ -237,6 +253,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       setAffectedMachines([]);
       setAffectedMachinesError('');
       if (!selectedFinding) return;
+      if (activeTab !== 'devices') return;
       const cve = selectedFinding.cveId || selectedFinding.id || '';
       if (!isCveId(cve)) {
         setAffectedMachinesError('Device drill-down is available only for CVE findings.');
@@ -244,7 +261,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       }
       setMachinesLoading(true);
       try {
-        const result = await api.getDefenderVulnerabilityMachines(cve, 500);
+        const result = await api.getDefenderVulnerabilityMachines(cve, 100);
         if (!mounted) return;
         const items = Array.isArray(result?.items) ? result.items : [];
         const names = items.map((x: any) => x.deviceName || x.computerDnsName || x.machineName || x.name).filter(Boolean);
@@ -259,7 +276,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     }
     loadMachines();
     return () => { mounted = false; };
-  }, [selectedFinding]);
+  }, [selectedFinding, activeTab]);
 
   async function handlePlan() {
     if (!selectedFinding) return;
@@ -307,10 +324,10 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           rebootBehavior,
           deviceIds,
           targetDeviceIds: deviceIds,
-          affectedDeviceNames: affectedMachines,
           policyTarget,
           scriptName,
           notes: executionNotes,
+          affectedDeviceNames: affectedMachines,
         },
       });
       setExecResult(result);
@@ -324,6 +341,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   }
 
   const clearFilters = () => {
+    setPageSize(250);
     setSearch('');
     setFilterCve('');
     setFilterProduct('');
@@ -334,11 +352,16 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setExposedDevicesOnly(true);
   };
 
-  const totalFindings = findings.length;
+  const totalFindings = totalCount || findings.length;
   const shownFindings = filteredFindings.length;
   const exposedCount = findings.filter((f) => (f.affectedMachineCount ?? 0) > 0).length;
   const remediationRequiredCount = findings.filter((f) => String(f.status || '').toLowerCase() === 'remediationrequired').length;
   const highOrCriticalCount = findings.filter((f) => ['high', 'critical'].includes(String(f.severity || '').toLowerCase())).length;
+  const hasMoreFindings = findings.length < totalFindings;
+
+  const handleLoadMore = () => {
+    setPageSize((value) => value + 250);
+  };
 
   return (
     <div className="remediation-shell">
@@ -438,6 +461,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
               <div className="toolbar-title">Vulnerability list</div>
               <div className="toolbar-meta">{shownFindings} item{shownFindings === 1 ? '' : 's'} currently match your filters</div>
             </div>
+            {hasMoreFindings ? (
+              <button className="btn btn-secondary btn-sm" onClick={handleLoadMore}>Load 250 more</button>
+            ) : null}
           </div>
 
           {loadingFindings ? (

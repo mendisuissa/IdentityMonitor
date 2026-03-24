@@ -439,8 +439,32 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  getDefenderVulnerabilities: (top = 0) =>
-    apiFetch<any>(top > 0 ? `/defender/vulnerabilities?top=${top}` : '/defender/vulnerabilities'),
+  getDefenderVulnerabilities: (params?: {
+    top?: number;
+    skip?: number;
+    search?: string;
+    cve?: string;
+    product?: string;
+    publisher?: string;
+    category?: string;
+    severity?: string;
+    remediationRequiredOnly?: boolean;
+    exposedDevicesOnly?: boolean;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.top) qs.set('top', String(params.top));
+    if (params?.skip) qs.set('skip', String(params.skip));
+    if (params?.search) qs.set('search', params.search);
+    if (params?.cve) qs.set('cve', params.cve);
+    if (params?.product) qs.set('product', params.product);
+    if (params?.publisher) qs.set('publisher', params.publisher);
+    if (params?.category) qs.set('category', params.category);
+    if (params?.severity) qs.set('severity', params.severity);
+    if (typeof params?.remediationRequiredOnly === 'boolean') qs.set('remediationRequiredOnly', String(params.remediationRequiredOnly));
+    if (typeof params?.exposedDevicesOnly === 'boolean') qs.set('exposedDevicesOnly', String(params.exposedDevicesOnly));
+    const query = qs.toString();
+    return apiFetch<any>(query ? `/defender/vulnerabilities?${query}` : '/defender/vulnerabilities');
+  },
 
   getDefenderVulnerabilityMachines: (cveId: string, top = 0) =>
     apiFetch<any>(top > 0 ? `/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines?top=${top}` : `/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines`),
@@ -467,8 +491,8 @@ export const api = {
       deviceIds?: string[];
       policyTarget?: string;
       scriptName?: string;
-      affectedDeviceNames?: string[];
       notes?: string;
+      affectedDeviceNames?: string[];
     };
   }) =>
     apiFetch<any>('/remediation/plan', {
@@ -489,8 +513,8 @@ export const api = {
       deviceIds?: string[];
       policyTarget?: string;
       scriptName?: string;
-      affectedDeviceNames?: string[];
       notes?: string;
+      affectedDeviceNames?: string[];
     };
   }) =>
     apiFetch<any>('/remediation/execute', {
