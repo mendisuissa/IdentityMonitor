@@ -413,15 +413,18 @@ async function getTenantConfigOrThrow(tenantId) {
 
 async function listTenantVulnerabilities(tenantId, top = 0) {
   const { config } = await getTenantConfigOrThrow(tenantId);
+  const requestedTop = Number(top) > 0 ? Number(top) : 0;
 
-  const requestedTop = Number(top) > 0 ? Number(top) : 200;
-  const page = await defenderGet(
-    config,
-    `/api/vulnerabilities?$top=${Math.min(requestedTop, 200)}&$skip=0`
-  );
+  const vulnRows = await fetchDefenderCollectionWithSkip(config, '/api/vulnerabilities', {
+    pageSize: 200,
+    maxPageSize: 8000,
+    maxPages: 25,
+    top: requestedTop,
+  });
 
-  const vulnRows = Array.isArray(page?.value) ? page.value : [];
-  const items = vulnRows.map(normalizeVulnerability);
+  const items = Array.isArray(vulnRows)
+    ? vulnRows.map(normalizeVulnerability)
+    : [];
 
   await writeTenantSnapshot(tenantId, 'defender/vulnerabilities', {
     count: items.length,
