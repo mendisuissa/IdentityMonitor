@@ -140,6 +140,14 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [policyTarget, setPolicyTarget] = useState('');
   const [scriptName, setScriptName] = useState('');
   const [executionNotes, setExecutionNotes] = useState('');
+  const [visibleCount, setVisibleCount] = useState(250);
+  const [serverTotalCount, setServerTotalCount] = useState(0);
+  const [searchScope, setSearchScope] = useState<'paged-top' | 'server-filtered'>('paged-top');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [debouncedFilterCve, setDebouncedFilterCve] = useState('');
+  const [debouncedFilterProduct, setDebouncedFilterProduct] = useState('');
+  const [debouncedFilterPublisher, setDebouncedFilterPublisher] = useState('');
+  const [debouncedFilterCategory, setDebouncedFilterCategory] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -157,6 +165,21 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   }, []);
 
   useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setDebouncedFilterCve(filterCve.trim());
+      setDebouncedFilterProduct(filterProduct.trim());
+      setDebouncedFilterPublisher(filterPublisher.trim());
+      setDebouncedFilterCategory(filterCategory.trim());
+    }, 350);
+    return () => window.clearTimeout(handle);
+  }, [search, filterCve, filterProduct, filterPublisher, filterCategory]);
+
+  useEffect(() => {
+    setVisibleCount(250);
+  }, [tenantId, debouncedSearch, debouncedFilterCve, debouncedFilterProduct, debouncedFilterPublisher, debouncedFilterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
+
+  useEffect(() => {
     let mounted = true;
     async function loadFindings() {
       setLoadingFindings(true);
@@ -167,7 +190,17 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       try {
         const [config, result] = await Promise.all([
           api.getDefenderTenantConfig(),
-          api.getDefenderVulnerabilities()
+          api.getDefenderVulnerabilities({
+            top: visibleCount,
+            q: debouncedSearch,
+            cve: debouncedFilterCve,
+            product: debouncedFilterProduct,
+            publisher: debouncedFilterPublisher,
+            category: debouncedFilterCategory,
+            severity: filterSeverity,
+            remediationRequiredOnly,
+            exposedDevicesOnly,
+          })
         ]);
         if (!mounted) return;
         const items = Array.isArray(result?.items) ? result.items : [];
@@ -175,13 +208,16 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         setNeedsAdminConsent(!!config?.needsAdminConsent);
         setAdminConsentUrl(config?.adminConsentUrl || '');
         setFindings(items);
-        setSelectedIndex(0);
+        setServerTotalCount(Number(result?.totalCount || items.length || 0));
+        setSearchScope(result?.mode === 'server-filtered' ? 'server-filtered' : 'paged-top');
+        setSelectedIndex((current) => Math.min(current, Math.max(items.length - 1, 0)));
       } catch (err: any) {
         if (!mounted) return;
         setError(getFriendlyErrorMessage(err));
         setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : (err?.message || ''));
         setTenantConfig(null);
         setFindings([]);
+        setServerTotalCount(0);
         setNeedsAdminConsent(!!err?.needsAdminConsent);
         setAdminConsentUrl(err?.adminConsentUrl || '');
       } finally {
@@ -190,32 +226,13 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     }
     loadFindings();
     return () => { mounted = false; };
-  }, [tenantId]);
+  }, [tenantId, visibleCount, debouncedSearch, debouncedFilterCve, debouncedFilterProduct, debouncedFilterPublisher, debouncedFilterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
 
-  const filteredFindings = useMemo(() => {
-    return findings.filter((f) => {
-      const cve = (f.cveId || f.id || '').toLowerCase();
-      const product = getDisplayProduct(f).toLowerCase();
-      const publisher = getDisplayPublisher(f).toLowerCase();
-      const category = (f.category || '').toLowerCase();
-      const severity = (f.severity || '').toLowerCase();
-      const status = (f.status || '').toLowerCase();
-      const haystack = `${cve} ${product} ${publisher} ${category} ${severity} ${status} ${f.description || ''}`.toLowerCase();
-      if (search && !haystack.includes(search.toLowerCase())) return false;
-      if (filterCve && !cve.includes(filterCve.toLowerCase())) return false;
-      if (filterProduct && !product.includes(filterProduct.toLowerCase())) return false;
-      if (filterPublisher && !publisher.includes(filterPublisher.toLowerCase())) return false;
-      if (filterCategory && !category.includes(filterCategory.toLowerCase())) return false;
-      if (filterSeverity && severity !== filterSeverity.toLowerCase()) return false;
-      if (remediationRequiredOnly && String(f.status || '').toLowerCase() !== 'remediationrequired') return false;
-      if (exposedDevicesOnly && (f.affectedMachineCount ?? 0) <= 0) return false;
-      return true;
-    });
-  }, [findings, search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
+  const filteredFindings = findings;
 
   useEffect(() => {
     setSelectedIndex(0);
-  }, [search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
+  }, [tenantId, debouncedSearch, debouncedFilterCve, debouncedFilterProduct, debouncedFilterPublisher, debouncedFilterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
 
   const selectedFinding = useMemo(() => filteredFindings[selectedIndex] || null, [filteredFindings, selectedIndex]);
   const selectedExecutor = planResult?.plan?.executor || null;
@@ -236,7 +253,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     async function loadMachines() {
       setAffectedMachines([]);
       setAffectedMachinesError('');
-      if (!selectedFinding) return;
+      if (!selectedFinding || activeTab !== 'devices') return;
       const cve = selectedFinding.cveId || selectedFinding.id || '';
       if (!isCveId(cve)) {
         setAffectedMachinesError('Device drill-down is available only for CVE findings.');
@@ -244,7 +261,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       }
       setMachinesLoading(true);
       try {
-        const result = await api.getDefenderVulnerabilityMachines(cve, 500);
+        const result = await api.getDefenderVulnerabilityMachines(cve, 100);
         if (!mounted) return;
         const items = Array.isArray(result?.items) ? result.items : [];
         const names = items.map((x: any) => x.deviceName || x.computerDnsName || x.machineName || x.name).filter(Boolean);
@@ -259,7 +276,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     }
     loadMachines();
     return () => { mounted = false; };
-  }, [selectedFinding]);
+  }, [selectedFinding, activeTab]);
 
   async function handlePlan() {
     if (!selectedFinding) return;
@@ -276,7 +293,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           rebootBehavior,
           policyTarget,
           scriptName,
-          affectedDeviceNames: affectedMachines,
         },
       });
       setPlanResult(result);
@@ -307,7 +323,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           rebootBehavior,
           deviceIds,
           targetDeviceIds: deviceIds,
-          affectedDeviceNames: affectedMachines,
           policyTarget,
           scriptName,
           notes: executionNotes,
@@ -334,8 +349,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setExposedDevicesOnly(true);
   };
 
-  const totalFindings = findings.length;
+  const totalFindings = serverTotalCount || findings.length;
   const shownFindings = filteredFindings.length;
+  const canLoadMore = searchScope === 'server-filtered' ? shownFindings < totalFindings : shownFindings >= visibleCount;
   const exposedCount = findings.filter((f) => (f.affectedMachineCount ?? 0) > 0).length;
   const remediationRequiredCount = findings.filter((f) => String(f.status || '').toLowerCase() === 'remediationrequired').length;
   const highOrCriticalCount = findings.filter((f) => ['high', 'critical'].includes(String(f.severity || '').toLowerCase())).length;
@@ -351,6 +367,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             <div>Active tenant: <strong>{tenantName || tenantId || 'Current connected tenant'}</strong></div>
             {tenantConfig ? <div>Defender: <strong>{tenantConfig.defenderEnabled ? 'Enabled' : 'Disabled'}</strong></div> : null}
             <div>Showing: <strong>{shownFindings} of {totalFindings}</strong></div>
+            <div>Mode: <strong>{searchScope === 'server-filtered' ? 'Search across all findings' : 'Fast paged list'}</strong></div>
           </div>
         </div>
         <div className="remediation-hero-actions">
@@ -437,6 +454,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             <div>
               <div className="toolbar-title">Vulnerability list</div>
               <div className="toolbar-meta">{shownFindings} item{shownFindings === 1 ? '' : 's'} currently match your filters</div>
+              <div className="toolbar-meta">{searchScope === 'server-filtered' ? 'Search and filters are running on the full Defender dataset.' : 'Load more to bring additional findings into the fast list.'}</div>
             </div>
           </div>
 
@@ -445,6 +463,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           ) : filteredFindings.length === 0 ? (
             <div className="rem-empty-state">No findings match the current filters. Try clearing one of the quick filters.</div>
           ) : (
+            <>
             <div className="rem-list-scroll">
               {filteredFindings.map((finding, index) => {
                 const selected = index === selectedIndex;
@@ -473,6 +492,14 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                 );
               })}
             </div>
+            {canLoadMore ? (
+              <div style={{ padding: '12px 14px', borderTop: '1px solid rgba(148,163,184,0.16)' }}>
+                <button className="btn btn-ghost" onClick={() => setVisibleCount((current) => current + 250)} disabled={loadingFindings}>
+                  {loadingFindings ? 'Loading…' : 'Load 250 more'}
+                </button>
+              </div>
+            ) : null}
+            </>
           )}
         </section>
 
@@ -596,9 +623,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                       <div><span>Route</span><strong>{planResult?.plan?.executionPath?.route || 'Plan remediation to calculate route'}</strong></div>
                       <div><span>Classification</span><strong>{planResult?.classification?.type || selectedFinding.category || '-'}</strong></div>
                       <div><span>Family</span><strong>{planResult?.classification?.family || 'software'}</strong></div>
-                      {planResult?.plan?.executor === 'webapp' ? (
-                        <div><span>External state</span><strong>{planResult?.plan?.external?.connected ? 'Connected' : 'Not connected'}</strong></div>
-                      ) : null}
+                      <div><span>External state</span><strong>{planResult?.plan?.external?.connected ? 'Connected' : 'Not connected'}</strong></div>
                     </div>
 
                     {isWindowsExecutor ? (
@@ -613,8 +638,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                           <option value="force">Force reboot</option>
                           <option value="defer">Try to defer reboot</option>
                         </select>
-                        <textarea className="rem-input" value={deviceIdsText} onChange={(e) => setDeviceIdsText(e.target.value)} rows={4} placeholder="Optional: Microsoft Entra device IDs, comma or new line separated" />
-                        <div className="toolbar-meta">Leave this empty to use the exposed devices already returned by Defender for this finding.</div>
+                        <textarea className="rem-input" value={deviceIdsText} onChange={(e) => setDeviceIdsText(e.target.value)} rows={4} placeholder="Microsoft Entra device IDs (optional), comma or new line separated" />
                       </div>
                     ) : null}
 
