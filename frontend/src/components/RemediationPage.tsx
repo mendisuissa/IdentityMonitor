@@ -114,6 +114,37 @@ function toCsvLines(input: string) {
   return input.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
 }
 
+type BuiltInScriptOption = {
+  id: string;
+  label: string;
+  value: string;
+  tags?: string[];
+};
+
+const BUILT_IN_SCRIPT_OPTIONS: BuiltInScriptOption[] = [
+  { id: 'edge-update', label: 'Update Microsoft Edge', value: 'Update Microsoft Edge', tags: ['edge', 'browser', 'update'] },
+  { id: 'chrome-update', label: 'Update Google Chrome', value: 'Update Google Chrome', tags: ['chrome', 'browser', 'update'] },
+  { id: 'edge-restart', label: 'Restart Microsoft Edge', value: 'Restart Microsoft Edge', tags: ['edge', 'browser', 'restart'] },
+  { id: 'edge-cache', label: 'Clear Edge cache', value: 'Clear Edge cache', tags: ['edge', 'browser', 'cache'] },
+  { id: 'wu-reset', label: 'Reset Windows Update components', value: 'Reset Windows Update components', tags: ['windows', 'update', 'wu'] },
+  { id: 'wu-scan', label: 'Trigger Windows Update scan', value: 'Trigger Windows Update scan', tags: ['windows', 'update', 'scan'] },
+  { id: 'wu-services', label: 'Repair Windows Update services', value: 'Repair Windows Update services', tags: ['windows', 'update', 'services'] },
+  { id: 'intune-sync', label: 'Force Intune device sync', value: 'Force Intune device sync', tags: ['intune', 'sync', 'mdm'] },
+  { id: 'mdm-repair', label: 'Repair MDM enrollment tasks', value: 'Repair MDM enrollment tasks', tags: ['intune', 'mdm', 'enrollment'] },
+  { id: 'teams-cache', label: 'Clear Teams cache', value: 'Clear Teams cache', tags: ['teams', 'cache'] },
+  { id: 'office-c2r', label: 'Repair Office Click-to-Run', value: 'Repair Office Click-to-Run', tags: ['office', 'click-to-run'] },
+  { id: 'defender-refresh', label: 'Refresh Defender signatures', value: 'Refresh Defender signatures', tags: ['defender', 'signatures'] },
+];
+
+function getRecommendedBuiltInScripts(finding: Finding | null) {
+  if (!finding) return BUILT_IN_SCRIPT_OPTIONS.slice(0, 4);
+  const hay = `${getDisplayProduct(finding)} ${finding.description || ''} ${getDisplayCategory(finding)}`.toLowerCase();
+  const hits = BUILT_IN_SCRIPT_OPTIONS.filter((item) =>
+    (item.tags || []).some((tag) => hay.includes(tag))
+  );
+  return hits.length ? hits.slice(0, 4) : BUILT_IN_SCRIPT_OPTIONS.slice(0, 4);
+}
+
 export default function RemediationPage({ tenantId, tenantName }: Props) {
 
   const componentStyles = `
@@ -662,46 +693,43 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [deviceIdsText, setDeviceIdsText] = useState('');
   const [policyTarget, setPolicyTarget] = useState('');
   const [scriptName, setScriptName] = useState('');
+  const [scriptMode, setScriptMode] = useState<'recommended' | 'builtin' | 'custom'>('recommended');
+  const [selectedBuiltInScript, setSelectedBuiltInScript] = useState('');
   const [executionNotes, setExecutionNotes] = useState('');
-  const [cacheInfo, setCacheInfo] = useState<{ cached?: boolean; cacheRefreshedAt?: string | null } | null>(null);
-
-  async function loadFindings(options?: { refresh?: boolean }) {
-    setLoadingFindings(true);
-    setError('');
-    setTechnicalError('');
-    setNeedsAdminConsent(false);
-    setAdminConsentUrl('');
-    try {
-      const [config, result] = await Promise.all([
-        api.getDefenderTenantConfig(),
-        api.getDefenderVulnerabilities(250, { refresh: options?.refresh })
-      ]);
-      const items = Array.isArray(result?.items) ? result.items : [];
-      setTenantConfig(config || null);
-      setNeedsAdminConsent(!!config?.needsAdminConsent);
-      setAdminConsentUrl(config?.adminConsentUrl || '');
-      setFindings(items);
-      setCacheInfo({ cached: !!result?.cached, cacheRefreshedAt: result?.cacheRefreshedAt || null });
-      setSelectedIndex(0);
-    } catch (err: any) {
-      setError(getFriendlyErrorMessage(err));
-      setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : (err?.message || ''));
-      setTenantConfig(null);
-      setFindings([]);
-      setCacheInfo(null);
-      setNeedsAdminConsent(!!err?.needsAdminConsent);
-      setAdminConsentUrl(err?.adminConsentUrl || '');
-    } finally {
-      setLoadingFindings(false);
-    }
-  }
 
   useEffect(() => {
     let mounted = true;
-    (async () => {
-      if (!mounted) return;
-      await loadFindings();
-    })();
+    async function loadFindings() {
+      setLoadingFindings(true);
+      setError('');
+      setTechnicalError('');
+      setNeedsAdminConsent(false);
+      setAdminConsentUrl('');
+      try {
+        const [config, result] = await Promise.all([
+          api.getDefenderTenantConfig(),
+          api.getDefenderVulnerabilities(250)
+        ]);
+        if (!mounted) return;
+        const items = Array.isArray(result?.items) ? result.items : [];
+        setTenantConfig(config || null);
+        setNeedsAdminConsent(!!config?.needsAdminConsent);
+        setAdminConsentUrl(config?.adminConsentUrl || '');
+        setFindings(items);
+        setSelectedIndex(0);
+      } catch (err: any) {
+        if (!mounted) return;
+        setError(getFriendlyErrorMessage(err));
+        setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : (err?.message || ''));
+        setTenantConfig(null);
+        setFindings([]);
+        setNeedsAdminConsent(!!err?.needsAdminConsent);
+        setAdminConsentUrl(err?.adminConsentUrl || '');
+      } finally {
+        if (mounted) setLoadingFindings(false);
+      }
+    }
+    loadFindings();
     return () => { mounted = false; };
   }, [tenantId]);
 
@@ -737,6 +765,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const isScriptExecutor = selectedExecutor === 'native-script';
   const planBadge = getPlanBadge(planResult);
   const primaryProducts = Array.isArray(selectedFinding?.relatedProducts) ? selectedFinding!.relatedProducts!.slice(0, 6) : [];
+  const recommendedBuiltInScripts = useMemo(() => getRecommendedBuiltInScripts(selectedFinding), [selectedFinding]);
 
   useEffect(() => {
     setPlanResult(null);
@@ -744,6 +773,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setActiveTab('details');
     setAffectedMachines([]);
     setAffectedMachinesError('');
+    setScriptMode('recommended');
+    setSelectedBuiltInScript('');
+    setScriptName('');
   }, [selectedFinding?.id, selectedFinding?.cveId]);
 
   useEffect(() => {
@@ -797,6 +829,65 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     });
   }, [affectedMachines, selectedFinding]);
 
+  useEffect(() => {
+    const lower = String(selectedFinding?.classification?.type || '').toLowerCase();
+    const shouldPrefetch = lower === 'script' || lower === 'windows-update';
+    if (!selectedFinding || !shouldPrefetch || affectedMachines.length || machinesLoading) return;
+    const cve = selectedFinding.cveId || selectedFinding.id || '';
+    if (!isCveId(cve)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setMachinesLoading(true);
+        const result = await api.getDefenderVulnerabilityMachines(cve, 100);
+        if (cancelled) return;
+        const items = Array.isArray(result?.items) ? result.items : [];
+        const names = items.map((x: any) => x.deviceName || x.computerDnsName || x.machineName || x.name).filter(Boolean);
+        setAffectedMachines(names);
+        if (!names.length) setAffectedMachinesError('No affected device names were returned for this finding.');
+      } catch (err: any) {
+        if (!cancelled) setAffectedMachinesError(err?.message || 'Affected device drill-down is not available for this finding.');
+      } finally {
+        if (!cancelled) setMachinesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedFinding?.id, selectedFinding?.cveId, selectedFinding?.classification?.type]);
+
+  function getEffectiveScriptName() {
+    if (scriptMode === 'custom') return scriptName.trim();
+    if (selectedBuiltInScript.trim()) return selectedBuiltInScript.trim();
+    return recommendedBuiltInScripts[0]?.value || scriptName.trim();
+  }
+
+  async function ensureAffectedMachinesLoaded() {
+    if (!selectedFinding) return affectedMachines;
+    if (affectedMachines.length) return affectedMachines;
+    const cve = selectedFinding.cveId || selectedFinding.id || '';
+    if (!isCveId(cve)) return affectedMachines;
+    try {
+      setMachinesLoading(true);
+      const result = await api.getDefenderVulnerabilityMachines(cve, 100);
+      const items = Array.isArray(result?.items) ? result.items : [];
+      const names = items.map((x: any) => x.deviceName || x.computerDnsName || x.machineName || x.name).filter(Boolean);
+      setAffectedMachines(names);
+      if (!names.length) setAffectedMachinesError('No affected device names were returned for this finding.');
+      return names;
+    } catch (err: any) {
+      setAffectedMachinesError(err?.message || 'Affected device drill-down is not available for this finding.');
+      return [];
+    } finally {
+      setMachinesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (scriptMode === 'custom') return;
+    if (selectedBuiltInScript) return;
+    const fallback = (scriptMode === 'recommended' ? recommendedBuiltInScripts[0] : BUILT_IN_SCRIPT_OPTIONS[0])?.value || '';
+    if (fallback) setSelectedBuiltInScript(fallback);
+  }, [scriptMode, recommendedBuiltInScripts, selectedBuiltInScript]);
+
   async function handlePlan() {
     if (!selectedFinding) return;
     setPlanning(true);
@@ -804,18 +895,22 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setTechnicalError('');
     setExecResult(null);
     try {
+      const classificationType = String(selectedFinding.classification?.type || '').toLowerCase();
+      const names = (classificationType === 'script' || classificationType === 'windows-update')
+        ? await ensureAffectedMachinesLoaded()
+        : affectedMachines;
       const result = await api.planRemediation({
         tenantId,
         finding: {
           ...selectedFinding,
-          affectedMachines: affectedMachines.length ? affectedMachines : (selectedFinding.affectedMachines || []),
+          affectedMachines: names.length ? names : (selectedFinding.affectedMachines || []),
         },
         options: {
           updateType,
           rebootBehavior,
           policyTarget,
-          scriptName,
-          affectedDeviceNames: affectedMachines,
+          scriptName: getEffectiveScriptName(),
+          affectedDeviceNames: names,
         },
       });
       setPlanResult(result);
@@ -831,9 +926,12 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   async function handleExecute() {
     if (!selectedFinding || !planResult?.plan) return;
     const deviceIds = toCsvLines(deviceIdsText);
-    const resolvedNames = affectedMachines.length ? affectedMachines : (planResult?.plan?.inferredDeviceNames || []);
+    let resolvedNames = affectedMachines.length ? affectedMachines : (planResult?.plan?.inferredDeviceNames || []);
     if (!deviceIds.length && !resolvedNames.length) {
-      setError('Load Exposed devices first or enter Microsoft Entra device IDs manually before running Windows Update.');
+      resolvedNames = await ensureAffectedMachinesLoaded();
+    }
+    if (!deviceIds.length && !resolvedNames.length) {
+      setError('No target devices were resolved yet. Open Exposed devices or enter Microsoft Entra device IDs manually before executing remediation.');
       setTechnicalError('');
       return;
     }
@@ -857,7 +955,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           targetDeviceIds: deviceIds,
           affectedDeviceNames: resolvedNames,
           policyTarget,
-          scriptName,
+          scriptName: getEffectiveScriptName(),
           notes: executionNotes,
         },
       });
@@ -950,18 +1048,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           <div>
             <h3>Refine the Defender view</h3>
             <p>Keep the fast filters, but stay in the cleaner tabbed layout.</p>
-            {cacheInfo?.cacheRefreshedAt ? (
-              <p style={{ marginTop: 8, opacity: 0.8 }}>
-                {cacheInfo.cached ? 'Cached Defender snapshot' : 'Fresh Defender fetch'} • {new Date(cacheInfo.cacheRefreshedAt).toLocaleTimeString()}
-              </p>
-            ) : null}
           </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary" onClick={() => loadFindings({ refresh: true })} disabled={loadingFindings}>
-              {loadingFindings ? 'Refreshing…' : 'Refresh Defender'}
-            </button>
-            <button className="btn btn-secondary" onClick={clearFilters}>Clear filters</button>
-          </div>
+          <button className="btn btn-secondary" onClick={clearFilters}>Clear filters</button>
         </div>
         <div className="filters-inline toggles">
           <label><input type="checkbox" checked={remediationRequiredOnly} onChange={(e) => setRemediationRequiredOnly(e.target.checked)} /> Remediation required only</label>
@@ -1167,12 +1255,40 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                       )}
 
                       {isScriptExecutor && (
-                        <div className="plan-form-grid">
-                          <label className="span-2">
-                            <span>Script policy ID or display name</span>
-                            <input value={scriptName} onChange={(e) => setScriptName(e.target.value)} placeholder="Device health script policy ID or exact display name" />
-                          </label>
-                        </div>
+                        <>
+                          <div className="plan-form-grid">
+                            <label>
+                              <span>Script source</span>
+                              <select value={scriptMode} onChange={(e) => setScriptMode(e.target.value as 'recommended' | 'builtin' | 'custom')}>
+                                <option value="recommended">Recommended built-ins</option>
+                                <option value="builtin">All built-in remediations</option>
+                                <option value="custom">Custom policy ID / display name</option>
+                              </select>
+                            </label>
+                            <label>
+                              <span>Resolved target devices</span>
+                              <input value={affectedMachines.length ? `${affectedMachines.length} device(s) ready` : (machinesLoading ? 'Resolving devices…' : 'Will resolve from Exposed devices')} readOnly />
+                            </label>
+                            {scriptMode !== 'custom' ? (
+                              <label className="span-2">
+                                <span>{scriptMode === 'recommended' ? 'Recommended built-in remediation' : 'Built-in remediation catalog'}</span>
+                                <select value={selectedBuiltInScript} onChange={(e) => setSelectedBuiltInScript(e.target.value)}>
+                                  {(scriptMode === 'recommended' ? recommendedBuiltInScripts : BUILT_IN_SCRIPT_OPTIONS).map((item) => (
+                                    <option key={item.id} value={item.value}>{item.label}</option>
+                                  ))}
+                                </select>
+                              </label>
+                            ) : (
+                              <label className="span-2">
+                                <span>Script policy ID or display name</span>
+                                <input value={scriptName} onChange={(e) => setScriptName(e.target.value)} placeholder="Device health script policy ID or exact display name" />
+                              </label>
+                            )}
+                          </div>
+                          <div className="detail-summary-block compact">
+                            <p>{scriptMode === 'custom' ? 'Enter an existing Intune device health script policy ID or exact display name.' : `The remediation run will use: ${getEffectiveScriptName() || 'Select a remediation script.'}`}</p>
+                          </div>
+                        </>
                       )}
 
                       <div className="plan-form-grid">
