@@ -5,6 +5,7 @@ const {
   listTenantVulnerabilities,
   listTenantRecommendations,
   listTenantVulnerabilityMachines,
+  readVulnerabilityCache,
 } = require('../services/tenantDefenderClient');
 const { enrichFinding } = require('../services/remediationCatalog');
 
@@ -162,10 +163,21 @@ router.get('/vulnerabilities', async (req, res) => {
     }
 
     const top = Number(req.query.top || 0);
-    const items = await listTenantVulnerabilities(tenantId, top);
+    const forceRefresh = String(req.query.refresh || '').toLowerCase() === 'true';
+    const cacheState = readVulnerabilityCache(tenantId);
+    const items = await listTenantVulnerabilities(tenantId, top, { forceRefresh });
     const enrichedItems = Array.isArray(items) ? items.map((item) => enrichFinding(item)) : [];
+    const totalCount = cacheState?.items?.length || enrichedItems.length;
 
-    res.json({ ok: true, tenantId, count: enrichedItems.length, totalCount: enrichedItems.length, items: enrichedItems });
+    res.json({
+      ok: true,
+      tenantId,
+      count: enrichedItems.length,
+      totalCount,
+      items: enrichedItems,
+      cached: !forceRefresh && !!cacheState,
+      cacheRefreshedAt: cacheState?.refreshedAt || null,
+    });
   } catch (error) {
     const friendly = getFriendlyError(error);
     if (friendly.requiresAdminConsent) {

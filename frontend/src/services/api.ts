@@ -439,8 +439,10 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  getDefenderVulnerabilities: (top = 0) =>
-    apiFetch<any>(top > 0 ? `/defender/vulnerabilities?top=${top}` : '/defender/vulnerabilities'),
+  getDefenderVulnerabilities: (top = 0, options?: { refresh?: boolean }) => {
+    const q = toQuery({ top: top > 0 ? top : undefined, refresh: options?.refresh ? 'true' : undefined });
+    return apiFetch<any>(`/defender/vulnerabilities${q ? `?${q}` : ''}`);
+  },
 
   getDefenderVulnerabilityMachines: (cveId: string, top = 0) =>
     apiFetch<any>(top > 0 ? `/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines?top=${top}` : `/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines`),
@@ -456,21 +458,6 @@ export const api = {
 
   executiveExportUrl: (format: 'csv' | 'json' = 'csv') =>
     `${API_BASE_URL}/api/reports/executive/export?format=${format}`,
-
-
-  getIntunePolicyCatalog: (params?: {
-    tenantId?: string;
-    cveId?: string;
-    productName?: string;
-    displayProductName?: string;
-    category?: string;
-    description?: string;
-    classificationType?: string;
-    classificationFamily?: string;
-  }) => {
-    const q = toQuery(params);
-    return apiFetch<any>(`/remediation/catalog/intune-policies${q ? `?${q}` : ''}`);
-  },
 
   planRemediation: (body: {
     tenantId?: string;

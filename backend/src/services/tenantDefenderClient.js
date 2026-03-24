@@ -5,6 +5,33 @@ const tokenCache = new Map();
 const DEFENDER_SCOPE = 'https://api.securitycenter.microsoft.com/.default';
 const DEFENDER_API_BASE = 'https://api.security.microsoft.com';
 
+const vulnerabilityCache = new Map();
+const VULNERABILITY_CACHE_TTL_MS = Number(process.env.DEFENDER_VULNERABILITY_CACHE_TTL_MS || 5 * 60 * 1000);
+const VULNERABILITY_CACHE_MAX_TOP = Number(process.env.DEFENDER_VULNERABILITY_CACHE_MAX_TOP || 1000);
+
+function getVulnerabilityCacheKey(tenantId) {
+  return String(tenantId || '').trim().toLowerCase();
+}
+
+function readVulnerabilityCache(tenantId) {
+  const key = getVulnerabilityCacheKey(tenantId);
+  const entry = vulnerabilityCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) return null;
+  return entry;
+}
+
+function writeVulnerabilityCache(tenantId, items) {
+  const key = getVulnerabilityCacheKey(tenantId);
+  const normalized = Array.isArray(items) ? items : [];
+  vulnerabilityCache.set(key, {
+    items: normalized,
+    expiresAt: Date.now() + VULNERABILITY_CACHE_TTL_MS,
+    refreshedAt: new Date().toISOString(),
+  });
+  return normalized;
+}
+
 function getCacheKey(config) {
   return `${config.defenderTenantId}:${config.defenderClientId}`;
 }
@@ -411,27 +438,41 @@ async function getTenantConfigOrThrow(tenantId) {
   return { integration, config };
 }
 
-async function listTenantVulnerabilities(tenantId, top = 0) {
-  const { config } = await getTenantConfigOrThrow(tenantId);
+async function listTenantVulnerabilities(tenantId, top = 0, options = {}) {
   const requestedTop = Number(top) > 0 ? Number(top) : 0;
+  const forceRefresh = options?.forceRefresh === true;
+  const cacheEntry = !forceRefresh ? readVulnerabilityCache(tenantId) : null;
+
+  if (cacheEntry) {
+    const items = requestedTop > 0 ? cacheEntry.items.slice(0, requestedTop) : cacheEntry.items;
+    return items;
+  }
+
+  const { config } = await getTenantConfigOrThrow(tenantId);
+  const fetchTop = requestedTop > 0
+    ? Math.max(requestedTop, Math.min(VULNERABILITY_CACHE_MAX_TOP, 250))
+    : VULNERABILITY_CACHE_MAX_TOP;
 
   const vulnRows = await fetchDefenderCollectionWithSkip(config, '/api/vulnerabilities', {
     pageSize: 200,
     maxPageSize: 8000,
     maxPages: 25,
-    top: requestedTop,
+    top: fetchTop,
   });
 
   const items = Array.isArray(vulnRows)
     ? vulnRows.map(normalizeVulnerability)
     : [];
 
+  writeVulnerabilityCache(tenantId, items);
+
   await writeTenantSnapshot(tenantId, 'defender/vulnerabilities', {
     count: items.length,
     items,
+    refreshedAt: new Date().toISOString(),
   }).catch(() => {});
 
-  return items;
+  return requestedTop > 0 ? items.slice(0, requestedTop) : items;
 }
 
 async function listTenantRecommendations(tenantId, top = 0) {
@@ -486,4 +527,5 @@ module.exports = {
   listTenantRecommendations,
   listTenantVulnerabilityMachines,
   getTenantConfigOrThrow,
+  readVulnerabilityCache,
 };

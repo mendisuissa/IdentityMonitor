@@ -41,8 +41,6 @@ type DetailTab = 'details' | 'devices' | 'plan';
 
 type Props = { tenantId?: string; tenantName?: string };
 
-type PolicyCatalogOption = { id?: string; name?: string; targetRef?: string; description?: string; category?: string; };
-
 function getFriendlyErrorMessage(error: any) {
   const raw = error?.message || error?.error || error?.details?.error?.message || '';
   const normalized = String(raw).toLowerCase();
@@ -664,46 +662,46 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [deviceIdsText, setDeviceIdsText] = useState('');
   const [policyTarget, setPolicyTarget] = useState('');
   const [scriptName, setScriptName] = useState('');
-  const [policySelection, setPolicySelection] = useState('');
-  const [policyGroupId, setPolicyGroupId] = useState('');
-  const [customPolicyValue, setCustomPolicyValue] = useState('');
-  const [policyCatalog, setPolicyCatalog] = useState<{ recommended: PolicyCatalogOption[]; builtIn: PolicyCatalogOption[]; tenantPolicies: PolicyCatalogOption[] }>({ recommended: [], builtIn: [], tenantPolicies: [] });
-  const [policyCatalogLoading, setPolicyCatalogLoading] = useState(false);
   const [executionNotes, setExecutionNotes] = useState('');
+  const [cacheInfo, setCacheInfo] = useState<{ cached?: boolean; cacheRefreshedAt?: string | null } | null>(null);
+
+  async function loadFindings(options?: { refresh?: boolean }) {
+    setLoadingFindings(true);
+    setError('');
+    setTechnicalError('');
+    setNeedsAdminConsent(false);
+    setAdminConsentUrl('');
+    try {
+      const [config, result] = await Promise.all([
+        api.getDefenderTenantConfig(),
+        api.getDefenderVulnerabilities(250, { refresh: options?.refresh })
+      ]);
+      const items = Array.isArray(result?.items) ? result.items : [];
+      setTenantConfig(config || null);
+      setNeedsAdminConsent(!!config?.needsAdminConsent);
+      setAdminConsentUrl(config?.adminConsentUrl || '');
+      setFindings(items);
+      setCacheInfo({ cached: !!result?.cached, cacheRefreshedAt: result?.cacheRefreshedAt || null });
+      setSelectedIndex(0);
+    } catch (err: any) {
+      setError(getFriendlyErrorMessage(err));
+      setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : (err?.message || ''));
+      setTenantConfig(null);
+      setFindings([]);
+      setCacheInfo(null);
+      setNeedsAdminConsent(!!err?.needsAdminConsent);
+      setAdminConsentUrl(err?.adminConsentUrl || '');
+    } finally {
+      setLoadingFindings(false);
+    }
+  }
 
   useEffect(() => {
     let mounted = true;
-    async function loadFindings() {
-      setLoadingFindings(true);
-      setError('');
-      setTechnicalError('');
-      setNeedsAdminConsent(false);
-      setAdminConsentUrl('');
-      try {
-        const [config, result] = await Promise.all([
-          api.getDefenderTenantConfig(),
-          api.getDefenderVulnerabilities(250)
-        ]);
-        if (!mounted) return;
-        const items = Array.isArray(result?.items) ? result.items : [];
-        setTenantConfig(config || null);
-        setNeedsAdminConsent(!!config?.needsAdminConsent);
-        setAdminConsentUrl(config?.adminConsentUrl || '');
-        setFindings(items);
-        setSelectedIndex(0);
-      } catch (err: any) {
-        if (!mounted) return;
-        setError(getFriendlyErrorMessage(err));
-        setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : (err?.message || ''));
-        setTenantConfig(null);
-        setFindings([]);
-        setNeedsAdminConsent(!!err?.needsAdminConsent);
-        setAdminConsentUrl(err?.adminConsentUrl || '');
-      } finally {
-        if (mounted) setLoadingFindings(false);
-      }
-    }
-    loadFindings();
+    (async () => {
+      if (!mounted) return;
+      await loadFindings();
+    })();
     return () => { mounted = false; };
   }, [tenantId]);
 
@@ -738,13 +736,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const isIntuneExecutor = selectedExecutor === 'native-intune-policy';
   const isScriptExecutor = selectedExecutor === 'native-script';
   const planBadge = getPlanBadge(planResult);
-
-  function buildPolicyTargetValue() {
-    const base = (policySelection === '__custom__' ? customPolicyValue : policySelection || policyTarget || '').trim();
-    if (!base) return '';
-    const group = policyGroupId.trim();
-    return group ? `${base}|${group}` : base;
-  }
   const primaryProducts = Array.isArray(selectedFinding?.relatedProducts) ? selectedFinding!.relatedProducts!.slice(0, 6) : [];
 
   useEffect(() => {
@@ -822,7 +813,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         options: {
           updateType,
           rebootBehavior,
-          policyTarget: buildPolicyTargetValue(),
+          policyTarget,
           scriptName,
           affectedDeviceNames: affectedMachines,
         },
@@ -865,7 +856,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           deviceIds,
           targetDeviceIds: deviceIds,
           affectedDeviceNames: resolvedNames,
-          policyTarget: buildPolicyTargetValue(),
+          policyTarget,
           scriptName,
           notes: executionNotes,
         },
@@ -959,8 +950,18 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           <div>
             <h3>Refine the Defender view</h3>
             <p>Keep the fast filters, but stay in the cleaner tabbed layout.</p>
+            {cacheInfo?.cacheRefreshedAt ? (
+              <p style={{ marginTop: 8, opacity: 0.8 }}>
+                {cacheInfo.cached ? 'Cached Defender snapshot' : 'Fresh Defender fetch'} • {new Date(cacheInfo.cacheRefreshedAt).toLocaleTimeString()}
+              </p>
+            ) : null}
           </div>
-          <button className="btn btn-secondary" onClick={clearFilters}>Clear filters</button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn-secondary" onClick={() => loadFindings({ refresh: true })} disabled={loadingFindings}>
+              {loadingFindings ? 'Refreshing…' : 'Refresh Defender'}
+            </button>
+            <button className="btn btn-secondary" onClick={clearFilters}>Clear filters</button>
+          </div>
         </div>
         <div className="filters-inline toggles">
           <label><input type="checkbox" checked={remediationRequiredOnly} onChange={(e) => setRemediationRequiredOnly(e.target.checked)} /> Remediation required only</label>
@@ -1158,39 +1159,12 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
                       {isIntuneExecutor && (
                         <div className="plan-form-grid">
-                          <label>
-                            <span>Policy source</span>
-                            <select value={policySelection} onChange={(e) => setPolicySelection(e.target.value)}>
-                              <option value="">Select a recommended, built-in, or tenant policy</option>
-                              {policyCatalog.recommended.length ? <optgroup label="Recommended templates">{policyCatalog.recommended.map((item) => <option key={`rec-${item.id || item.targetRef}`} value={item.targetRef || item.name || ''}>{item.name}</option>)}</optgroup> : null}
-                              {policyCatalog.builtIn.length ? <optgroup label="Built-in templates">{policyCatalog.builtIn.map((item) => <option key={`builtin-${item.id || item.targetRef}`} value={item.targetRef || item.name || ''}>{item.name}</option>)}</optgroup> : null}
-                              {policyCatalog.tenantPolicies.length ? <optgroup label="My Intune policies">{policyCatalog.tenantPolicies.map((item) => <option key={`tenant-${item.id}`} value={item.id || item.name || ''}>{item.name}</option>)}</optgroup> : null}
-                              <option value="__custom__">Custom policy ID or exact name</option>
-                            </select>
-                          </label>
-                          <label>
-                            <span>Entra group object ID</span>
-                            <input value={policyGroupId} onChange={(e) => setPolicyGroupId(e.target.value)} placeholder="00000000-0000-0000-0000-000000000000" />
-                          </label>
-                          {policySelection === '__custom__' ? (
-                            <label className="span-2">
-                              <span>Custom policy reference</span>
-                              <input value={customPolicyValue} onChange={(e) => setCustomPolicyValue(e.target.value)} placeholder="Policy ID or exact policy name" />
-                            </label>
-                          ) : null}
                           <label className="span-2">
-                            <span>Resolved policy target</span>
-                            <input value={buildPolicyTargetValue()} readOnly placeholder="PolicyIdOrName|GroupId" />
+                            <span>Policy target</span>
+                            <input value={policyTarget} onChange={(e) => setPolicyTarget(e.target.value)} placeholder="Policy ID or exact policy name | Entra group object ID" />
                           </label>
-                          {policyCatalogLoading ? <div className="detail-banner slim span-2">Loading Intune policy suggestions…</div> : null}
                         </div>
                       )}
-
-                      {isIntuneExecutor && !policyCatalogLoading && (policyCatalog.recommended.length || policyCatalog.tenantPolicies.length) ? (
-                        <div className="detail-banner slim">
-                          Choose a recommended template, one of your tenant policies, or switch to Custom for a direct policy ID / name. The executor will assign the resolved policy to the supplied Entra group.
-                        </div>
-                      ) : null}
 
                       {isScriptExecutor && (
                         <div className="plan-form-grid">
