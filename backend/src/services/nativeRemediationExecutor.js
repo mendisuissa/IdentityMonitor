@@ -91,6 +91,44 @@ async function updateAudience(tenantId, deploymentId, deviceIds) {
 }
 function buildStatusCard(code, label, tone, message) { return { code, label, tone, message }; }
 
+function extractGraphError(error) {
+  const details = error?.details || {};
+  const nested = details?.error || {};
+  const rawMessage = nested?.message || details?.message || error?.message || 'Unknown Graph error.';
+  const lower = String(rawMessage).toLowerCase();
+  const status = Number(error?.status || 500);
+
+  if (status === 403) {
+    return {
+      code: 'graph-permission-denied',
+      message: 'The app registration is missing Windows Update Graph permissions or admin consent for this tenant.',
+      technical: rawMessage,
+    };
+  }
+
+  if (status === 400) {
+    return {
+      code: 'graph-bad-request',
+      message: 'The Windows Update request was rejected. Verify the target devices and Windows Update deployment prerequisites.',
+      technical: rawMessage,
+    };
+  }
+
+  if (status >= 500 || lower.includes('unknownerror') || lower.includes('internal error')) {
+    return {
+      code: 'windows-update-service-unavailable',
+      message: 'Microsoft Graph Windows Update deployment APIs returned an internal error for this tenant. This usually means the tenant or targeted devices are not ready for Windows Update deployment service execution yet.',
+      technical: rawMessage,
+    };
+  }
+
+  return {
+    code: 'windows-update-execution-failed',
+    message: rawMessage,
+    technical: rawMessage,
+  };
+}
+
 async function resolveEntraDeviceIds(tenantId, options = {}, finding = {}) {
   const explicitInputs = unique(toArray(options.targetDeviceIds || options.deviceIds || []));
   const directGuids = explicitInputs.filter(isGuid);
@@ -126,10 +164,10 @@ function buildPlanForWindowsUpdate(classification, finding, options = {}) {
     message: 'Windows Update native executor is ready. You can run the update immediately from this plan.',
     statusCard: buildStatusCard('native-ready', 'native ready', 'success', 'Windows Update execution is ready.'),
     executionPath: { classification: classification.type, family: classification.family, executor: 'native-windows-update', status: 'ready', route: 'Windows Update -> Native executor' },
-    fields: { requiresDeviceIds: false, supportsUpdateType: true, supportsRebootBehavior: true, supportsImmediateRun: true, canResolveDeviceNames: true },
+    fields: { requiresDeviceIds: true, supportsUpdateType: true, supportsRebootBehavior: true, supportsImmediateRun: true },
     inferredDeviceNames: toArray(options.affectedDeviceNames || []).length ? toArray(options.affectedDeviceNames || []) : toArray(finding.affectedMachines || []),
     preflight: { graphConfigured: !!process.env.CLIENT_ID && !!process.env.CLIENT_SECRET, requiresEntraDeviceIds: true, ready: !!process.env.CLIENT_ID && !!process.env.CLIENT_SECRET },
-    manualSteps: ['Review the affected devices before rollout.', 'If you do not provide Entra device IDs, the executor will attempt to resolve the exposed device names automatically.', 'Ensure the app registration has WindowsUpdates.ReadWrite.All and required device permissions.', 'Ensure devices meet Windows Autopatch / WUfB deployment prerequisites before execution.']
+    manualSteps: ['Review the affected devices before rollout.', 'Ensure the app registration has WindowsUpdates.ReadWrite.All and required device permissions.', 'Ensure devices meet Windows Autopatch / WUfB deployment prerequisites before execution.']
   };
 }
 function buildPlanForIntunePolicy(classification, finding, options = {}) {
@@ -149,13 +187,60 @@ async function executeWindowsUpdate({ tenantId, finding = {}, options = {} }) {
   const rebootBehavior = normalizeRebootBehavior(options.rebootBehavior || 'ifRequired');
   const resolution = await resolveEntraDeviceIds(tenantId, options, finding);
   const deviceIds = resolution.resolvedDeviceIds;
-  if (!deviceIds.length) { const err = new Error('No Microsoft Entra device IDs could be resolved. Provide Entra device IDs or exposed device names before running Windows Update now.'); err.status = 400; err.details = { unmatchedInputs: resolution.unmatchedInputs, sourceInputs: resolution.sourceInputs }; throw err; }
-  const category = updateType === 'feature' ? 'feature' : 'quality';
-  await enrollAssetsForCategory(tenantId, category, deviceIds);
-  const catalogEntry = updateType === 'feature' ? await getLatestFeatureCatalogEntry(tenantId) : await getLatestSecurityCatalogEntry(tenantId);
-  const deployment = await createDeployment(tenantId, updateType, catalogEntry, { rebootBehavior });
-  await updateAudience(tenantId, deployment.id, deviceIds);
-  return { queued: true, supported: true, status: 'live-deploy', executionMode: 'native-update-now', updateType, rebootBehavior, targetDeviceIds: deviceIds, resolvedTargets: { sourceInputs: resolution.sourceInputs, resolvedDeviceIds: deviceIds, unmatchedInputs: resolution.unmatchedInputs }, deploymentId: deployment.id, deploymentState: deployment?.state?.value || 'offering', catalogEntry: { id: catalogEntry.id, displayName: catalogEntry.displayName, releaseDateTime: catalogEntry.releaseDateTime || null, qualityUpdateClassification: catalogEntry.qualityUpdateClassification || null }, message: updateType === 'feature' ? 'Feature update deployment created and audience assigned.' : 'Security quality update deployment created and audience assigned.', sourceFinding: { cveId: finding?.cveId || null, productName: finding?.productName || finding?.name || null } };
+  if (!deviceIds.length) {
+    const err = new Error('No Microsoft Entra device IDs could be resolved. Provide Entra device IDs or affected device names before running Windows Update now.');
+    err.status = 400;
+    err.details = { unmatchedInputs: resolution.unmatchedInputs, sourceInputs: resolution.sourceInputs };
+    throw err;
+  }
+
+  try {
+    const category = updateType === 'feature' ? 'feature' : 'quality';
+    await enrollAssetsForCategory(tenantId, category, deviceIds);
+    const catalogEntry = updateType === 'feature' ? await getLatestFeatureCatalogEntry(tenantId) : await getLatestSecurityCatalogEntry(tenantId);
+    const deployment = await createDeployment(tenantId, updateType, catalogEntry, { rebootBehavior });
+    await updateAudience(tenantId, deployment.id, deviceIds);
+    return {
+      queued: true,
+      supported: true,
+      status: 'live-deploy',
+      executionMode: 'native-update-now',
+      updateType,
+      rebootBehavior,
+      targetDeviceIds: deviceIds,
+      resolvedTargets: { sourceInputs: resolution.sourceInputs, resolvedDeviceIds: deviceIds, unmatchedInputs: resolution.unmatchedInputs },
+      deploymentId: deployment.id,
+      deploymentState: deployment?.state?.value || 'offering',
+      catalogEntry: {
+        id: catalogEntry.id,
+        displayName: catalogEntry.displayName,
+        releaseDateTime: catalogEntry.releaseDateTime || null,
+        qualityUpdateClassification: catalogEntry.qualityUpdateClassification || null,
+      },
+      message: updateType === 'feature' ? 'Feature update deployment created and audience assigned.' : 'Security quality update deployment created and audience assigned.',
+      sourceFinding: { cveId: finding?.cveId || null, productName: finding?.productName || finding?.name || null },
+    };
+  } catch (error) {
+    const graphError = extractGraphError(error);
+    return {
+      queued: false,
+      supported: false,
+      status: graphError.code,
+      executionMode: 'guided-windows-update',
+      updateType,
+      rebootBehavior,
+      targetDeviceIds: deviceIds,
+      resolvedTargets: { sourceInputs: resolution.sourceInputs, resolvedDeviceIds: deviceIds, unmatchedInputs: resolution.unmatchedInputs },
+      message: graphError.message,
+      technicalMessage: graphError.technical,
+      manualSteps: [
+        'Verify the tenant is onboarded for Windows Update for Business deployment service / Autopatch scenarios supported by Microsoft Graph.',
+        'Confirm the app registration has WindowsUpdates.ReadWrite.All and the required device read permissions with admin consent.',
+        'Validate that the targeted Entra devices are eligible Windows clients and retry the deployment.',
+      ],
+      sourceFinding: { cveId: finding?.cveId || null, productName: finding?.productName || finding?.name || null },
+    };
+  }
 }
 async function executeIntunePolicy({ finding = {}, options = {} }) { const taskId = `intune-${Date.now()}`; return { queued: true, supported: true, status: 'native-queued', executionMode: 'native-queued', taskId, queuedAt: new Date().toISOString(), target: options.policyTarget || finding?.productName || finding?.name || 'Policy target not specified', notes: options.notes || '', summary: 'Queued a guided Intune policy remediation task.', message: 'Intune policy remediation was queued as a guided native task. Live Graph policy mutation is not enabled yet.' }; }
 async function executeScriptRemediation({ finding = {}, options = {} }) { const taskId = `script-${Date.now()}`; return { queued: true, supported: true, status: 'native-queued', executionMode: 'native-queued', taskId, queuedAt: new Date().toISOString(), scriptName: options.scriptName || finding?.productName || finding?.name || 'Script target not specified', notes: options.notes || '', summary: 'Queued a guided remediation script task.', message: 'Script / proactive remediation was queued as a guided native task. Live Intune script assignment is not enabled yet.' }; }
