@@ -41,6 +41,18 @@ type DetailTab = 'details' | 'devices' | 'plan';
 
 type Props = { tenantId?: string; tenantName?: string };
 
+
+type ScriptCatalogItem = {
+  id: string;
+  displayName: string;
+  shortName?: string;
+  description?: string;
+  category?: string;
+  publisher?: string;
+  source?: 'builtin' | 'tenant';
+  recommendedFor?: string[];
+};
+
 function getFriendlyErrorMessage(error: any) {
   const raw = error?.message || error?.error || error?.details?.error?.message || '';
   const normalized = String(raw).toLowerCase();
@@ -112,6 +124,12 @@ function getAffectedDeviceCount(finding: Finding, affectedMachines: string[]) {
 
 function toCsvLines(input: string) {
   return input.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+}
+
+
+function getRecommendedBuiltIns(finding: Finding, builtIns: ScriptCatalogItem[]) {
+  const text = `${getDisplayProduct(finding)} ${getDisplayPublisher(finding)} ${finding.description || ''} ${finding.category || ''} ${finding.classification?.type || ''}`.toLowerCase();
+  return builtIns.filter((item) => (item.recommendedFor || []).some((hint) => text.includes(String(hint).toLowerCase())));
 }
 
 export default function RemediationPage({ tenantId, tenantName }: Props) {
@@ -662,6 +680,11 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [deviceIdsText, setDeviceIdsText] = useState('');
   const [policyTarget, setPolicyTarget] = useState('');
   const [scriptName, setScriptName] = useState('');
+  const [builtInScriptId, setBuiltInScriptId] = useState('');
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState('');
+  const [builtInScripts, setBuiltInScripts] = useState<ScriptCatalogItem[]>([]);
+  const [tenantScripts, setTenantScripts] = useState<ScriptCatalogItem[]>([]);
   const [executionNotes, setExecutionNotes] = useState('');
 
   useEffect(() => {
@@ -732,6 +755,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const isScriptExecutor = selectedExecutor === 'native-script';
   const planBadge = getPlanBadge(planResult);
   const primaryProducts = Array.isArray(selectedFinding?.relatedProducts) ? selectedFinding!.relatedProducts!.slice(0, 6) : [];
+  const recommendedBuiltIns = selectedFinding ? getRecommendedBuiltIns(selectedFinding, builtInScripts) : [];
 
   useEffect(() => {
     setPlanResult(null);
@@ -739,6 +763,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setActiveTab('details');
     setAffectedMachines([]);
     setAffectedMachinesError('');
+    setBuiltInScriptId('');
+    setScriptName('');
   }, [selectedFinding?.id, selectedFinding?.cveId]);
 
   useEffect(() => {
@@ -771,6 +797,29 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     return () => { mounted = false; };
   }, [selectedFinding?.id, selectedFinding?.cveId, activeTab]);
 
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadCatalog() {
+      if (!isScriptExecutor) return;
+      setCatalogLoading(true);
+      setCatalogError('');
+      try {
+        const result = await api.getRemediationScriptCatalog();
+        if (!mounted) return;
+        setBuiltInScripts(Array.isArray(result?.builtIns) ? result.builtIns : []);
+        setTenantScripts(Array.isArray(result?.tenantScripts) ? result.tenantScripts : []);
+      } catch (err: any) {
+        if (!mounted) return;
+        setCatalogError(err?.message || 'Failed to load remediation script catalog.');
+      } finally {
+        if (mounted) setCatalogLoading(false);
+      }
+    }
+    loadCatalog();
+    return () => { mounted = false; };
+  }, [isScriptExecutor, tenantId]);
+
   useEffect(() => {
     if (!planResult?.plan || !selectedFinding) return;
     setPlanResult((current: any) => {
@@ -792,6 +841,15 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     });
   }, [affectedMachines, selectedFinding]);
 
+
+  useEffect(() => {
+    if (!builtInScriptId) return;
+    const fromBuiltIn = builtInScripts.find((item) => item.id === builtInScriptId);
+    if (fromBuiltIn) {
+      setScriptName(fromBuiltIn.displayName);
+    }
+  }, [builtInScriptId, builtInScripts]);
+
   async function handlePlan() {
     if (!selectedFinding) return;
     setPlanning(true);
@@ -810,6 +868,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           rebootBehavior,
           policyTarget,
           scriptName,
+          builtInScriptId,
           affectedDeviceNames: affectedMachines,
         },
       });
@@ -828,7 +887,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     const deviceIds = toCsvLines(deviceIdsText);
     const resolvedNames = affectedMachines.length ? affectedMachines : (planResult?.plan?.inferredDeviceNames || []);
     if (!deviceIds.length && !resolvedNames.length) {
-      setError('Load Exposed devices first or enter Microsoft Entra device IDs manually before running Windows Update.');
+      setError('Load Exposed devices first or enter Microsoft Entra device IDs manually before running remediation.');
       setTechnicalError('');
       return;
     }
@@ -853,6 +912,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           affectedDeviceNames: resolvedNames,
           policyTarget,
           scriptName,
+          builtInScriptId,
           notes: executionNotes,
         },
       });
@@ -1154,9 +1214,37 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                       {isScriptExecutor && (
                         <div className="plan-form-grid">
                           <label className="span-2">
-                            <span>Script policy ID or display name</span>
-                            <input value={scriptName} onChange={(e) => setScriptName(e.target.value)} placeholder="Device health script policy ID or exact display name" />
+                            <span>Built-in or tenant remediation package</span>
+                            <select value={builtInScriptId || scriptName} onChange={(e) => {
+                              const value = e.target.value;
+                              const builtIn = builtInScripts.find((item) => item.id === value);
+                              const tenant = tenantScripts.find((item) => item.id === value || item.displayName === value);
+                              if (builtIn) {
+                                setBuiltInScriptId(builtIn.id);
+                                setScriptName(builtIn.displayName);
+                              } else if (tenant) {
+                                setBuiltInScriptId('');
+                                setScriptName(tenant.displayName);
+                              } else {
+                                setBuiltInScriptId('');
+                                setScriptName(value);
+                              }
+                            }}>
+                              <option value="">Choose built-in / my script / keep custom</option>
+                              {recommendedBuiltIns.length ? <optgroup label="Recommended built-ins">{recommendedBuiltIns.map((item) => <option key={`rec-${item.id}`} value={item.id}>{item.shortName || item.displayName}</option>)}</optgroup> : null}
+                              {builtInScripts.length ? <optgroup label="Built-in remediations">{builtInScripts.map((item) => <option key={item.id} value={item.id}>{item.shortName || item.displayName}</option>)}</optgroup> : null}
+                              {tenantScripts.length ? <optgroup label="My Intune remediations">{tenantScripts.map((item) => <option key={item.id} value={item.displayName}>{item.displayName}</option>)}</optgroup> : null}
+                            </select>
                           </label>
+                          <label className="span-2">
+                            <span>Custom script policy ID or exact display name</span>
+                            <input value={scriptName} onChange={(e) => { setScriptName(e.target.value); setBuiltInScriptId(''); }} placeholder="Device health script policy ID or exact display name" />
+                          </label>
+                          {catalogLoading ? <div className="detail-banner slim span-2">Loading built-in and tenant remediation packages…</div> : null}
+                          {!catalogLoading && catalogError ? <div className="detail-banner subtle-error span-2">{catalogError}</div> : null}
+                          {!catalogLoading && !!builtInScriptId ? (
+                            <div className="detail-banner slim span-2">Built-in remediation selected. IdentityMonitor will create it in the tenant if it does not already exist, then run it on the resolved devices.</div>
+                          ) : null}
                         </div>
                       )}
 

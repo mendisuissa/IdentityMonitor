@@ -1,0 +1,177 @@
+function ps(text) {
+  return Buffer.from(String(text || ''), 'utf8').toString('base64');
+}
+
+const ALWAYS_RUN_DETECTION = ps(`Write-Output 'IdentityMonitor built-in remediation package.'\nexit 1\n`);
+
+const BUILT_IN_REMEDIATIONS = [
+  {
+    id: 'builtin-edge-update',
+    displayName: 'IdentityMonitor - Update Microsoft Edge',
+    shortName: 'Update Microsoft Edge',
+    description: 'Trigger Microsoft Edge update check and silent updater.',
+    category: 'browser',
+    recommendedFor: ['edge', 'browser', 'chromium', 'application'],
+    publisher: 'Modern Endpoint',
+    version: '1.0.0',
+    detectionScriptContent: ALWAYS_RUN_DETECTION,
+    remediationScriptContent: ps(`$ErrorActionPreference='SilentlyContinue'\n$paths=@(\n  \"$env:ProgramFiles (x86)\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe\",\n  \"$env:ProgramFiles\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe\"\n)\n$ran=$false\nforeach($p in $paths){ if(Test-Path $p){ Start-Process -FilePath $p -ArgumentList '/silent /install' -WindowStyle Hidden; $ran=$true } }\nif(-not $ran){ Write-Output 'Edge updater not found.' } else { Write-Output 'Edge update triggered.' }\nexit 0\n`),
+  },
+  {
+    id: 'builtin-chrome-update',
+    displayName: 'IdentityMonitor - Update Google Chrome',
+    shortName: 'Update Google Chrome',
+    description: 'Trigger Google Update for Chrome where available.',
+    category: 'browser',
+    recommendedFor: ['chrome', 'browser', 'chromium', 'application'],
+    publisher: 'Modern Endpoint',
+    version: '1.0.0',
+    detectionScriptContent: ALWAYS_RUN_DETECTION,
+    remediationScriptContent: ps(`$ErrorActionPreference='SilentlyContinue'\n$paths=@(\n  \"$env:ProgramFiles (x86)\\Google\\Update\\GoogleUpdate.exe\",\n  \"$env:ProgramFiles\\Google\\Update\\GoogleUpdate.exe\"\n)\n$ran=$false\nforeach($p in $paths){ if(Test-Path $p){ Start-Process -FilePath $p -ArgumentList '/ua /installsource scheduler' -WindowStyle Hidden; $ran=$true } }\nif(-not $ran){ Write-Output 'Google Update not found.' } else { Write-Output 'Chrome update triggered.' }\nexit 0\n`),
+  },
+  {
+    id: 'builtin-edge-restart',
+    displayName: 'IdentityMonitor - Restart Microsoft Edge',
+    shortName: 'Restart Microsoft Edge',
+    description: 'Close and restart Microsoft Edge for the signed-in user.',
+    category: 'browser',
+    recommendedFor: ['edge', 'browser', 'application'],
+    publisher: 'Modern Endpoint',
+    version: '1.0.0',
+    detectionScriptContent: ALWAYS_RUN_DETECTION,
+    remediationScriptContent: ps(`Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue\nStart-Sleep -Seconds 2\n$edgePaths=@(\"$env:ProgramFiles (x86)\\Microsoft\\Edge\\Application\\msedge.exe\",\"$env:ProgramFiles\\Microsoft\\Edge\\Application\\msedge.exe\")\nforeach($p in $edgePaths){ if(Test-Path $p){ Start-Process $p; break } }\nWrite-Output 'Edge restart attempted.'\nexit 0\n`),
+  },
+  {
+    id: 'builtin-edge-cache',
+    displayName: 'IdentityMonitor - Clear Edge Cache',
+    shortName: 'Clear Edge cache and temp state',
+    description: 'Clear common Microsoft Edge cache folders.',
+    category: 'browser',
+    recommendedFor: ['edge', 'browser', 'application'],
+    publisher: 'Modern Endpoint',
+    version: '1.0.0',
+    detectionScriptContent: ALWAYS_RUN_DETECTION,
+    remediationScriptContent: ps(`$targets=@(\"$env:LOCALAPPDATA\\Microsoft\\Edge\\User Data\\Default\\Cache\",\"$env:LOCALAPPDATA\\Microsoft\\Edge\\User Data\\Default\\Code Cache\")\nforeach($t in $targets){ if(Test-Path $t){ Remove-Item -Path $t -Recurse -Force -ErrorAction SilentlyContinue } }\nWrite-Output 'Edge cache cleanup attempted.'\nexit 0\n`),
+  },
+  {
+    id: 'builtin-wu-reset',
+    displayName: 'IdentityMonitor - Reset Windows Update Components',
+    shortName: 'Reset Windows Update components',
+    description: 'Stop Windows Update services, clear SoftwareDistribution and start services again.',
+    category: 'windows-update',
+    recommendedFor: ['windows-update', 'platform', 'windows'],
+    publisher: 'Modern Endpoint',
+    version: '1.0.0',
+    detectionScriptContent: ALWAYS_RUN_DETECTION,
+    remediationScriptContent: ps(`$services='wuauserv','bits','cryptSvc'\nforeach($s in $services){ Stop-Service -Name $s -Force -ErrorAction SilentlyContinue }\nRemove-Item -Path \"$env:SystemRoot\\SoftwareDistribution\\Download\\*\" -Recurse -Force -ErrorAction SilentlyContinue\nRemove-Item -Path \"$env:SystemRoot\\System32\\catroot2\\*\" -Recurse -Force -ErrorAction SilentlyContinue\nforeach($s in $services){ Start-Service -Name $s -ErrorAction SilentlyContinue }\nWrite-Output 'Windows Update reset attempted.'\nexit 0\n`),
+  },
+  {
+    id: 'builtin-wu-scan',
+    displayName: 'IdentityMonitor - Trigger Windows Update Scan',
+    shortName: 'Trigger Windows Update scan',
+    description: 'Trigger Windows Update detection and scan actions.',
+    category: 'windows-update',
+    recommendedFor: ['windows-update', 'platform', 'windows'],
+    publisher: 'Modern Endpoint',
+    version: '1.0.0',
+    detectionScriptContent: ALWAYS_RUN_DETECTION,
+    remediationScriptContent: ps(`UsoClient StartScan\nUsoClient RefreshSettings\nWrite-Output 'Windows Update scan triggered.'\nexit 0\n`),
+  },
+  {
+    id: 'builtin-wu-services',
+    displayName: 'IdentityMonitor - Repair Windows Update Services',
+    shortName: 'Repair BITS / Windows Update services',
+    description: 'Ensure key Windows Update related services are set and running.',
+    category: 'windows-update',
+    recommendedFor: ['windows-update', 'platform', 'windows'],
+    publisher: 'Modern Endpoint',
+    version: '1.0.0',
+    detectionScriptContent: ALWAYS_RUN_DETECTION,
+    remediationScriptContent: ps(`$services=@('bits','wuauserv','cryptSvc')\nforeach($s in $services){ Set-Service -Name $s -StartupType Automatic -ErrorAction SilentlyContinue; Start-Service -Name $s -ErrorAction SilentlyContinue }\nWrite-Output 'Windows Update services repaired.'\nexit 0\n`),
+  },
+  {
+    id: 'builtin-intune-sync',
+    displayName: 'IdentityMonitor - Force Intune Device Sync',
+    shortName: 'Force Intune device sync',
+    description: 'Run the enterprise management scheduled task to trigger MDM sync.',
+    category: 'intune',
+    recommendedFor: ['intune', 'configuration', 'script'],
+    publisher: 'Modern Endpoint',
+    version: '1.0.0',
+    detectionScriptContent: ALWAYS_RUN_DETECTION,
+    remediationScriptContent: ps(`$tasks=Get-ScheduledTask -TaskPath '\\Microsoft\\Windows\\EnterpriseMgmt\\' -ErrorAction SilentlyContinue\nforeach($t in $tasks){ Start-ScheduledTask -InputObject $t -ErrorAction SilentlyContinue }\nWrite-Output 'EnterpriseMgmt sync tasks triggered.'\nexit 0\n`),
+  },
+  {
+    id: 'builtin-mdm-repair',
+    displayName: 'IdentityMonitor - Repair MDM Enrollment Tasks',
+    shortName: 'Repair MDM enrollment tasks/services',
+    description: 'Restart Enterprise Management scheduled tasks and Intune Management Extension if present.',
+    category: 'intune',
+    recommendedFor: ['intune', 'configuration', 'script'],
+    publisher: 'Modern Endpoint',
+    version: '1.0.0',
+    detectionScriptContent: ALWAYS_RUN_DETECTION,
+    remediationScriptContent: ps(`Restart-Service -Name 'IntuneManagementExtension' -ErrorAction SilentlyContinue\n$tasks=Get-ScheduledTask -TaskPath '\\Microsoft\\Windows\\EnterpriseMgmt\\' -ErrorAction SilentlyContinue\nforeach($t in $tasks){ Start-ScheduledTask -InputObject $t -ErrorAction SilentlyContinue }\nWrite-Output 'MDM repair actions attempted.'\nexit 0\n`),
+  },
+  {
+    id: 'builtin-teams-cache',
+    displayName: 'IdentityMonitor - Clear Teams Cache',
+    shortName: 'Clear Teams cache / re-register Teams',
+    description: 'Clear common Teams cache folders for the current user profile.',
+    category: 'm365',
+    recommendedFor: ['teams', 'application', 'script'],
+    publisher: 'Modern Endpoint',
+    version: '1.0.0',
+    detectionScriptContent: ALWAYS_RUN_DETECTION,
+    remediationScriptContent: ps(`Get-Process ms-teams,Teams -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue\n$targets=@(\"$env:APPDATA\\Microsoft\\Teams\",\"$env:LOCALAPPDATA\\Packages\\MSTeams_8wekyb3d8bbwe\\LocalCache\")\nforeach($t in $targets){ if(Test-Path $t){ Remove-Item -Path $t -Recurse -Force -ErrorAction SilentlyContinue } }\nWrite-Output 'Teams cache cleanup attempted.'\nexit 0\n`),
+  },
+  {
+    id: 'builtin-office-c2r',
+    displayName: 'IdentityMonitor - Repair Office Click-to-Run',
+    shortName: 'Repair Office Click-to-Run health',
+    description: 'Restart ClickToRunSvc and force Office update detection.',
+    category: 'm365',
+    recommendedFor: ['office', 'application', 'script'],
+    publisher: 'Modern Endpoint',
+    version: '1.0.0',
+    detectionScriptContent: ALWAYS_RUN_DETECTION,
+    remediationScriptContent: ps(`Restart-Service -Name ClickToRunSvc -ErrorAction SilentlyContinue\n$officeClient=\"$env:ProgramFiles\\Common Files\\microsoft shared\\ClickToRun\\OfficeC2RClient.exe\"\nif(Test-Path $officeClient){ Start-Process -FilePath $officeClient -ArgumentList '/update user' -WindowStyle Hidden }\nWrite-Output 'Office Click-to-Run repair attempted.'\nexit 0\n`),
+  },
+  {
+    id: 'builtin-defender-signatures',
+    displayName: 'IdentityMonitor - Refresh Defender Signatures',
+    shortName: 'Repair Defender signatures',
+    description: 'Trigger a Microsoft Defender signature update.',
+    category: 'security',
+    recommendedFor: ['defender', 'security', 'script'],
+    publisher: 'Modern Endpoint',
+    version: '1.0.0',
+    detectionScriptContent: ALWAYS_RUN_DETECTION,
+    remediationScriptContent: ps(`Update-MpSignature -ErrorAction SilentlyContinue\nWrite-Output 'Defender signature update attempted.'\nexit 0\n`),
+  },
+];
+
+function getBuiltInRemediations() {
+  return BUILT_IN_REMEDIATIONS.map((item) => ({
+    id: item.id,
+    displayName: item.displayName,
+    shortName: item.shortName,
+    description: item.description,
+    category: item.category,
+    recommendedFor: item.recommendedFor,
+    publisher: item.publisher,
+    version: item.version,
+    source: 'builtin',
+  }));
+}
+
+function getBuiltInRemediationById(id) {
+  const raw = String(id || '').trim().toLowerCase();
+  if (!raw) return null;
+  return BUILT_IN_REMEDIATIONS.find((item) => item.id.toLowerCase() === raw || item.displayName.toLowerCase() === raw || item.shortName.toLowerCase() === raw) || null;
+}
+
+module.exports = {
+  getBuiltInRemediations,
+  getBuiltInRemediationById,
+};

@@ -457,6 +457,9 @@ export const api = {
   executiveExportUrl: (format: 'csv' | 'json' = 'csv') =>
     `${API_BASE_URL}/api/reports/executive/export?format=${format}`,
 
+  getRemediationScriptCatalog: () =>
+    apiFetch<any>('/remediation/script-catalog'),
+
   planRemediation: (body: {
     tenantId?: string;
     finding: any;
@@ -467,6 +470,7 @@ export const api = {
       deviceIds?: string[];
       policyTarget?: string;
       scriptName?: string;
+      builtInScriptId?: string;
       notes?: string;
       affectedDeviceNames?: string[];
     };
@@ -489,6 +493,7 @@ export const api = {
       deviceIds?: string[];
       policyTarget?: string;
       scriptName?: string;
+      builtInScriptId?: string;
       notes?: string;
       affectedDeviceNames?: string[];
     };

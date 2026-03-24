@@ -1,5 +1,6 @@
 require('isomorphic-fetch');
 const { getClientForTenant } = require('./graphService');
+const { getBuiltInRemediationById } = require('./builtInRemediations');
 
 const GRAPH_BETA_BASE = 'https://graph.microsoft.com/beta';
 const graphTokenCache = new Map();
@@ -188,15 +189,48 @@ async function resolveManagedDeviceTargets(tenantId, options = {}, finding = {})
   };
 }
 
+async function ensureBuiltInDeviceHealthScript(tenantId, builtIn) {
+  const client = await getClientForTenant(tenantId);
+  const safe = String(builtIn.displayName || '').replace(/'/g, "''");
+  const page = await client.api(`/deviceManagement/deviceHealthScripts?$select=id,displayName&$filter=displayName eq '${safe}' or startswith(displayName,'${safe}')`).top(10).get();
+  const existing = (page?.value || []).find((item) => String(item.displayName || '').toLowerCase() === String(builtIn.displayName || '').toLowerCase()) || (page?.value || [])[0];
+  if (existing?.id) return { id: existing.id, created: false, builtInId: builtIn.id };
+  const created = await graphBetaRequest(tenantId, '/deviceManagement/deviceHealthScripts', {
+    method: 'POST',
+    body: {
+      publisher: builtIn.publisher || 'Modern Endpoint',
+      version: builtIn.version || '1.0.0',
+      displayName: builtIn.displayName,
+      description: builtIn.description || builtIn.shortName || builtIn.displayName,
+      detectionScriptContent: builtIn.detectionScriptContent,
+      remediationScriptContent: builtIn.remediationScriptContent,
+      runAsAccount: 'system',
+      enforceSignatureCheck: false,
+      runAs32Bit: false,
+      roleScopeTagIds: [],
+      isGlobalScript: false,
+      deviceHealthScriptType: 'deviceHealthScript',
+      detectionScriptParameters: [],
+      remediationScriptParameters: [],
+    }
+  });
+  return { id: created?.id || null, created: true, builtInId: builtIn.id };
+}
+
 async function resolveDeviceHealthScriptId(tenantId, input = '') {
   const raw = String(input || '').trim();
   if (!raw) return null;
-  if (isGuid(raw)) return raw;
+  if (isGuid(raw)) return { id: raw, source: 'custom' };
+  const builtIn = getBuiltInRemediationById(raw);
+  if (builtIn) {
+    const ensured = await ensureBuiltInDeviceHealthScript(tenantId, builtIn);
+    return { id: ensured.id, source: 'builtin', builtInId: builtIn.id, created: !!ensured.created, displayName: builtIn.displayName };
+  }
   const client = await getClientForTenant(tenantId);
   const safe = raw.replace(/'/g, "''");
   const page = await client.api(`/deviceManagement/deviceHealthScripts?$select=id,displayName&$filter=displayName eq '${safe}' or startswith(displayName,'${safe}')`).top(10).get();
   const match = (page?.value || []).find((item) => String(item.displayName || '').toLowerCase() === raw.toLowerCase()) || (page?.value || [])[0];
-  return match?.id || null;
+  return match?.id ? { id: match.id, source: 'tenant', displayName: match.displayName || raw } : null;
 }
 
 async function resolveConfigurationPolicyId(tenantId, input = '') {
@@ -238,7 +272,7 @@ function buildPlanForIntunePolicy(classification, finding, options = {}) {
   return { executor: 'native-intune-policy', supported: true, remediationType: classification.type, autoRemediate: true, executionMode: 'native-policy-assign', targetHint: finding?.productName || finding?.name || finding?.cveId || 'Intune policy issue', message: 'Intune policy executor is ready when you provide a configuration policy and target group.', statusCard: buildStatusCard('native-ready', 'native ready', 'success', 'Intune policy assignment is ready when policy and group IDs are provided.'), executionPath: { classification: classification.type, family: classification.family, executor: 'native-intune-policy', status: 'ready', route: 'Intune Policy -> Native assignment executor' }, fields: { requiresTargetHint: true, supportsNotes: true }, policyTarget: options.policyTarget || '', preflight: { graphConfigured: !!process.env.CLIENT_ID && !!process.env.CLIENT_SECRET, ready: !!process.env.CLIENT_ID && !!process.env.CLIENT_SECRET }, manualSteps: ['Enter the Intune configuration policy as a policy ID or exact policy name.', 'Append the Entra group object ID using policy|groupId (example: Windows Baseline|00000000-0000-0000-0000-000000000000).', 'The executor will assign that policy to the supplied group through Microsoft Graph.'] };
 }
 function buildPlanForScript(classification, finding, options = {}) {
-  return { executor: 'native-script', supported: true, remediationType: classification.type, autoRemediate: true, executionMode: 'native-script-now', targetHint: finding?.productName || finding?.name || finding?.cveId || 'Script remediation', message: 'Script / proactive remediation executor is ready when you provide a device health script policy.', statusCard: buildStatusCard('native-ready', 'native ready', 'success', 'On-demand proactive remediation can run immediately on targeted devices.'), executionPath: { classification: classification.type, family: classification.family, executor: 'native-script', status: 'ready', route: 'Script / Proactive Remediation -> Native on-demand executor' }, fields: { requiresScriptName: true, supportsNotes: true, requiresDeviceIds: true }, scriptName: options.scriptName || '', preflight: { graphConfigured: !!process.env.CLIENT_ID && !!process.env.CLIENT_SECRET, ready: !!process.env.CLIENT_ID && !!process.env.CLIENT_SECRET }, manualSteps: ['Enter the device health script policy ID or exact display name.', 'Review the targeted devices before rollout.', 'The executor will call initiateOnDemandProactiveRemediation for each resolved managed device.'] };
+  return { executor: 'native-script', supported: true, remediationType: classification.type, autoRemediate: true, executionMode: 'native-script-now', targetHint: finding?.productName || finding?.name || finding?.cveId || 'Script remediation', message: 'Script / proactive remediation executor is ready when you provide a device health script policy.', statusCard: buildStatusCard('native-ready', 'native ready', 'success', 'On-demand proactive remediation can run immediately on targeted devices.'), executionPath: { classification: classification.type, family: classification.family, executor: 'native-script', status: 'ready', route: 'Script / Proactive Remediation -> Native on-demand executor' }, fields: { requiresScriptName: true, supportsNotes: true, requiresDeviceIds: true, supportsCatalogSelection: true }, scriptName: options.scriptName || '', builtInScriptId: options.builtInScriptId || '', preflight: { graphConfigured: !!process.env.CLIENT_ID && !!process.env.CLIENT_SECRET, ready: !!process.env.CLIENT_ID && !!process.env.CLIENT_SECRET }, manualSteps: ['Enter the device health script policy ID or exact display name.', 'Review the targeted devices before rollout.', 'The executor will call initiateOnDemandProactiveRemediation for each resolved managed device.'] };
 }
 function buildPlanForManual(classification, finding) {
   return { executor: 'guided-manual', supported: true, remediationType: classification.type, autoRemediate: false, executionMode: 'guided-manual', targetHint: finding?.productName || finding?.name || finding?.cveId || 'Manual remediation', message: 'No live executor exists yet for this finding. Use guided/manual remediation.', statusCard: buildStatusCard('manual-review-required', 'manual review required', 'warning', 'This finding needs guided manual remediation.'), executionPath: { classification: classification.type, family: classification.family, executor: 'guided-manual', status: 'manual', route: 'Manual -> Guided remediation' }, manualSteps: ['Review vendor guidance and impacted devices.', 'Document the remediation action taken outside the platform.', 'Return to the case and record the change window / evidence.'] };
@@ -328,11 +362,11 @@ async function executeIntunePolicy({ tenantId, finding = {}, options = {} }) {
   return { queued: true, supported: true, status: 'live-deploy', executionMode: 'native-policy-assign', policyId, groupId, target: `${policyInput || policyId}|${groupId}`, notes: options.notes || '', summary: 'Assigned the Intune configuration policy to the supplied Entra group.', message: 'Intune policy assignment was submitted through Microsoft Graph.' };
 }
 async function executeScriptRemediation({ tenantId, finding = {}, options = {} }) {
-  const scriptPolicyId = await resolveDeviceHealthScriptId(tenantId, options.scriptPolicyId || options.scriptName || finding?.productName || finding?.name || '');
-  if (!scriptPolicyId) {
-    const err = new Error('The remediation script could not be resolved. Enter a device health script policy ID or exact display name.');
+  const scriptResolution = await resolveDeviceHealthScriptId(tenantId, options.builtInScriptId || options.scriptPolicyId || options.scriptName || finding?.productName || finding?.name || '');
+  if (!scriptResolution?.id) {
+    const err = new Error('The remediation script could not be resolved. Choose a built-in remediation, or enter a device health script policy ID / exact display name.');
     err.status = 404;
-    err.details = { scriptInput: options.scriptName || '' };
+    err.details = { scriptInput: options.scriptName || '', builtInScriptId: options.builtInScriptId || '' };
     throw err;
   }
   const targets = await resolveManagedDeviceTargets(tenantId, options, finding);
@@ -347,7 +381,7 @@ async function executeScriptRemediation({ tenantId, finding = {}, options = {} }
     try {
       await graphBetaRequest(tenantId, `/deviceManagement/managedDevices/${target.managedDeviceId}/initiateOnDemandProactiveRemediation`, {
         method: 'POST',
-        body: { scriptPolicyId }
+        body: { scriptPolicyId: scriptResolution.id }
       });
       results.push({ ok: true, managedDeviceId: target.managedDeviceId, azureADDeviceId: target.azureADDeviceId, deviceName: target.deviceName || null });
     } catch (error) {
@@ -361,7 +395,10 @@ async function executeScriptRemediation({ tenantId, finding = {}, options = {} }
     supported: successCount > 0,
     status: failed.length ? (successCount ? 'partial-success' : 'script-execution-failed') : 'live-deploy',
     executionMode: 'native-script-now',
-    scriptPolicyId,
+    scriptPolicyId: scriptResolution.id,
+    scriptSource: scriptResolution.source || 'custom',
+    builtInScriptId: scriptResolution.builtInId || null,
+    builtInCreatedInTenant: !!scriptResolution.created,
     resolvedTargets: { sourceInputs: targets.sourceInputs, resolvedDeviceIds: targets.resolvedDeviceIds, unmatchedInputs: targets.unmatchedManagedDeviceInputs },
     targetDevices: results,
     summary: failed.length ? `Started proactive remediation on ${successCount} device(s); ${failed.length} device(s) failed.` : `Started proactive remediation on ${successCount} device(s).`,

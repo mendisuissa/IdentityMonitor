@@ -1,5 +1,6 @@
 const express = require('express');
 const { classifyFinding, enrichFinding } = require('../services/remediationCatalog');
+const { getBuiltInRemediations } = require('../services/builtInRemediations');
 const {
   getExternalHealth,
   resolveApplicationRemediation,
@@ -36,6 +37,25 @@ router.get('/health', async (_req, res) => {
     graphConfigured: !!process.env.CLIENT_ID && !!process.env.CLIENT_SECRET,
     external
   });
+});
+
+
+router.get('/script-catalog', async (req, res) => {
+  try {
+    const tenantId = getTenantIdFromRequest(req);
+    const client = await require('../services/graphService').getClientForTenant(tenantId);
+    const page = await client.api('/deviceManagement/deviceHealthScripts?$select=id,displayName,description,publisher').top(100).get();
+    const tenantScripts = (page?.value || []).map((item) => ({
+      id: item.id,
+      displayName: item.displayName || item.id,
+      description: item.description || '',
+      publisher: item.publisher || 'Tenant',
+      source: 'tenant',
+    }));
+    return res.json({ ok: true, tenantId, builtIns: getBuiltInRemediations(), tenantScripts });
+  } catch (error) {
+    return res.status(error.status || 500).json({ ok: false, error: error.message, details: error.details || null });
+  }
 });
 
 router.post('/plan', async (req, res) => {
