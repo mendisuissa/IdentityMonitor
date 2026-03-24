@@ -439,20 +439,8 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  getDefenderVulnerabilities: (params?: {
-    top?: number;
-    q?: string;
-    cve?: string;
-    product?: string;
-    publisher?: string;
-    category?: string;
-    severity?: string;
-    remediationRequiredOnly?: boolean;
-    exposedDevicesOnly?: boolean;
-  }) => {
-    const q = toQuery(params as any);
-    return apiFetch<any>(`/defender/vulnerabilities${q ? `?${q}` : ''}`);
-  },
+  getDefenderVulnerabilities: (top = 0) =>
+    apiFetch<any>(top > 0 ? `/defender/vulnerabilities?top=${top}` : '/defender/vulnerabilities'),
 
   getDefenderVulnerabilityMachines: (cveId: string, top = 0) =>
     apiFetch<any>(top > 0 ? `/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines?top=${top}` : `/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines`),
@@ -479,6 +467,7 @@ export const api = {
       deviceIds?: string[];
       policyTarget?: string;
       scriptName?: string;
+      affectedDeviceNames?: string[];
       notes?: string;
     };
   }) =>
@@ -500,6 +489,7 @@ export const api = {
       deviceIds?: string[];
       policyTarget?: string;
       scriptName?: string;
+      affectedDeviceNames?: string[];
       notes?: string;
     };
   }) =>
