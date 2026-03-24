@@ -1146,7 +1146,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                         <div className="plan-form-grid">
                           <label className="span-2">
                             <span>Policy target</span>
-                            <input value={policyTarget} onChange={(e) => setPolicyTarget(e.target.value)} placeholder="Name of the Intune policy or profile to update" />
+                            <input value={policyTarget} onChange={(e) => setPolicyTarget(e.target.value)} placeholder="Policy ID or exact policy name | Entra group object ID" />
                           </label>
                         </div>
                       )}
@@ -1154,8 +1154,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                       {isScriptExecutor && (
                         <div className="plan-form-grid">
                           <label className="span-2">
-                            <span>Script / remediation package</span>
-                            <input value={scriptName} onChange={(e) => setScriptName(e.target.value)} placeholder="Name of the remediation script or proactive remediation package" />
+                            <span>Script policy ID or display name</span>
+                            <input value={scriptName} onChange={(e) => setScriptName(e.target.value)} placeholder="Device health script policy ID or exact display name" />
                           </label>
                         </div>
                       )}
