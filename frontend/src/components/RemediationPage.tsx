@@ -31,6 +31,10 @@ type Finding = {
   publicExploit?: boolean;
   exploitVerified?: boolean;
   exploitInKit?: boolean;
+  displayProductName?: string;
+  displayPublisher?: string;
+  displayCategoryLabel?: string;
+  classification?: { type?: string; family?: string };
 };
 
 type DetailTab = 'details' | 'devices' | 'plan';
@@ -47,13 +51,15 @@ function getFriendlyErrorMessage(error: any) {
 }
 
 function getDisplayProduct(finding: Finding) {
-  const value = finding.productName || finding.softwareName || finding.name || '';
-  if (!value || /^CVE-/i.test(value) || /^TVM-/i.test(value)) return 'Unknown product';
-  return value;
+  return finding.displayProductName || finding.productName || finding.softwareName || finding.name || 'Unknown product';
 }
 
 function getDisplayPublisher(finding: Finding) {
-  return finding.publisher || 'Not provided by Defender payload';
+  return finding.displayPublisher || finding.publisher || 'Not provided by Defender payload';
+}
+
+function getDisplayCategory(finding: Finding) {
+  return finding.displayCategoryLabel || finding.classification?.type || finding.category || 'unknown';
 }
 
 function normalizeProblemLabel(finding: Finding) {
@@ -110,8 +116,6 @@ function toCsvLines(input: string) {
 
 export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [findings, setFindings] = useState<Finding[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [pageSize, setPageSize] = useState(250);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loadingFindings, setLoadingFindings] = useState(true);
   const [planning, setPlanning] = useState(false);
@@ -142,37 +146,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [policyTarget, setPolicyTarget] = useState('');
   const [scriptName, setScriptName] = useState('');
   const [executionNotes, setExecutionNotes] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [debouncedFilterCve, setDebouncedFilterCve] = useState('');
-  const [debouncedFilterProduct, setDebouncedFilterProduct] = useState('');
-  const [debouncedFilterPublisher, setDebouncedFilterPublisher] = useState('');
-  const [debouncedFilterCategory, setDebouncedFilterCategory] = useState('');
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(search);
-      setDebouncedFilterCve(filterCve);
-      setDebouncedFilterProduct(filterProduct);
-      setDebouncedFilterPublisher(filterPublisher);
-      setDebouncedFilterCategory(filterCategory);
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [search, filterCve, filterProduct, filterPublisher, filterCategory]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const consent = params.get('consent');
-    const message = params.get('message');
-    if (consent === 'granted') {
-      setConsentBanner('Organization access approved. Reloading live Defender data for this tenant.');
-      params.delete('consent');
-      params.delete('message');
-      const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
-      window.history.replaceState({}, '', newUrl);
-    } else if (consent === 'error') {
-      setConsentBanner(message || 'Admin consent was not completed.');
-    }
-  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -185,17 +158,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       try {
         const [config, result] = await Promise.all([
           api.getDefenderTenantConfig(),
-          api.getDefenderVulnerabilities({
-            top: pageSize,
-            search: debouncedSearch,
-            cve: debouncedFilterCve,
-            product: debouncedFilterProduct,
-            publisher: debouncedFilterPublisher,
-            category: debouncedFilterCategory,
-            severity: filterSeverity || undefined,
-            remediationRequiredOnly,
-            exposedDevicesOnly,
-          })
+          api.getDefenderVulnerabilities(250)
         ]);
         if (!mounted) return;
         const items = Array.isArray(result?.items) ? result.items : [];
@@ -203,7 +166,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         setNeedsAdminConsent(!!config?.needsAdminConsent);
         setAdminConsentUrl(config?.adminConsentUrl || '');
         setFindings(items);
-        setTotalCount(Number(result?.totalCount || items.length || 0));
         setSelectedIndex(0);
       } catch (err: any) {
         if (!mounted) return;
@@ -211,7 +173,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : (err?.message || ''));
         setTenantConfig(null);
         setFindings([]);
-        setTotalCount(0);
         setNeedsAdminConsent(!!err?.needsAdminConsent);
         setAdminConsentUrl(err?.adminConsentUrl || '');
       } finally {
@@ -220,18 +181,32 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     }
     loadFindings();
     return () => { mounted = false; };
-  }, [tenantId, pageSize, debouncedSearch, debouncedFilterCve, debouncedFilterProduct, debouncedFilterPublisher, debouncedFilterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
-
-  const filteredFindings = useMemo(() => findings, [findings]);
-
-  useEffect(() => {
-    setSelectedIndex(0);
-    setPageSize(250);
   }, [tenantId]);
 
+  const filteredFindings = useMemo(() => {
+    return findings.filter((f) => {
+      const cve = (f.cveId || f.id || '').toLowerCase();
+      const product = getDisplayProduct(f).toLowerCase();
+      const publisher = getDisplayPublisher(f).toLowerCase();
+      const category = getDisplayCategory(f).toLowerCase();
+      const severity = (f.severity || '').toLowerCase();
+      const status = (f.status || '').toLowerCase();
+      const haystack = `${cve} ${product} ${publisher} ${category} ${severity} ${status} ${f.description || ''}`.toLowerCase();
+      if (search && !haystack.includes(search.toLowerCase())) return false;
+      if (filterCve && !cve.includes(filterCve.toLowerCase())) return false;
+      if (filterProduct && !product.includes(filterProduct.toLowerCase())) return false;
+      if (filterPublisher && !publisher.includes(filterPublisher.toLowerCase())) return false;
+      if (filterCategory && !category.includes(filterCategory.toLowerCase())) return false;
+      if (filterSeverity && severity !== filterSeverity.toLowerCase()) return false;
+      if (remediationRequiredOnly && String(f.status || '').toLowerCase() !== 'remediationrequired') return false;
+      if (exposedDevicesOnly && (f.affectedMachineCount ?? 0) <= 0) return false;
+      return true;
+    });
+  }, [findings, search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
+
   useEffect(() => {
     setSelectedIndex(0);
-  }, [debouncedSearch, debouncedFilterCve, debouncedFilterProduct, debouncedFilterPublisher, debouncedFilterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
+  }, [search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
 
   const selectedFinding = useMemo(() => filteredFindings[selectedIndex] || null, [filteredFindings, selectedIndex]);
   const selectedExecutor = planResult?.plan?.executor || null;
@@ -245,6 +220,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setPlanResult(null);
     setExecResult(null);
     setActiveTab('details');
+    setAffectedMachines([]);
+    setAffectedMachinesError('');
   }, [selectedFinding?.id, selectedFinding?.cveId]);
 
   useEffect(() => {
@@ -252,8 +229,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     async function loadMachines() {
       setAffectedMachines([]);
       setAffectedMachinesError('');
-      if (!selectedFinding) return;
-      if (activeTab !== 'devices') return;
+      if (!selectedFinding || activeTab !== 'devices') return;
       const cve = selectedFinding.cveId || selectedFinding.id || '';
       if (!isCveId(cve)) {
         setAffectedMachinesError('Device drill-down is available only for CVE findings.');
@@ -276,7 +252,28 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     }
     loadMachines();
     return () => { mounted = false; };
-  }, [selectedFinding, activeTab]);
+  }, [selectedFinding?.id, selectedFinding?.cveId, activeTab]);
+
+  useEffect(() => {
+    if (!planResult?.plan || !selectedFinding) return;
+    setPlanResult((current: any) => {
+      if (!current?.plan) return current;
+      const inferredDeviceNames = affectedMachines.length ? affectedMachines : (current.plan.inferredDeviceNames || []);
+      return {
+        ...current,
+        finding: {
+          ...current.finding,
+          ...selectedFinding,
+          affectedMachines: affectedMachines.length ? affectedMachines : (current.finding?.affectedMachines || selectedFinding.affectedMachines || []),
+        },
+        plan: {
+          ...current.plan,
+          targetHint: getDisplayProduct(selectedFinding),
+          inferredDeviceNames,
+        },
+      };
+    });
+  }, [affectedMachines, selectedFinding]);
 
   async function handlePlan() {
     if (!selectedFinding) return;
@@ -287,7 +284,10 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     try {
       const result = await api.planRemediation({
         tenantId,
-        finding: selectedFinding,
+        finding: {
+          ...selectedFinding,
+          affectedMachines: affectedMachines.length ? affectedMachines : (selectedFinding.affectedMachines || []),
+        },
         options: {
           updateType,
           rebootBehavior,
@@ -308,26 +308,35 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
   async function handleExecute() {
     if (!selectedFinding || !planResult?.plan) return;
+    const deviceIds = toCsvLines(deviceIdsText);
+    const resolvedNames = affectedMachines.length ? affectedMachines : (planResult?.plan?.inferredDeviceNames || []);
+    if (!deviceIds.length && !resolvedNames.length) {
+      setError('Load Exposed devices first or enter Microsoft Entra device IDs manually before running Windows Update.');
+      setTechnicalError('');
+      return;
+    }
     setExecuting(true);
     setError('');
     setTechnicalError('');
     try {
-      const deviceIds = toCsvLines(deviceIdsText);
       const result = await api.executeRemediation({
         tenantId,
         approvalId: 'apr-ui-001',
         devices: deviceIds,
-        finding: selectedFinding,
+        finding: {
+          ...selectedFinding,
+          affectedMachines: resolvedNames,
+        },
         plan: planResult.plan,
         options: {
           updateType,
           rebootBehavior,
           deviceIds,
           targetDeviceIds: deviceIds,
+          affectedDeviceNames: resolvedNames,
           policyTarget,
           scriptName,
           notes: executionNotes,
-          affectedDeviceNames: affectedMachines,
         },
       });
       setExecResult(result);
@@ -341,7 +350,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   }
 
   const clearFilters = () => {
-    setPageSize(250);
     setSearch('');
     setFilterCve('');
     setFilterProduct('');
@@ -352,16 +360,11 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setExposedDevicesOnly(true);
   };
 
-  const totalFindings = totalCount || findings.length;
+  const totalFindings = findings.length;
   const shownFindings = filteredFindings.length;
   const exposedCount = findings.filter((f) => (f.affectedMachineCount ?? 0) > 0).length;
   const remediationRequiredCount = findings.filter((f) => String(f.status || '').toLowerCase() === 'remediationrequired').length;
   const highOrCriticalCount = findings.filter((f) => ['high', 'critical'].includes(String(f.severity || '').toLowerCase())).length;
-  const hasMoreFindings = findings.length < totalFindings;
-
-  const handleLoadMore = () => {
-    setPageSize((value) => value + 250);
-  };
 
   return (
     <div className="remediation-shell">
@@ -383,68 +386,60 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         </div>
       </section>
 
-      <section className="remediation-kpi-strip">
-        <div className="rem-kpi rem-kpi-blue"><span>Findings in scope</span><strong>{shownFindings}</strong></div>
-        <div className="rem-kpi rem-kpi-red"><span>Remediation required</span><strong>{remediationRequiredCount}</strong></div>
-        <div className="rem-kpi rem-kpi-purple"><span>Exposed devices</span><strong>{exposedCount}</strong></div>
-        <div className="rem-kpi rem-kpi-amber"><span>High / Critical</span><strong>{highOrCriticalCount}</strong></div>
+      <section className="remediation-stats-grid">
+        <div className="remediation-stat-card"><span>Findings in scope</span><strong>{shownFindings}</strong></div>
+        <div className="remediation-stat-card"><span>Remediation required</span><strong>{remediationRequiredCount}</strong></div>
+        <div className="remediation-stat-card"><span>Exposed devices</span><strong>{exposedCount}</strong></div>
+        <div className="remediation-stat-card"><span>High / Critical</span><strong>{highOrCriticalCount}</strong></div>
       </section>
 
-      {consentBanner ? (
-        <section className="remediation-callout info">
-          <div className="callout-title">Consent update</div>
+      {needsAdminConsent && (
+        <section className="remediation-banner warning">
+          <div>
+            <strong>Defender access needs admin consent.</strong>
+            <div>This customer tenant must complete Defender admin consent before the app can read live vulnerability data.</div>
+          </div>
+          <div className="remediation-banner-actions">
+            {adminConsentUrl ? <a className="btn btn-primary" href={adminConsentUrl}>Grant Defender admin consent</a> : null}
+          </div>
+        </section>
+      )}
+
+      {!!consentBanner && !needsAdminConsent && (
+        <section className="remediation-banner success">
           <div>{consentBanner}</div>
         </section>
-      ) : null}
+      )}
 
-      {needsAdminConsent ? (
-        <section className="remediation-callout info">
-          <div className="callout-title">Organization approval required</div>
-          <div>An Entra admin from this customer tenant needs to approve Defender application access once before live vulnerabilities can be loaded.</div>
-          <div style={{ marginTop: 12 }}>
-            <a className="btn btn-primary" href={adminConsentUrl || '/api/auth/admin-consent'}>Approve organization access</a>
-          </div>
-        </section>
-      ) : null}
-
-      {error ? (
-        <section className="remediation-callout danger">
-          <div className="callout-title">Unable to load remediation data</div>
-          <div>{error}</div>
-          {technicalError ? (
-            <details className="rem-raw-json">
-              <summary>Technical details</summary>
-              <pre className="json-box">{technicalError}</pre>
-            </details>
-          ) : null}
-        </section>
-      ) : null}
-
-      <section className="remediation-toolbar-card">
-        <div className="remediation-toolbar-top">
+      {error && (
+        <section className="remediation-banner danger">
           <div>
-            <div className="toolbar-title">Refine the Defender view</div>
-            <div className="toolbar-subtitle">Keep the fast filters, but stay in the cleaner tabbed layout.</div>
+            <strong>Unable to load remediation data</strong>
+            <div>{error}</div>
+            {technicalError ? <details><summary>Technical details</summary><pre>{technicalError}</pre></details> : null}
           </div>
-          <button className="btn btn-ghost" onClick={clearFilters}>Clear filters</button>
+        </section>
+      )}
+
+      <section className="remediation-filters">
+        <div className="filters-headline">
+          <div>
+            <h3>Refine the Defender view</h3>
+            <p>Keep the fast filters, but stay in the cleaner tabbed layout.</p>
+          </div>
+          <button className="btn btn-secondary" onClick={clearFilters}>Clear filters</button>
         </div>
-        <div style={{ marginTop: 14, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input type="checkbox" checked={remediationRequiredOnly} onChange={(e) => setRemediationRequiredOnly(e.target.checked)} />
-            <span>Remediation required only</span>
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input type="checkbox" checked={exposedDevicesOnly} onChange={(e) => setExposedDevicesOnly(e.target.checked)} />
-            <span>Exposed devices only</span>
-          </label>
+        <div className="filters-inline toggles">
+          <label><input type="checkbox" checked={remediationRequiredOnly} onChange={(e) => setRemediationRequiredOnly(e.target.checked)} /> Remediation required only</label>
+          <label><input type="checkbox" checked={exposedDevicesOnly} onChange={(e) => setExposedDevicesOnly(e.target.checked)} /> Exposed devices only</label>
         </div>
-        <div className="remediation-toolbar-grid">
-          <input className="rem-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search vulnerabilities" />
-          <input className="rem-input" value={filterCve} onChange={(e) => setFilterCve(e.target.value)} placeholder="Filter by CVE" />
-          <input className="rem-input" value={filterProduct} onChange={(e) => setFilterProduct(e.target.value)} placeholder="Filter by product" />
-          <input className="rem-input" value={filterPublisher} onChange={(e) => setFilterPublisher(e.target.value)} placeholder="Filter by publisher" />
-          <input className="rem-input" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} placeholder="Filter by category" />
-          <select className="rem-input" value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
+        <div className="filters-grid">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search vulnerabilities" />
+          <input value={filterCve} onChange={(e) => setFilterCve(e.target.value)} placeholder="CVE-2026-25188" />
+          <input value={filterProduct} onChange={(e) => setFilterProduct(e.target.value)} placeholder="Filter by product" />
+          <input value={filterPublisher} onChange={(e) => setFilterPublisher(e.target.value)} placeholder="Filter by publisher" />
+          <input value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} placeholder="Filter by category" />
+          <select value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
             <option value="">All severities</option>
             <option value="critical">Critical</option>
             <option value="high">High</option>
@@ -454,234 +449,235 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         </div>
       </section>
 
-      <div className="remediation-workspace">
-        <section className="rem-list-card">
-          <div className="rem-list-header">
+      <section className="remediation-layout">
+        <aside className="remediation-list-card">
+          <div className="list-card-header">
             <div>
-              <div className="toolbar-title">Vulnerability list</div>
-              <div className="toolbar-meta">{shownFindings} item{shownFindings === 1 ? '' : 's'} currently match your filters</div>
+              <h3>Vulnerability list</h3>
+              <p>{loadingFindings ? 'Loading findings…' : `${shownFindings} item${shownFindings === 1 ? '' : 's'} currently match your filters`}</p>
             </div>
-            {hasMoreFindings ? (
-              <button className="btn btn-secondary btn-sm" onClick={handleLoadMore}>Load 250 more</button>
-            ) : null}
           </div>
+          <div className="finding-list">
+            {loadingFindings ? <div className="finding-empty">Loading Defender vulnerability data…</div> : null}
+            {!loadingFindings && !filteredFindings.length ? <div className="finding-empty">No vulnerabilities match the current filters.</div> : null}
+            {!loadingFindings && filteredFindings.map((finding, index) => {
+              const active = index === selectedIndex;
+              const count = getAffectedDeviceCount(finding, active ? affectedMachines : []);
+              return (
+                <button key={finding.id || finding.cveId || index} className={`finding-card ${active ? 'active' : ''}`} onClick={() => setSelectedIndex(index)}>
+                  <div className="finding-card-topline">
+                    <div className="finding-card-cve">{finding.cveId || finding.id || 'Vulnerability'}</div>
+                    <span className={`severity-pill ${severityClass(finding.severity)}`}>{finding.severity || 'Unknown'}</span>
+                  </div>
+                  <div className="finding-card-title">{getDisplayProduct(finding)}</div>
+                  <div className="finding-card-meta">{getDisplayPublisher(finding)} &nbsp; {getDisplayCategory(finding)}</div>
+                  <div className="finding-card-footer">
+                    <span>{finding.status || 'Unknown status'}</span>
+                    <span>{count} exposed device{count === 1 ? '' : 's'}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
 
-          {loadingFindings ? (
-            <div className="rem-empty-state">Loading Defender vulnerabilities…</div>
-          ) : filteredFindings.length === 0 ? (
-            <div className="rem-empty-state">No findings match the current filters. Try clearing one of the quick filters.</div>
-          ) : (
-            <div className="rem-list-scroll">
-              {filteredFindings.map((finding, index) => {
-                const selected = index === selectedIndex;
-                return (
-                  <button
-                    key={`${finding.cveId || finding.id || 'finding'}-${index}`}
-                    className={`rem-list-item ${selected ? 'active' : ''}`}
-                    onClick={() => {
-                      setSelectedIndex(index);
-                      setPlanResult(null);
-                      setExecResult(null);
-                    }}
-                  >
-                    <div className="rem-list-item-top">
-                      <div className="rem-list-cve">{finding.cveId || finding.id || '-'}</div>
-                      <span className={`severity-badge ${severityClass(finding.severity)}`}>{finding.severity || 'Unknown'}</span>
-                    </div>
-                    <div className="rem-list-product">{getDisplayProduct(finding)}</div>
-                    <div className="rem-list-meta">
-                      <span>{getDisplayPublisher(finding)}</span>
-                      <span>{finding.category || '-'}</span>
-                      <span>{finding.status || 'Status unavailable'}</span>
-                      <span>{finding.affectedMachineCount ?? 0} exposed device{(finding.affectedMachineCount ?? 0) === 1 ? '' : 's'}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        <section className="rem-detail-blade">
-          {selectedFinding ? (
+        <article className="remediation-detail-card">
+          {!selectedFinding ? <div className="finding-empty">Choose a vulnerability to review details.</div> : (
             <>
-              <div className="rem-blade-header">
+              <div className="detail-header">
                 <div>
-                  <div className="rem-blade-title">{selectedFinding.cveId || selectedFinding.id || 'Selected vulnerability'}</div>
-                  <div className="rem-blade-status-row">
-                    <span className={`status-dot ${String(selectedFinding.status || '').toLowerCase() === 'remediationrequired' ? 'critical' : 'low'}`} />
-                    <span>{selectedFinding.status === 'RemediationRequired' ? 'Remediation required' : (selectedFinding.status || 'Status unavailable')}</span>
-                  </div>
+                  <h2>{selectedFinding.cveId || selectedFinding.id || 'Selected vulnerability'}</h2>
+                  <div className="detail-status-line"><span className="detail-status-dot" /> {selectedFinding.status || 'Remediation required'}</div>
                 </div>
-                <div className="rem-blade-actions">
-                  <button className="btn btn-ghost btn-sm" onClick={() => setActiveTab('details')}>Vulnerability details</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setActiveTab('devices')}>Exposed devices</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setActiveTab('plan')}>Remediation plan</button>
+                <div className="detail-header-actions">
+                  <button className={`chip-button ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Vulnerability details</button>
+                  <button className={`chip-button ${activeTab === 'devices' ? 'active' : ''}`} onClick={() => setActiveTab('devices')}>Exposed devices</button>
+                  <button className={`chip-button ${activeTab === 'plan' ? 'active' : ''}`} onClick={() => setActiveTab('plan')}>Remediation plan</button>
                 </div>
               </div>
 
-              <div className="rem-tabs">
-                <button className={`rem-tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Vulnerability details</button>
-                <button className={`rem-tab ${activeTab === 'devices' ? 'active' : ''}`} onClick={() => setActiveTab('devices')}>Exposed devices</button>
-                <button className={`rem-tab ${activeTab === 'plan' ? 'active' : ''}`} onClick={() => setActiveTab('plan')}>Remediation plan</button>
+              <div className="detail-tab-strip">
+                <button className={activeTab === 'details' ? 'active' : ''} onClick={() => setActiveTab('details')}>Vulnerability details</button>
+                <button className={activeTab === 'devices' ? 'active' : ''} onClick={() => setActiveTab('devices')}>Exposed devices</button>
+                <button className={activeTab === 'plan' ? 'active' : ''} onClick={() => setActiveTab('plan')}>Remediation plan</button>
               </div>
 
-              <div className="rem-legal-note">The vulnerability data shown here is sourced from your connected Defender tenant and mapped into a remediation workflow.</div>
+              <div className="detail-banner">The vulnerability data shown here is sourced from your connected Defender tenant and mapped into a remediation workflow.</div>
 
-              {activeTab === 'details' ? (
-                <div className="rem-tab-grid">
-                  <div className="rem-surface">
-                    <div className="rem-section-title">Vulnerability description</div>
-                    <div className="rem-ai-label">Generated by AI / Defender metadata</div>
-                    <div className="rem-description">{selectedFinding.description || 'No description available.'}</div>
-
-                    <div className="rem-section-title" style={{ marginTop: 24 }}>Threat insights</div>
-                    <div className="rem-insights-grid">
-                      <div className="rem-insight-box"><span>Public exploit</span><strong>{selectedFinding.publicExploit ? 'Yes' : 'No'}</strong></div>
-                      <div className="rem-insight-box"><span>Verified</span><strong>{selectedFinding.exploitVerified ? 'Yes' : 'No'}</strong></div>
-                      <div className="rem-insight-box"><span>Exploit kits</span><strong>{selectedFinding.exploitInKit ? 'Yes' : 'No'}</strong></div>
-                      <div className="rem-insight-box"><span>EPSS</span><strong>{formatEpss(selectedFinding.epss)}</strong></div>
+              {activeTab === 'details' && (
+                <section className="detail-section card-block">
+                  <div className="detail-grid">
+                    <div><span>Vulnerability name</span><strong>{selectedFinding.cveId || selectedFinding.id || 'Not available'}</strong></div>
+                    <div><span>Affected product</span><strong>{getDisplayProduct(selectedFinding)}</strong></div>
+                    <div><span>Publisher</span><strong>{getDisplayPublisher(selectedFinding)}</strong></div>
+                    <div><span>Severity</span><strong>{selectedFinding.severity || 'Not available'}</strong></div>
+                    <div><span>CVSS</span><strong>{selectedFinding.cvss ?? 'Not available'}</strong></div>
+                    <div><span>Status</span><strong>{selectedFinding.status || 'Not available'}</strong></div>
+                    <div><span>Published on</span><strong>{formatDate(selectedFinding.publishedOn)}</strong></div>
+                    <div><span>Updated on</span><strong>{formatDate(selectedFinding.updatedOn)}</strong></div>
+                    <div><span>Category</span><strong>{getDisplayCategory(selectedFinding)}</strong></div>
+                    <div><span>EPSS</span><strong>{formatEpss(selectedFinding.epss)}</strong></div>
+                    <div><span>Public exploit</span><strong>{selectedFinding.publicExploit ? 'Yes' : 'No'}</strong></div>
+                    <div><span>Exploit verified</span><strong>{selectedFinding.exploitVerified ? 'Yes' : 'No'}</strong></div>
+                  </div>
+                  <div className="detail-summary-block">
+                    <h4>Description</h4>
+                    <p>{selectedFinding.description || 'No description was provided by Defender.'}</p>
+                  </div>
+                  {primaryProducts.length > 0 ? (
+                    <div className="detail-related-products">
+                      <h4>Related products</h4>
+                      <div className="detail-related-grid">
+                        {primaryProducts.map((item, idx) => (
+                          <div key={`${item.productName || 'product'}-${idx}`} className="detail-related-card">
+                            {item.productName || 'Unknown product'}{item.productVersion ? ` ${item.productVersion}` : ''} · {item.publisher || 'unknown publisher'}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
+                </section>
+              )}
 
-                  <div className="rem-surface rem-surface-side">
-                    <div className="rem-section-title">Vulnerability details</div>
-                    <div className="rem-details-list">
-                      <div><span>Vulnerability name</span><strong>{selectedFinding.cveId || selectedFinding.id || '-'}</strong></div>
-                      <div><span>Affected product</span><strong>{getDisplayProduct(selectedFinding)}</strong></div>
-                      <div><span>Publisher</span><strong>{getDisplayPublisher(selectedFinding)}</strong></div>
-                      <div><span>Severity</span><strong>{selectedFinding.severity || 'Unknown'}</strong></div>
-                      <div><span>CVSS</span><strong>{selectedFinding.cvss ?? 'Not available'}</strong></div>
-                      <div><span>Status</span><strong>{selectedFinding.status || 'Unknown'}</strong></div>
-                      <div><span>Published on</span><strong>{formatDate(selectedFinding.publishedOn)}</strong></div>
-                      <div><span>Updated on</span><strong>{formatDate(selectedFinding.updatedOn)}</strong></div>
-                    </div>
+              {activeTab === 'devices' && (
+                <section className="detail-section card-block">
+                  <div className="section-headline">
+                    <h3>Exposed devices</h3>
+                    <span>{getAffectedDeviceCount(selectedFinding, affectedMachines)} item{getAffectedDeviceCount(selectedFinding, affectedMachines) === 1 ? '' : 's'}</span>
                   </div>
-                </div>
-              ) : null}
-
-              {activeTab === 'devices' ? (
-                <div className="rem-surface">
-                  <div className="rem-devices-header">
-                    <div className="rem-section-title">Exposed devices</div>
-                    <div className="toolbar-meta">{getAffectedDeviceCount(selectedFinding, affectedMachines)} item{getAffectedDeviceCount(selectedFinding, affectedMachines) === 1 ? '' : 's'}</div>
-                  </div>
-                  {machinesLoading ? (
-                    <div className="rem-empty-state">Loading affected devices…</div>
-                  ) : affectedMachines.length ? (
-                    <div className="rem-device-list">
+                  {machinesLoading ? <div className="finding-empty">Loading affected devices…</div> : null}
+                  {!machinesLoading && affectedMachinesError ? <div className="detail-banner subtle-error">{affectedMachinesError}</div> : null}
+                  {!machinesLoading && !affectedMachinesError && !affectedMachines.length ? <div className="finding-empty">No affected devices were returned for this vulnerability.</div> : null}
+                  {!machinesLoading && !!affectedMachines.length ? (
+                    <div className="device-list">
                       {affectedMachines.map((name) => (
-                        <div key={name} className="rem-device-row">
-                          <strong>{name}</strong>
-                          <span>Update available</span>
+                        <div key={name} className="device-list-item">
+                          <span>{name}</span>
+                          <span className="muted">Update available</span>
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <div className="rem-empty-state">{affectedMachinesError || 'No affected device names were returned for this finding.'}</div>
-                  )}
-                </div>
-              ) : null}
+                  ) : null}
+                </section>
+              )}
 
-              {activeTab === 'plan' ? (
-                <div className="rem-plan-stack">
-                  <div className="rem-surface">
-                    <div className="rem-section-title">Plan details</div>
-                    <div className="rem-plan-summary">{normalizeProblemLabel(selectedFinding)}</div>
-                    <div className="rem-plan-description">{selectedFinding.recommendation || 'Apply the vendor-provided update or mitigation path for the affected product.'}</div>
-
-                    <div className="rem-details-list" style={{ marginTop: 18 }}>
-                      <div><span>Affected product</span><strong>{getDisplayProduct(selectedFinding)}</strong></div>
-                      <div><span>Publisher</span><strong>{getDisplayPublisher(selectedFinding)}</strong></div>
-                      <div><span>Affected devices</span><strong>{affectedMachines.length ? affectedMachines.join(', ') : (affectedMachinesError || 'Not available')}</strong></div>
-                      <div><span>Executor</span><strong>{planResult?.plan?.executor || 'Not planned yet'}</strong></div>
-                      <div><span>Execution mode</span><strong>{planResult?.plan?.executionMode || 'Not planned yet'}</strong></div>
+              {activeTab === 'plan' && (
+                <section className="detail-section card-block">
+                  <div className="plan-header-row">
+                    <div>
+                      <h3>Plan details</h3>
+                      <p>{normalizeProblemLabel(selectedFinding)}</p>
                     </div>
+                    {planBadge ? <span className={`status-badge ${planBadge.tone}`}>{planBadge.label}</span> : null}
+                  </div>
 
-                    {primaryProducts.length ? (
-                      <>
-                        <div className="rem-section-title" style={{ marginTop: 22 }}>Related products</div>
-                        <div className="rem-chip-wrap">
-                          {primaryProducts.map((item, idx) => (
-                            <div key={`${item.productName || 'product'}-${idx}`} className="rem-chip">
-                              {item.productName || 'Unknown product'}{item.productVersion ? ` ${item.productVersion}` : ''} · {item.publisher || 'unknown publisher'}
-                            </div>
-                          ))}
+                  {planResult?.plan ? (
+                    <>
+                      <div className="detail-summary-block compact">
+                        <p>{planResult.plan.message || 'Review and execute the recommended remediation path for this finding.'}</p>
+                      </div>
+
+                      <div className="detail-grid">
+                        <div><span>Affected product</span><strong>{getDisplayProduct(selectedFinding)}</strong></div>
+                        <div><span>Publisher</span><strong>{getDisplayPublisher(selectedFinding)}</strong></div>
+                        <div><span>Affected devices</span><strong>{affectedMachines.length ? affectedMachines.join(', ') : ((planResult.plan.inferredDeviceNames || []).join(', ') || affectedMachinesError || 'Not available')}</strong></div>
+                        <div><span>Executor</span><strong>{planResult.plan.executor || 'Not planned yet'}</strong></div>
+                        <div><span>Execution mode</span><strong>{planResult.plan.executionMode || 'Not planned yet'}</strong></div>
+                      </div>
+
+                      <div className="plan-execution-path">
+                        <div className="section-headline inline">
+                          <h3>Execution path</h3>
+                          {planBadge ? <span className={`status-badge ${planBadge.tone}`}>{planBadge.label}</span> : null}
                         </div>
-                      </>
-                    ) : null}
-                  </div>
-
-                  <div className="rem-surface">
-                    <div className="rem-plan-header-row">
-                      <div className="rem-section-title">Execution path</div>
-                      {planBadge ? <div className={`rem-status-pill ${planBadge.tone}`}>{planBadge.label}</div> : null}
-                    </div>
-                    {planBadge?.message ? <div className="rem-plan-banner">{planBadge.message}</div> : null}
-                    <div className="rem-details-list">
-                      <div><span>Route</span><strong>{planResult?.plan?.executionPath?.route || 'Plan remediation to calculate route'}</strong></div>
-                      <div><span>Classification</span><strong>{planResult?.classification?.type || selectedFinding.category || '-'}</strong></div>
-                      <div><span>Family</span><strong>{planResult?.classification?.family || 'software'}</strong></div>
-                      <div><span>External state</span><strong>{planResult?.plan?.external?.connected ? 'Connected' : 'Not connected'}</strong></div>
-                    </div>
-
-                    {isWindowsExecutor ? (
-                      <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
-                        <div className="toolbar-title">Windows Update options</div>
-                        <select className="rem-input" value={updateType} onChange={(e) => setUpdateType(e.target.value as 'security' | 'feature')}>
-                          <option value="security">Security update</option>
-                          <option value="feature">Feature update</option>
-                        </select>
-                        <select className="rem-input" value={rebootBehavior} onChange={(e) => setRebootBehavior(e.target.value as 'ifRequired' | 'force' | 'defer')}>
-                          <option value="ifRequired">Reboot if required</option>
-                          <option value="force">Force reboot</option>
-                          <option value="defer">Try to defer reboot</option>
-                        </select>
-                        <textarea className="rem-input" value={deviceIdsText} onChange={(e) => setDeviceIdsText(e.target.value)} rows={4} placeholder="Microsoft Entra device IDs, comma or new line separated" />
+                        <div className="detail-banner slim">{planBadge?.message || 'Plan remediation to calculate route'}</div>
+                        <div className="detail-grid compact">
+                          <div><span>Route</span><strong>{planResult.plan.executionPath?.route || 'Plan remediation to calculate route'}</strong></div>
+                          <div><span>Classification</span><strong>{planResult.plan.executionPath?.classification || selectedFinding.classification?.type || 'unknown'}</strong></div>
+                          <div><span>Family</span><strong>{planResult.plan.executionPath?.family || selectedFinding.classification?.family || 'unknown'}</strong></div>
+                          {planResult.plan.executor === 'webapp' ? <div><span>External state</span><strong>{planResult.plan.external?.connected ? 'Connected' : 'Not connected'}</strong></div> : null}
+                        </div>
                       </div>
-                    ) : null}
 
-                    {isIntuneExecutor ? (
-                      <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
-                        <div className="toolbar-title">Intune policy target</div>
-                        <input className="rem-input" value={policyTarget} onChange={(e) => setPolicyTarget(e.target.value)} placeholder="Configuration profile / compliance policy name" />
-                        <textarea className="rem-input" value={executionNotes} onChange={(e) => setExecutionNotes(e.target.value)} rows={3} placeholder="Notes for the queued Intune remediation task" />
+                      {isWindowsExecutor && (
+                        <div className="plan-form-grid">
+                          <label>
+                            <span>Windows Update options</span>
+                            <select value={updateType} onChange={(e) => setUpdateType(e.target.value as 'security' | 'feature')}>
+                              <option value="security">Security update</option>
+                              <option value="feature">Feature update</option>
+                            </select>
+                          </label>
+                          <label>
+                            <span>Reboot behavior</span>
+                            <select value={rebootBehavior} onChange={(e) => setRebootBehavior(e.target.value as 'ifRequired' | 'force' | 'defer')}>
+                              <option value="ifRequired">Reboot if required</option>
+                              <option value="force">Force reboot</option>
+                              <option value="defer">Defer reboot</option>
+                            </select>
+                          </label>
+                          <label className="span-2">
+                            <span>Microsoft Entra device IDs (optional), comma or new line separated</span>
+                            <textarea rows={3} value={deviceIdsText} onChange={(e) => setDeviceIdsText(e.target.value)} placeholder="6ca3d4cf-0a77-f70a-1df1-b0fc447442eb" />
+                          </label>
+                        </div>
+                      )}
+
+                      {isIntuneExecutor && (
+                        <div className="plan-form-grid">
+                          <label className="span-2">
+                            <span>Policy target</span>
+                            <input value={policyTarget} onChange={(e) => setPolicyTarget(e.target.value)} placeholder="Name of the Intune policy or profile to update" />
+                          </label>
+                        </div>
+                      )}
+
+                      {isScriptExecutor && (
+                        <div className="plan-form-grid">
+                          <label className="span-2">
+                            <span>Script / remediation package</span>
+                            <input value={scriptName} onChange={(e) => setScriptName(e.target.value)} placeholder="Name of the remediation script or proactive remediation package" />
+                          </label>
+                        </div>
+                      )}
+
+                      <div className="plan-form-grid">
+                        <label className="span-2">
+                          <span>Execution notes</span>
+                          <textarea rows={3} value={executionNotes} onChange={(e) => setExecutionNotes(e.target.value)} placeholder="Optional notes for the remediation run" />
+                        </label>
                       </div>
-                    ) : null}
 
-                    {isScriptExecutor ? (
-                      <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
-                        <div className="toolbar-title">Script / proactive remediation</div>
-                        <input className="rem-input" value={scriptName} onChange={(e) => setScriptName(e.target.value)} placeholder="Script or proactive remediation package name" />
-                        <textarea className="rem-input" value={executionNotes} onChange={(e) => setExecutionNotes(e.target.value)} rows={3} placeholder="Notes for the queued script remediation task" />
+                      <div className="plan-actions-row">
+                        <button className="btn btn-secondary" onClick={handlePlan} disabled={planning}>{planning ? 'Refreshing…' : 'Refresh plan'}</button>
+                        <button className="btn btn-primary" onClick={handleExecute} disabled={executing}>{executing ? 'Executing…' : 'Execute remediation'}</button>
                       </div>
-                    ) : null}
 
-                    <div className="rem-plan-actions">
-                      <button className="btn btn-primary" onClick={handlePlan} disabled={planning || needsAdminConsent}>{planning ? 'Planning…' : 'Refresh plan'}</button>
-                      <button className="btn btn-ghost" onClick={handleExecute} disabled={executing || !planResult?.plan || needsAdminConsent}>{executing ? 'Executing…' : 'Execute remediation'}</button>
+                      {Array.isArray(planResult.plan.manualSteps) && planResult.plan.manualSteps.length ? (
+                        <div className="detail-related-products">
+                          <h4>Operator guidance</h4>
+                          <ul>
+                            {planResult.plan.manualSteps.map((step: string, idx: number) => <li key={idx}>{step}</li>)}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <div className="finding-empty">Plan remediation to calculate the route and execution mode for this finding.</div>
+                  )}
+
+                  {execResult ? (
+                    <div className="detail-summary-block compact success-block">
+                      <h4>Execution result</h4>
+                      <pre>{JSON.stringify(execResult, null, 2)}</pre>
                     </div>
-
-                    <details className="rem-raw-json">
-                      <summary>Technical details</summary>
-                      <pre className="json-box">{JSON.stringify(planResult || { message: 'Run planning to generate a remediation path.' }, null, 2)}</pre>
-                    </details>
-
-                    {execResult ? (
-                      <details className="rem-raw-json" open>
-                        <summary>Execution result</summary>
-                        <pre className="json-box">{JSON.stringify(execResult, null, 2)}</pre>
-                      </details>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
+                  ) : null}
+                </section>
+              )}
             </>
-          ) : (
-            <div className="rem-empty-state">No finding selected.</div>
           )}
-        </section>
-      </div>
+        </article>
+      </section>
     </div>
   );
 }

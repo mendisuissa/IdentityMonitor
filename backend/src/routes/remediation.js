@@ -1,5 +1,5 @@
 const express = require('express');
-const { classifyFinding } = require('../services/remediationCatalog');
+const { classifyFinding, enrichFinding } = require('../services/remediationCatalog');
 const {
   getExternalHealth,
   resolveApplicationRemediation,
@@ -42,11 +42,12 @@ router.post('/plan', async (req, res) => {
   try {
     const tenantId = getTenantIdFromRequest(req);
     const { finding = {}, options = {} } = req.body || {};
-    const classification = classifyFinding(finding);
+    const enrichedFinding = enrichFinding(finding);
+    const classification = enrichedFinding.classification || classifyFinding(enrichedFinding);
 
     if (classification.type === 'application') {
       try {
-        const resolution = await resolveApplicationRemediation(finding);
+        const resolution = await resolveApplicationRemediation(enrichedFinding);
         const plan = {
           executor: 'webapp',
           supported: !!resolution?.resolution?.supported,
@@ -74,7 +75,7 @@ router.post('/plan', async (req, res) => {
           ok: true,
           tenantId,
           classification,
-          finding,
+          finding: enrichedFinding,
           plan: {
             executor: 'webapp',
             supported: false,
@@ -109,8 +110,8 @@ router.post('/plan', async (req, res) => {
       }
     }
 
-    const plan = await planNativeRemediation({ classification, finding, options });
-    return res.json({ ok: true, tenantId, classification, finding, plan });
+    const plan = await planNativeRemediation({ classification, finding: enrichedFinding, options });
+    return res.json({ ok: true, tenantId, classification, finding: enrichedFinding, plan });
   } catch (error) {
     return res.status(error.status || 500).json({ ok: false, error: error.message, details: error.details || null });
   }
@@ -120,11 +121,12 @@ router.post('/execute', async (req, res) => {
   try {
     const tenantId = getTenantIdFromRequest(req);
     const { approvalId = null, finding = {}, devices = [], plan = {}, options = {} } = req.body || {};
-    const classification = classifyFinding(finding);
+    const enrichedFinding = enrichFinding(finding);
+    const classification = enrichedFinding.classification || classifyFinding(enrichedFinding);
 
     if (plan.executor === 'webapp' || classification.type === 'application') {
       try {
-        const result = await executeApplicationRemediation({ tenantId, approvalId, finding, devices, plan, options });
+        const result = await executeApplicationRemediation({ tenantId, approvalId, finding: enrichedFinding, devices, plan, options });
         return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'webapp', result });
       } catch (_error) {
         return res.json({
@@ -144,12 +146,12 @@ router.post('/execute', async (req, res) => {
 
     const result = await executeNativeRemediation({
       tenantId,
-      finding,
+      finding: enrichedFinding,
       classification,
       options: {
         ...options,
         deviceIds: options.deviceIds || devices,
-        affectedDeviceNames: options.affectedDeviceNames || finding.affectedMachines || []
+        affectedDeviceNames: options.affectedDeviceNames || enrichedFinding.affectedMachines || []
       }
     });
     return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'native', result });

@@ -6,6 +6,7 @@ const {
   listTenantRecommendations,
   listTenantVulnerabilityMachines,
 } = require('../services/tenantDefenderClient');
+const { enrichFinding } = require('../services/remediationCatalog');
 
 const router = express.Router();
 
@@ -160,46 +161,11 @@ router.get('/vulnerabilities', async (req, res) => {
       return res.status(401).json({ ok: false, error: 'No authenticated tenant session was found for this request.' });
     }
 
-    const topRaw = Number(req.query.top || 250);
-    const skipRaw = Number(req.query.skip || 0);
-    const top = Number.isFinite(topRaw) && topRaw > 0 ? Math.min(topRaw, 500) : 250;
-    const skip = Number.isFinite(skipRaw) && skipRaw > 0 ? skipRaw : 0;
-    const search = String(req.query.search || '').trim().toLowerCase();
-    const cve = String(req.query.cve || '').trim().toLowerCase();
-    const product = String(req.query.product || '').trim().toLowerCase();
-    const publisher = String(req.query.publisher || '').trim().toLowerCase();
-    const category = String(req.query.category || '').trim().toLowerCase();
-    const severity = String(req.query.severity || '').trim().toLowerCase();
-    const remediationRequiredOnly = String(req.query.remediationRequiredOnly || '').toLowerCase() === 'true';
-    const exposedDevicesOnly = String(req.query.exposedDevicesOnly || '').toLowerCase() === 'true';
+    const top = Number(req.query.top || 0);
+    const items = await listTenantVulnerabilities(tenantId, top);
+    const enrichedItems = Array.isArray(items) ? items.map((item) => enrichFinding(item)) : [];
 
-    const hasServerFilters = !!(search || cve || product || publisher || category || severity || remediationRequiredOnly || exposedDevicesOnly || skip > 0);
-    const rawItems = await listTenantVulnerabilities(tenantId, hasServerFilters ? 0 : top);
-
-    const filtered = hasServerFilters
-      ? rawItems.filter((item) => {
-          const itemCve = String(item.cveId || item.id || '').toLowerCase();
-          const itemProduct = String(item.productName || item.softwareName || item.name || '').toLowerCase();
-          const itemPublisher = String(item.publisher || '').toLowerCase();
-          const itemCategory = String(item.category || '').toLowerCase();
-          const itemSeverity = String(item.severity || '').toLowerCase();
-          const itemStatus = String(item.status || '').toLowerCase();
-          const haystack = `${itemCve} ${itemProduct} ${itemPublisher} ${itemCategory} ${itemSeverity} ${itemStatus} ${String(item.description || '')}`.toLowerCase();
-          if (search && !haystack.includes(search)) return false;
-          if (cve && !itemCve.includes(cve)) return false;
-          if (product && !itemProduct.includes(product)) return false;
-          if (publisher && !itemPublisher.includes(publisher)) return false;
-          if (category && !itemCategory.includes(category)) return false;
-          if (severity && itemSeverity !== severity) return false;
-          if (remediationRequiredOnly && itemStatus !== 'remediationrequired') return false;
-          if (exposedDevicesOnly && Number(item.affectedMachineCount || 0) <= 0) return false;
-          return true;
-        })
-      : rawItems;
-
-    const pagedItems = filtered.slice(skip, skip + top);
-
-    res.json({ ok: true, tenantId, count: pagedItems.length, totalCount: filtered.length, items: pagedItems, page: { top, skip, hasMore: skip + pagedItems.length < filtered.length } });
+    res.json({ ok: true, tenantId, count: enrichedItems.length, totalCount: enrichedItems.length, items: enrichedItems });
   } catch (error) {
     const friendly = getFriendlyError(error);
     if (friendly.requiresAdminConsent) {
