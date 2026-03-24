@@ -276,6 +276,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           rebootBehavior,
           policyTarget,
           scriptName,
+          affectedDeviceNames: affectedMachines,
         },
       });
       setPlanResult(result);
@@ -306,6 +307,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           rebootBehavior,
           deviceIds,
           targetDeviceIds: deviceIds,
+          affectedDeviceNames: affectedMachines,
           policyTarget,
           scriptName,
           notes: executionNotes,
@@ -594,7 +596,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                       <div><span>Route</span><strong>{planResult?.plan?.executionPath?.route || 'Plan remediation to calculate route'}</strong></div>
                       <div><span>Classification</span><strong>{planResult?.classification?.type || selectedFinding.category || '-'}</strong></div>
                       <div><span>Family</span><strong>{planResult?.classification?.family || 'software'}</strong></div>
-                      <div><span>External state</span><strong>{planResult?.plan?.external?.connected ? 'Connected' : 'Not connected'}</strong></div>
+                      {planResult?.plan?.executor === 'webapp' ? (
+                        <div><span>External state</span><strong>{planResult?.plan?.external?.connected ? 'Connected' : 'Not connected'}</strong></div>
+                      ) : null}
                     </div>
 
                     {isWindowsExecutor ? (
@@ -609,7 +613,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                           <option value="force">Force reboot</option>
                           <option value="defer">Try to defer reboot</option>
                         </select>
-                        <textarea className="rem-input" value={deviceIdsText} onChange={(e) => setDeviceIdsText(e.target.value)} rows={4} placeholder="Microsoft Entra device IDs, comma or new line separated" />
+                        <textarea className="rem-input" value={deviceIdsText} onChange={(e) => setDeviceIdsText(e.target.value)} rows={4} placeholder="Optional: Microsoft Entra device IDs, comma or new line separated" />
+                        <div className="toolbar-meta">Leave this empty to use the exposed devices already returned by Defender for this finding.</div>
                       </div>
                     ) : null}
 

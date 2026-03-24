@@ -126,10 +126,10 @@ function buildPlanForWindowsUpdate(classification, finding, options = {}) {
     message: 'Windows Update native executor is ready. You can run the update immediately from this plan.',
     statusCard: buildStatusCard('native-ready', 'native ready', 'success', 'Windows Update execution is ready.'),
     executionPath: { classification: classification.type, family: classification.family, executor: 'native-windows-update', status: 'ready', route: 'Windows Update -> Native executor' },
-    fields: { requiresDeviceIds: true, supportsUpdateType: true, supportsRebootBehavior: true, supportsImmediateRun: true },
+    fields: { requiresDeviceIds: false, supportsUpdateType: true, supportsRebootBehavior: true, supportsImmediateRun: true, canResolveDeviceNames: true },
     inferredDeviceNames: toArray(options.affectedDeviceNames || []).length ? toArray(options.affectedDeviceNames || []) : toArray(finding.affectedMachines || []),
     preflight: { graphConfigured: !!process.env.CLIENT_ID && !!process.env.CLIENT_SECRET, requiresEntraDeviceIds: true, ready: !!process.env.CLIENT_ID && !!process.env.CLIENT_SECRET },
-    manualSteps: ['Review the affected devices before rollout.', 'Ensure the app registration has WindowsUpdates.ReadWrite.All and required device permissions.', 'Ensure devices meet Windows Autopatch / WUfB deployment prerequisites before execution.']
+    manualSteps: ['Review the affected devices before rollout.', 'If you do not provide Entra device IDs, the executor will attempt to resolve the exposed device names automatically.', 'Ensure the app registration has WindowsUpdates.ReadWrite.All and required device permissions.', 'Ensure devices meet Windows Autopatch / WUfB deployment prerequisites before execution.']
   };
 }
 function buildPlanForIntunePolicy(classification, finding, options = {}) {
@@ -149,7 +149,7 @@ async function executeWindowsUpdate({ tenantId, finding = {}, options = {} }) {
   const rebootBehavior = normalizeRebootBehavior(options.rebootBehavior || 'ifRequired');
   const resolution = await resolveEntraDeviceIds(tenantId, options, finding);
   const deviceIds = resolution.resolvedDeviceIds;
-  if (!deviceIds.length) { const err = new Error('No Microsoft Entra device IDs could be resolved. Provide Entra device IDs or affected device names before running Windows Update now.'); err.status = 400; err.details = { unmatchedInputs: resolution.unmatchedInputs, sourceInputs: resolution.sourceInputs }; throw err; }
+  if (!deviceIds.length) { const err = new Error('No Microsoft Entra device IDs could be resolved. Provide Entra device IDs or exposed device names before running Windows Update now.'); err.status = 400; err.details = { unmatchedInputs: resolution.unmatchedInputs, sourceInputs: resolution.sourceInputs }; throw err; }
   const category = updateType === 'feature' ? 'feature' : 'quality';
   await enrollAssetsForCategory(tenantId, category, deviceIds);
   const catalogEntry = updateType === 'feature' ? await getLatestFeatureCatalogEntry(tenantId) : await getLatestSecurityCatalogEntry(tenantId);

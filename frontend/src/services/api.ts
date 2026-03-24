@@ -468,6 +468,7 @@ export const api = {
       policyTarget?: string;
       scriptName?: string;
       notes?: string;
+      affectedDeviceNames?: string[];
     };
   }) =>
     apiFetch<any>('/remediation/plan', {
@@ -489,6 +490,7 @@ export const api = {
       policyTarget?: string;
       scriptName?: string;
       notes?: string;
+      affectedDeviceNames?: string[];
     };
   }) =>
     apiFetch<any>('/remediation/execute', {
