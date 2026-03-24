@@ -1,6 +1,5 @@
 const express = require('express');
 const { classifyFinding, enrichFinding } = require('../services/remediationCatalog');
-const { getBuiltInRemediations } = require('../services/builtInRemediations');
 const {
   getExternalHealth,
   resolveApplicationRemediation,
@@ -8,8 +7,10 @@ const {
 } = require('../services/webappExecutionClient');
 const {
   planNativeRemediation,
-  executeNativeRemediation
+  executeNativeRemediation,
+  listTenantConfigurationPolicies
 } = require('../services/nativeRemediationExecutor');
+const { BUILT_IN_POLICY_TEMPLATES, getRecommendedPolicyTemplates } = require('../services/builtInPolicyTemplates');
 
 const router = express.Router();
 
@@ -29,6 +30,35 @@ function getTenantIdFromRequest(req) {
   return sessionTenantId;
 }
 
+
+router.get('/catalog/intune-policies', async (req, res) => {
+  try {
+    const tenantId = getTenantIdFromRequest({ session: req.session, body: { tenantId: req.query?.tenantId || null } });
+    const finding = enrichFinding({
+      cveId: req.query?.cveId || null,
+      productName: req.query?.productName || null,
+      displayProductName: req.query?.displayProductName || null,
+      category: req.query?.category || null,
+      description: req.query?.description || null,
+      classification: {
+        type: req.query?.classificationType || null,
+        family: req.query?.classificationFamily || null,
+      },
+    });
+    const recommended = getRecommendedPolicyTemplates(finding);
+    const tenantPolicies = await listTenantConfigurationPolicies(tenantId);
+    res.json({
+      ok: true,
+      tenantId,
+      recommended,
+      builtIn: BUILT_IN_POLICY_TEMPLATES,
+      tenantPolicies,
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ ok: false, error: error.message, details: error.details || null });
+  }
+});
+
 router.get('/health', async (_req, res) => {
   const external = await getExternalHealth();
   res.json({
@@ -37,25 +67,6 @@ router.get('/health', async (_req, res) => {
     graphConfigured: !!process.env.CLIENT_ID && !!process.env.CLIENT_SECRET,
     external
   });
-});
-
-
-router.get('/script-catalog', async (req, res) => {
-  try {
-    const tenantId = getTenantIdFromRequest(req);
-    const client = await require('../services/graphService').getClientForTenant(tenantId);
-    const page = await client.api('/deviceManagement/deviceHealthScripts?$select=id,displayName,description,publisher').top(100).get();
-    const tenantScripts = (page?.value || []).map((item) => ({
-      id: item.id,
-      displayName: item.displayName || item.id,
-      description: item.description || '',
-      publisher: item.publisher || 'Tenant',
-      source: 'tenant',
-    }));
-    return res.json({ ok: true, tenantId, builtIns: getBuiltInRemediations(), tenantScripts });
-  } catch (error) {
-    return res.status(error.status || 500).json({ ok: false, error: error.message, details: error.details || null });
-  }
 });
 
 router.post('/plan', async (req, res) => {

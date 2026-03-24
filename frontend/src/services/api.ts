@@ -457,8 +457,20 @@ export const api = {
   executiveExportUrl: (format: 'csv' | 'json' = 'csv') =>
     `${API_BASE_URL}/api/reports/executive/export?format=${format}`,
 
-  getRemediationScriptCatalog: () =>
-    apiFetch<any>('/remediation/script-catalog'),
+
+  getIntunePolicyCatalog: (params?: {
+    tenantId?: string;
+    cveId?: string;
+    productName?: string;
+    displayProductName?: string;
+    category?: string;
+    description?: string;
+    classificationType?: string;
+    classificationFamily?: string;
+  }) => {
+    const q = toQuery(params);
+    return apiFetch<any>(`/remediation/catalog/intune-policies${q ? `?${q}` : ''}`);
+  },
 
   planRemediation: (body: {
     tenantId?: string;
@@ -470,7 +482,6 @@ export const api = {
       deviceIds?: string[];
       policyTarget?: string;
       scriptName?: string;
-      builtInScriptId?: string;
       notes?: string;
       affectedDeviceNames?: string[];
     };
@@ -493,7 +504,6 @@ export const api = {
       deviceIds?: string[];
       policyTarget?: string;
       scriptName?: string;
-      builtInScriptId?: string;
       notes?: string;
       affectedDeviceNames?: string[];
     };

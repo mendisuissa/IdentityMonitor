@@ -41,17 +41,7 @@ type DetailTab = 'details' | 'devices' | 'plan';
 
 type Props = { tenantId?: string; tenantName?: string };
 
-
-type ScriptCatalogItem = {
-  id: string;
-  displayName: string;
-  shortName?: string;
-  description?: string;
-  category?: string;
-  publisher?: string;
-  source?: 'builtin' | 'tenant';
-  recommendedFor?: string[];
-};
+type PolicyCatalogOption = { id?: string; name?: string; targetRef?: string; description?: string; category?: string; };
 
 function getFriendlyErrorMessage(error: any) {
   const raw = error?.message || error?.error || error?.details?.error?.message || '';
@@ -124,12 +114,6 @@ function getAffectedDeviceCount(finding: Finding, affectedMachines: string[]) {
 
 function toCsvLines(input: string) {
   return input.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
-}
-
-
-function getRecommendedBuiltIns(finding: Finding, builtIns: ScriptCatalogItem[]) {
-  const text = `${getDisplayProduct(finding)} ${getDisplayPublisher(finding)} ${finding.description || ''} ${finding.category || ''} ${finding.classification?.type || ''}`.toLowerCase();
-  return builtIns.filter((item) => (item.recommendedFor || []).some((hint) => text.includes(String(hint).toLowerCase())));
 }
 
 export default function RemediationPage({ tenantId, tenantName }: Props) {
@@ -680,11 +664,11 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [deviceIdsText, setDeviceIdsText] = useState('');
   const [policyTarget, setPolicyTarget] = useState('');
   const [scriptName, setScriptName] = useState('');
-  const [builtInScriptId, setBuiltInScriptId] = useState('');
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [catalogError, setCatalogError] = useState('');
-  const [builtInScripts, setBuiltInScripts] = useState<ScriptCatalogItem[]>([]);
-  const [tenantScripts, setTenantScripts] = useState<ScriptCatalogItem[]>([]);
+  const [policySelection, setPolicySelection] = useState('');
+  const [policyGroupId, setPolicyGroupId] = useState('');
+  const [customPolicyValue, setCustomPolicyValue] = useState('');
+  const [policyCatalog, setPolicyCatalog] = useState<{ recommended: PolicyCatalogOption[]; builtIn: PolicyCatalogOption[]; tenantPolicies: PolicyCatalogOption[] }>({ recommended: [], builtIn: [], tenantPolicies: [] });
+  const [policyCatalogLoading, setPolicyCatalogLoading] = useState(false);
   const [executionNotes, setExecutionNotes] = useState('');
 
   useEffect(() => {
@@ -754,8 +738,14 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const isIntuneExecutor = selectedExecutor === 'native-intune-policy';
   const isScriptExecutor = selectedExecutor === 'native-script';
   const planBadge = getPlanBadge(planResult);
+
+  function buildPolicyTargetValue() {
+    const base = (policySelection === '__custom__' ? customPolicyValue : policySelection || policyTarget || '').trim();
+    if (!base) return '';
+    const group = policyGroupId.trim();
+    return group ? `${base}|${group}` : base;
+  }
   const primaryProducts = Array.isArray(selectedFinding?.relatedProducts) ? selectedFinding!.relatedProducts!.slice(0, 6) : [];
-  const recommendedBuiltIns = selectedFinding ? getRecommendedBuiltIns(selectedFinding, builtInScripts) : [];
 
   useEffect(() => {
     setPlanResult(null);
@@ -763,8 +753,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setActiveTab('details');
     setAffectedMachines([]);
     setAffectedMachinesError('');
-    setBuiltInScriptId('');
-    setScriptName('');
   }, [selectedFinding?.id, selectedFinding?.cveId]);
 
   useEffect(() => {
@@ -797,29 +785,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     return () => { mounted = false; };
   }, [selectedFinding?.id, selectedFinding?.cveId, activeTab]);
 
-
-  useEffect(() => {
-    let mounted = true;
-    async function loadCatalog() {
-      if (!isScriptExecutor) return;
-      setCatalogLoading(true);
-      setCatalogError('');
-      try {
-        const result = await api.getRemediationScriptCatalog();
-        if (!mounted) return;
-        setBuiltInScripts(Array.isArray(result?.builtIns) ? result.builtIns : []);
-        setTenantScripts(Array.isArray(result?.tenantScripts) ? result.tenantScripts : []);
-      } catch (err: any) {
-        if (!mounted) return;
-        setCatalogError(err?.message || 'Failed to load remediation script catalog.');
-      } finally {
-        if (mounted) setCatalogLoading(false);
-      }
-    }
-    loadCatalog();
-    return () => { mounted = false; };
-  }, [isScriptExecutor, tenantId]);
-
   useEffect(() => {
     if (!planResult?.plan || !selectedFinding) return;
     setPlanResult((current: any) => {
@@ -841,15 +806,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     });
   }, [affectedMachines, selectedFinding]);
 
-
-  useEffect(() => {
-    if (!builtInScriptId) return;
-    const fromBuiltIn = builtInScripts.find((item) => item.id === builtInScriptId);
-    if (fromBuiltIn) {
-      setScriptName(fromBuiltIn.displayName);
-    }
-  }, [builtInScriptId, builtInScripts]);
-
   async function handlePlan() {
     if (!selectedFinding) return;
     setPlanning(true);
@@ -866,9 +822,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         options: {
           updateType,
           rebootBehavior,
-          policyTarget,
+          policyTarget: buildPolicyTargetValue(),
           scriptName,
-          builtInScriptId,
           affectedDeviceNames: affectedMachines,
         },
       });
@@ -887,7 +842,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     const deviceIds = toCsvLines(deviceIdsText);
     const resolvedNames = affectedMachines.length ? affectedMachines : (planResult?.plan?.inferredDeviceNames || []);
     if (!deviceIds.length && !resolvedNames.length) {
-      setError('Load Exposed devices first or enter Microsoft Entra device IDs manually before running remediation.');
+      setError('Load Exposed devices first or enter Microsoft Entra device IDs manually before running Windows Update.');
       setTechnicalError('');
       return;
     }
@@ -910,9 +865,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           deviceIds,
           targetDeviceIds: deviceIds,
           affectedDeviceNames: resolvedNames,
-          policyTarget,
+          policyTarget: buildPolicyTargetValue(),
           scriptName,
-          builtInScriptId,
           notes: executionNotes,
         },
       });
@@ -1204,47 +1158,46 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
                       {isIntuneExecutor && (
                         <div className="plan-form-grid">
-                          <label className="span-2">
-                            <span>Policy target</span>
-                            <input value={policyTarget} onChange={(e) => setPolicyTarget(e.target.value)} placeholder="Policy ID or exact policy name | Entra group object ID" />
+                          <label>
+                            <span>Policy source</span>
+                            <select value={policySelection} onChange={(e) => setPolicySelection(e.target.value)}>
+                              <option value="">Select a recommended, built-in, or tenant policy</option>
+                              {policyCatalog.recommended.length ? <optgroup label="Recommended templates">{policyCatalog.recommended.map((item) => <option key={`rec-${item.id || item.targetRef}`} value={item.targetRef || item.name || ''}>{item.name}</option>)}</optgroup> : null}
+                              {policyCatalog.builtIn.length ? <optgroup label="Built-in templates">{policyCatalog.builtIn.map((item) => <option key={`builtin-${item.id || item.targetRef}`} value={item.targetRef || item.name || ''}>{item.name}</option>)}</optgroup> : null}
+                              {policyCatalog.tenantPolicies.length ? <optgroup label="My Intune policies">{policyCatalog.tenantPolicies.map((item) => <option key={`tenant-${item.id}`} value={item.id || item.name || ''}>{item.name}</option>)}</optgroup> : null}
+                              <option value="__custom__">Custom policy ID or exact name</option>
+                            </select>
                           </label>
+                          <label>
+                            <span>Entra group object ID</span>
+                            <input value={policyGroupId} onChange={(e) => setPolicyGroupId(e.target.value)} placeholder="00000000-0000-0000-0000-000000000000" />
+                          </label>
+                          {policySelection === '__custom__' ? (
+                            <label className="span-2">
+                              <span>Custom policy reference</span>
+                              <input value={customPolicyValue} onChange={(e) => setCustomPolicyValue(e.target.value)} placeholder="Policy ID or exact policy name" />
+                            </label>
+                          ) : null}
+                          <label className="span-2">
+                            <span>Resolved policy target</span>
+                            <input value={buildPolicyTargetValue()} readOnly placeholder="PolicyIdOrName|GroupId" />
+                          </label>
+                          {policyCatalogLoading ? <div className="detail-banner slim span-2">Loading Intune policy suggestions…</div> : null}
                         </div>
                       )}
+
+                      {isIntuneExecutor && !policyCatalogLoading && (policyCatalog.recommended.length || policyCatalog.tenantPolicies.length) ? (
+                        <div className="detail-banner slim">
+                          Choose a recommended template, one of your tenant policies, or switch to Custom for a direct policy ID / name. The executor will assign the resolved policy to the supplied Entra group.
+                        </div>
+                      ) : null}
 
                       {isScriptExecutor && (
                         <div className="plan-form-grid">
                           <label className="span-2">
-                            <span>Built-in or tenant remediation package</span>
-                            <select value={builtInScriptId || scriptName} onChange={(e) => {
-                              const value = e.target.value;
-                              const builtIn = builtInScripts.find((item) => item.id === value);
-                              const tenant = tenantScripts.find((item) => item.id === value || item.displayName === value);
-                              if (builtIn) {
-                                setBuiltInScriptId(builtIn.id);
-                                setScriptName(builtIn.displayName);
-                              } else if (tenant) {
-                                setBuiltInScriptId('');
-                                setScriptName(tenant.displayName);
-                              } else {
-                                setBuiltInScriptId('');
-                                setScriptName(value);
-                              }
-                            }}>
-                              <option value="">Choose built-in / my script / keep custom</option>
-                              {recommendedBuiltIns.length ? <optgroup label="Recommended built-ins">{recommendedBuiltIns.map((item) => <option key={`rec-${item.id}`} value={item.id}>{item.shortName || item.displayName}</option>)}</optgroup> : null}
-                              {builtInScripts.length ? <optgroup label="Built-in remediations">{builtInScripts.map((item) => <option key={item.id} value={item.id}>{item.shortName || item.displayName}</option>)}</optgroup> : null}
-                              {tenantScripts.length ? <optgroup label="My Intune remediations">{tenantScripts.map((item) => <option key={item.id} value={item.displayName}>{item.displayName}</option>)}</optgroup> : null}
-                            </select>
+                            <span>Script policy ID or display name</span>
+                            <input value={scriptName} onChange={(e) => setScriptName(e.target.value)} placeholder="Device health script policy ID or exact display name" />
                           </label>
-                          <label className="span-2">
-                            <span>Custom script policy ID or exact display name</span>
-                            <input value={scriptName} onChange={(e) => { setScriptName(e.target.value); setBuiltInScriptId(''); }} placeholder="Device health script policy ID or exact display name" />
-                          </label>
-                          {catalogLoading ? <div className="detail-banner slim span-2">Loading built-in and tenant remediation packages…</div> : null}
-                          {!catalogLoading && catalogError ? <div className="detail-banner subtle-error span-2">{catalogError}</div> : null}
-                          {!catalogLoading && !!builtInScriptId ? (
-                            <div className="detail-banner slim span-2">Built-in remediation selected. IdentityMonitor will create it in the tenant if it does not already exist, then run it on the resolved devices.</div>
-                          ) : null}
                         </div>
                       )}
 
