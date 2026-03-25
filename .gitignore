@@ -7,3 +7,4 @@ public/
 # Azure publish profiles (contain credentials — never commit)
 *.PublishSettings
 *.publishsettings
+.claude/
