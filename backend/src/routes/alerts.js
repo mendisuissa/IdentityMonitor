@@ -57,6 +57,30 @@ router.get('/cases', requirePermission('alerts.view'), (req, res) => {
   res.json(cases);
 });
 
+router.get('/cases/:id', requirePermission('alerts.view'), (req, res) => {
+  const tenantId = getTenantId(req);
+  const cases = workflowStore.getCases(tenantId);
+  const found = cases.find(c => c.alertId === req.params.id);
+  if (!found) return res.status(404).json({ error: 'Case not found' });
+  res.json(found);
+});
+
+router.post('/cases', requirePermission('alerts.respond'), (req, res) => {
+  const tenantId = getTenantId(req);
+  const { alertId, ...body } = req.body || {};
+  if (!alertId) return res.status(400).json({ error: 'alertId required' });
+  const updated = workflowStore.patchAlertWorkflow(tenantId, alertId, body, getActor(req));
+  auditLog.log(tenantId, 'cases.created', { alertId }, getActor(req));
+  res.json(updated);
+});
+
+router.patch('/cases/:id', requirePermission('alerts.respond'), (req, res) => {
+  const tenantId = getTenantId(req);
+  const updated = workflowStore.patchAlertWorkflow(tenantId, req.params.id, req.body || {}, getActor(req));
+  auditLog.log(tenantId, 'cases.updated', { alertId: req.params.id }, getActor(req));
+  res.json(updated);
+});
+
 
 router.get('/:id/investigation', requirePermission('alerts.view'), (req, res) => {
   const tenantId = getTenantId(req);
@@ -83,6 +107,12 @@ router.patch('/:id/workflow', requirePermission('alerts.respond'), (req, res) =>
   const tenantId = getTenantId(req);
   const updated = workflowStore.patchAlertWorkflow(tenantId, req.params.id, req.body, getActor(req));
   res.json(updated);
+});
+
+router.get('/:id/comments', requirePermission('alerts.view'), (req, res) => {
+  const tenantId = getTenantId(req);
+  const workflow = workflowStore.getAlertWorkflow(tenantId, req.params.id);
+  res.json(workflow?.comments || []);
 });
 
 router.post('/:id/comments', requirePermission('alerts.respond'), (req, res) => {
@@ -267,6 +297,29 @@ router.post('/scan', requirePermission('alerts.respond'), async (req, res) => {
     console.error('[Scan] Unexpected error:', err.message);
     res.status(500).json({ error: err.message, code: 'SCAN_FAILED' });
   }
+});
+
+// GET /api/alerts/:id — single alert with workflow
+router.get('/:id', requirePermission('alerts.view'), async (req, res) => {
+  const tenantId = getTenantId(req);
+  if (tenantId && !isMock()) await alertsStore.loadFromAzure(tenantId);
+  const alert = isMock()
+    ? getMockAlertsState().find(a => a.id === req.params.id)
+    : alertsStore.getById(req.params.id);
+  if (!alert || (tenantId && !isMock() && alert.tenantId !== tenantId)) {
+    return res.status(404).json({ error: 'Alert not found' });
+  }
+  const workflow = tenantId ? workflowStore.getAlertWorkflow(tenantId, alert.id) : undefined;
+  res.json({ ...alert, workflow });
+});
+
+// POST /api/alerts/refresh — reload alerts from store
+router.post('/refresh', requirePermission('alerts.view'), async (req, res) => {
+  const tenantId = getTenantId(req);
+  if (tenantId && !isMock()) await alertsStore.loadFromAzure(tenantId);
+  const alerts = isMock() ? getMockAlertsState() : alertsStore.getAll(tenantId);
+  const withWorkflow = alerts.map(a => ({ ...a, workflow: tenantId ? workflowStore.getAlertWorkflow(tenantId, a.id) : undefined }));
+  res.json(withWorkflow);
 });
 
 module.exports = router;

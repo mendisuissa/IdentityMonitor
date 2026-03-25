@@ -280,7 +280,8 @@ router.get('/policy-pack', requirePermission('ops.view'), (req, res) => {
   res.json({ policyPack: settings.policyPack || 'balanced', escalation: settings.escalation, autoActions: settings.autoActions, detectionRules: settings.detectionRules });
 });
 
-router.patch('/policy-pack', requirePermission('settings.manage'), (req, res) => {
+// PUT alias for policy-pack (frontend uses PUT)
+router.put('/policy-pack', requirePermission('settings.manage'), (req, res) => {
   const tenantId = requireAuth(req, res);
   if (!tenantId) return;
   const { policyPack } = req.body || {};
@@ -299,4 +300,282 @@ router.patch('/policy-pack', requirePermission('settings.manage'), (req, res) =>
   const updated = settingsService.saveSettings(tenantId, { policyPack: policyPack || 'balanced', ...selected });
   auditLog.log(tenantId, 'policy.pack_updated', { policyPack: policyPack || 'balanced' }, getActor(req));
   res.json({ policyPack: updated.policyPack, autoActions: updated.autoActions });
+});
+
+// ─── Missing GET/PUT endpoints ──────────────────────────────────────────────
+
+// GET /api/settings/admins
+router.get('/admins', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  res.json(settingsService.getSettings(tenantId).admins || []);
+});
+
+// GET /api/settings/whitelist
+router.get('/whitelist', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  res.json(settingsService.getSettings(tenantId).whitelist || { ips: [], countries: [], devices: [], users: [] });
+});
+
+// PUT /api/settings/whitelist — save full whitelist object
+router.put('/whitelist', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { whitelist: req.body });
+  auditLog.log(tenantId, auditLog.ACTIONS.WHITELIST_UPDATED, { action: 'bulk-save' }, getActor(req));
+  res.json(updated.whitelist);
+});
+
+// GET /api/settings/detection
+router.get('/detection', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  res.json(settingsService.getSettings(tenantId).detectionRules || {});
+});
+
+// PUT /api/settings/detection
+router.put('/detection', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { detectionRules: req.body });
+  auditLog.log(tenantId, auditLog.ACTIONS.SETTINGS_UPDATED, { sections: ['detectionRules'] }, getActor(req));
+  res.json(updated.detectionRules);
+});
+
+// GET /api/settings/auto-actions
+router.get('/auto-actions', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  res.json(settingsService.getSettings(tenantId).autoActions || {});
+});
+
+// PUT /api/settings/auto-actions
+router.put('/auto-actions', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { autoActions: req.body });
+  auditLog.log(tenantId, auditLog.ACTIONS.SETTINGS_UPDATED, { sections: ['autoActions'] }, getActor(req));
+  res.json(updated.autoActions);
+});
+
+// GET /api/settings/response-policies
+router.get('/response-policies', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  res.json(settingsService.getSettings(tenantId).responsePolicies || {});
+});
+
+// PUT /api/settings/response-policies
+router.put('/response-policies', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { responsePolicies: req.body });
+  auditLog.log(tenantId, auditLog.ACTIONS.SETTINGS_UPDATED, { sections: ['responsePolicies'] }, getActor(req));
+  res.json(updated.responsePolicies);
+});
+
+// GET /api/settings/suppression-rules
+router.get('/suppression-rules', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  res.json(settingsService.getSettings(tenantId).suppressionRules || []);
+});
+
+// PUT /api/settings/suppression-rules
+router.put('/suppression-rules', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { suppressionRules: req.body });
+  auditLog.log(tenantId, auditLog.ACTIONS.SETTINGS_UPDATED, { sections: ['suppressionRules'] }, getActor(req));
+  res.json(updated.suppressionRules);
+});
+
+// GET /api/settings/response-exceptions
+router.get('/response-exceptions', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  res.json(settingsService.getSettings(tenantId).responseExceptions || {});
+});
+
+// PUT /api/settings/response-exceptions
+router.put('/response-exceptions', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { responseExceptions: req.body });
+  auditLog.log(tenantId, auditLog.ACTIONS.SETTINGS_UPDATED, { sections: ['responseExceptions'] }, getActor(req));
+  res.json(updated.responseExceptions);
+});
+
+// GET /api/settings/retention-policy
+router.get('/retention-policy', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  res.json(settingsService.getSettings(tenantId).retentionPolicy || {});
+});
+
+// PUT /api/settings/retention-policy
+router.put('/retention-policy', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { retentionPolicy: req.body });
+  auditLog.log(tenantId, auditLog.ACTIONS.SETTINGS_UPDATED, { sections: ['retentionPolicy'] }, getActor(req));
+  res.json(updated.retentionPolicy);
+});
+
+// GET /api/settings/retention-preview
+router.get('/retention-preview', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const s = settingsService.getSettings(tenantId);
+  const rp = s.retentionPolicy || {};
+  const cutoffs = {
+    incidents: rp.incidentDays ? new Date(Date.now() - rp.incidentDays * 86400000).toISOString() : null,
+    audit:     rp.auditDays    ? new Date(Date.now() - rp.auditDays    * 86400000).toISOString() : null,
+    reports:   rp.reportDays   ? new Date(Date.now() - rp.reportDays   * 86400000).toISOString() : null,
+  };
+  res.json({ retentionPolicy: rp, cutoffs, previewGeneratedAt: new Date().toISOString() });
+});
+
+// GET /api/settings/business-hours
+router.get('/business-hours', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const s = settingsService.getSettings(tenantId);
+  res.json(s.businessHours || s.workHours || {});
+});
+
+// PUT /api/settings/business-hours
+router.put('/business-hours', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { businessHours: req.body, workHours: req.body });
+  auditLog.log(tenantId, auditLog.ACTIONS.SETTINGS_UPDATED, { sections: ['businessHours'] }, getActor(req));
+  res.json(updated.businessHours);
+});
+
+// POST /api/settings/policy-simulator
+router.post('/policy-simulator', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const policyEngine = require('../services/policyEngineService');
+  const decision = policyEngine.simulateDecision(tenantId, req.body || {});
+  const executionCheck = policyEngine.getExecutionCheck(tenantId, req.body || {}, (req.body || {}).requestedAction || 'monitor', { approvalStatus: req.body?.approvalStatus || 'pending' });
+  res.json({ decision, executionCheck, sample: req.body || {} });
+});
+
+// GET /api/settings/ops/orchestration/policies
+router.get('/ops/orchestration/policies', requirePermission('ops.view'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  res.json(settingsService.getSettings(tenantId).orchestrationPolicies || {});
+});
+
+// PUT /api/settings/ops/orchestration/policies
+router.put('/ops/orchestration/policies', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { orchestrationPolicies: req.body });
+  auditLog.log(tenantId, auditLog.ACTIONS.SETTINGS_UPDATED, { sections: ['orchestrationPolicies'] }, getActor(req));
+  res.json(updated.orchestrationPolicies);
+});
+
+// GET /api/settings/plan-trial
+router.get('/plan-trial', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const s = settingsService.getSettings(tenantId);
+  res.json({ billing: s.billing || {}, trialStatus: settingsService.getTrialStatus(tenantId) });
+});
+
+// PUT /api/settings/plan-trial
+router.put('/plan-trial', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { billing: req.body });
+  auditLog.log(tenantId, auditLog.ACTIONS.SETTINGS_UPDATED, { sections: ['billing'] }, getActor(req));
+  res.json({ billing: updated.billing, trialStatus: settingsService.getTrialStatus(tenantId) });
+});
+
+// GET /api/settings/telegram
+router.get('/telegram', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const s = settingsService.getSettings(tenantId);
+  const n = s.notifications || {};
+  res.json({ telegramBotToken: n.telegramBotToken || '', telegramChatId: n.telegramChatId || '', telegramOnSeverity: n.telegramOnSeverity || ['critical', 'high'] });
+});
+
+// PUT /api/settings/telegram
+router.put('/telegram', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const s = settingsService.getSettings(tenantId);
+  const merged = { ...(s.notifications || {}), ...req.body };
+  const updated = settingsService.saveSettings(tenantId, { notifications: merged });
+  auditLog.log(tenantId, auditLog.ACTIONS.SETTINGS_UPDATED, { sections: ['telegram'] }, getActor(req));
+  res.json({ telegramBotToken: merged.telegramBotToken || '', telegramChatId: merged.telegramChatId || '', telegramOnSeverity: merged.telegramOnSeverity || ['critical', 'high'] });
+});
+
+// POST /api/settings/telegram/test
+router.post('/telegram/test', async (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  try {
+    const telegramService = require('../services/telegramService');
+    await telegramService.sendMessage('🔔 *Test message* from Privileged Identity Monitor');
+    auditLog.log(tenantId, auditLog.ACTIONS.TEST_SENT || 'test.sent', { type: 'telegram' }, getActor(req));
+    res.json({ ok: true, message: 'Test message sent' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// PUT aliases for PATCH endpoints (frontend uses PUT)
+router.put('/assignment-rules', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { assignmentRules: req.body || {} });
+  auditLog.log(tenantId, 'assignment.rules_updated', { assignmentRules: req.body || {} }, getActor(req));
+  res.json(updated.assignmentRules);
+});
+
+router.put('/approval-policies', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { approvalPolicies: req.body || {} });
+  auditLog.log(tenantId, 'approval.policies_updated', { approvalPolicies: req.body || {} }, getActor(req));
+  res.json(updated.approvalPolicies);
+});
+
+router.put('/runbooks', requirePermission('settings.manage'), (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { runbooks: req.body || {} });
+  auditLog.log(tenantId, 'runbooks.updated', { severities: Object.keys(req.body || {}) }, getActor(req));
+  res.json(updated.runbooks);
+});
+
+// POST alias for PATCH /siem (frontend uses POST)
+router.post('/siem', (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const updated = settingsService.saveSettings(tenantId, { siem: req.body });
+  auditLog.log(tenantId, auditLog.ACTIONS.SETTINGS_UPDATED, { sections: ['siem'] }, getActor(req));
+  res.json(updated.siem);
+});
+
+// POST /api/settings/siem/test-log-analytics (alias for /siem/test)
+router.post('/siem/test-log-analytics', async (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+  const { workspaceId, sharedKey } = req.body;
+  try {
+    const siemService = require('../services/siemService');
+    const result = await siemService.testLogAnalytics(workspaceId, sharedKey);
+    auditLog.log(tenantId, auditLog.ACTIONS.TEST_SENT || 'test.sent', { type: 'siem_log_analytics' }, getActor(req));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });

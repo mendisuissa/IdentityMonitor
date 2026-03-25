@@ -32,6 +32,7 @@ const telegramService = require('./services/telegramService');
 const automationService = require('./services/automationService');
 const tenantRegistry = require('./services/tenantRegistry');
 const defenderVulnerabilityRoutes = require('./routes/defenderVulnerabilities');
+const auditRoutes = require('./routes/audit');
 
 const app    = express();
 const server = http.createServer(app);
@@ -76,6 +77,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/tenant',  tenantRoutes);
 app.use('/api/remediation', remediationRouter);
 app.use('/api/defender', defenderVulnerabilityRoutes);
+app.use('/api/audit',   auditRoutes);
 
 // Settings route
 try {
