@@ -43,17 +43,29 @@ export default function SettingsPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [s, a, i, siemSettings] = await Promise.all([
+      const [s, siemSettings] = await Promise.all([
         fetch('/api/settings', { credentials: 'include' }).then(r => r.json()),
-        api.getAudit({ limit: 50 }),
-        api.getNotificationInbox({ limit: 50, dedupe: true }),
         api.getSiemSettings().catch(() => ({ logAnalytics: { enabled: false }, webhooks: [] }))
       ]);
       setSettings(s);
-      setAudit(a);
-      setInbox(i);
       setSiem({ logAnalytics: { enabled: !!siemSettings?.logAnalytics?.enabled, workspaceId: siemSettings?.logAnalytics?.workspaceId || '', sharedKey: siemSettings?.logAnalytics?.sharedKey || '' }, webhooks: Array.isArray(siemSettings?.webhooks) ? siemSettings.webhooks : [] });
     } finally { setLoading(false); }
+  };
+
+  const loadAudit = async () => {
+    if (audit.entries?.length) return;
+    try {
+      const a = await api.getAudit({ limit: 50 });
+      setAudit(a);
+    } catch {}
+  };
+
+  const loadInbox = async () => {
+    if (inbox.items?.length) return;
+    try {
+      const i = await api.getNotificationInbox({ limit: 50, dedupe: true });
+      setInbox(i);
+    } catch {}
   };
 
   useEffect(() => { load(); }, []);
@@ -123,7 +135,7 @@ export default function SettingsPage() {
   return (
     <div>
       <div className="page-header"><div><div className="page-title">Settings</div><div className="page-subtitle">Per-tenant configuration — detection rules, notifications, admins, approvals, routing, runbooks, and SIEM integrations</div></div>{saved && <div className="role-tag">{saved}</div>}</div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 18, borderBottom: '1px solid var(--navy-border)', overflowX: 'auto', paddingBottom: 2 }}>{tabs.map(t => <button key={t.id} onClick={() => setTab(t.id)} className={`btn btn-sm ${tab === t.id ? 'btn-primary' : 'btn-ghost'}`} style={{ whiteSpace: 'nowrap' }}>{t.icon} {t.label}</button>)}</div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 18, borderBottom: '1px solid var(--navy-border)', overflowX: 'auto', paddingBottom: 2 }}>{tabs.map(t => <button key={t.id} onClick={() => { setTab(t.id); if (t.id === 'audit') loadAudit(); if (t.id === 'notifications') loadInbox(); }} className={`btn btn-sm ${tab === t.id ? 'btn-primary' : 'btn-ghost'}`} style={{ whiteSpace: 'nowrap' }}>{t.icon} {t.label}</button>)}</div>
 
       {tab === 'trial' && <div className="grid-two-responsive"><div className="card"><div className="card-header"><div className="card-title">Current plan</div></div><div style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>{trialText}</div><div className="text-muted" style={{ fontSize: 13 }}>Trial end: {settings.billing?.trialEndsAt ? new Date(settings.billing.trialEndsAt).toLocaleString() : '—'}</div></div><div className="card"><div className="card-header"><div className="card-title">Notification center snapshot</div></div><div className="stats-grid" style={{ marginBottom: 0 }}><div className="stat-card neutral"><div className="stat-value">{inbox.stats?.unread ?? 0}</div><div className="stat-label">Unread</div></div><div className="stat-card amber"><div className="stat-value">{inbox.stats?.approvals ?? 0}</div><div className="stat-label">Approval</div></div><div className="stat-card medium"><div className="stat-value">{inbox.stats?.mentions ?? 0}</div><div className="stat-label">Mentions</div></div><div className="stat-card critical"><div className="stat-value">{inbox.stats?.escalation ?? 0}</div><div className="stat-label">Escalations</div></div></div></div></div>}
 

@@ -50,12 +50,12 @@ jobs:
 
       - name: Get staging URL
         id: get-url
-        run: echo "url=https://${{ secrets.AZURE_STAGING_APP_NAME }}.azurewebsites.net" >> $GITHUB_OUTPUT
+        run: echo "url=${{ secrets.AZURE_STAGING_URL }}" >> $GITHUB_OUTPUT
 
       # ── Smoke Tests ────────────────────────────────────────────────
       - name: Wait for staging to become healthy
         run: |
-          URL="https://${{ secrets.AZURE_STAGING_APP_NAME }}.azurewebsites.net/api/health"
+          URL="${{ secrets.AZURE_STAGING_URL }}/api/health"
           echo "Polling $URL ..."
           for i in $(seq 1 24); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
@@ -74,7 +74,7 @@ jobs:
       - name: Run smoke tests
         run: node backend/tests/smoke.js
         env:
-          TEST_URL: https://${{ secrets.AZURE_STAGING_APP_NAME }}.azurewebsites.net
+          TEST_URL: ${{ secrets.AZURE_STAGING_URL }}
           MOCK_MODE: "true"
 
       - name: ✅ Staging OK — ready to promote to production

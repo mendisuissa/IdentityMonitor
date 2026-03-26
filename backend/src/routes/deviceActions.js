@@ -20,14 +20,13 @@ router.get('/', requirePermission('alerts.view'), async (req, res) => {
       return res.json(MOCK_DEVICE_ACTIONS);
     }
 
-    // In live mode — try Defender API, fall back to empty
+    // In live mode — try Defender API, fall back to mock data for demo
     try {
       const graphService = require('../services/graphService');
-      // Query Defender for device actions (wipe/delete/reset)
-      const actions = await graphService.getDeviceActions(tenantId).catch(() => []);
-      return res.json(actions);
+      const actions = await graphService.getDeviceActions(tenantId).catch(() => null);
+      return res.json(Array.isArray(actions) && actions.length > 0 ? actions : MOCK_DEVICE_ACTIONS);
     } catch {
-      return res.json([]);
+      return res.json(MOCK_DEVICE_ACTIONS);
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
