@@ -24,6 +24,8 @@ interface SettingsShape {
   assignmentRules?: { enabled: boolean; defaultOwner: string; severityOwners: Record<Severity, string> };
   runbooks?: Record<Severity, string[]>;
   siem?: SiemSettings;
+  businessHours?: Array<{ day: string; enabled: boolean; start: string; end: string }>;
+  userBusinessHours?: Array<{ email: string; start: string; end: string }>;
 }
 
 const SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low'];
