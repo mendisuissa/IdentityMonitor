@@ -8,6 +8,10 @@ on:
         required: true
         default: ''
 
+concurrency:
+  group: azure-production
+  cancel-in-progress: false
+
 jobs:
   guard:
     runs-on: ubuntu-latest
