@@ -57,7 +57,7 @@ jobs:
       - name: Final smoke test on staging
         run: node backend/tests/smoke.js
         env:
-          TEST_URL: https://${{ secrets.AZURE_STAGING_APP_NAME }}.azurewebsites.net
+          TEST_URL: ${{ secrets.AZURE_STAGING_URL }}
           MOCK_MODE: "true"
 
       # ── Deploy to PRODUCTION ───────────────────────────────────────
