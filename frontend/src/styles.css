@@ -70,7 +70,7 @@ body {
   display: flex;
   flex-direction: column;
   z-index: 200;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .sidebar-logo {
@@ -127,7 +127,7 @@ body {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 9px 10px;
+  padding: 7px 10px;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
@@ -166,12 +166,12 @@ body {
 }
 
 .sidebar-footer {
-  margin-top: auto;
-  padding: 14px;
+  flex-shrink: 0;
+  padding: 10px 14px;
   border-top: 1px solid var(--navy-border);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .sidebar-avatar {
