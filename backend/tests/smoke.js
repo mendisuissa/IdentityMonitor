@@ -26,14 +26,24 @@ async function check(name, fn) {
   }
 }
 
-async function get(path, expectedStatus = 200) {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Accept': 'application/json' }
-  });
-  if (res.status !== expectedStatus) {
-    throw new Error(`Expected ${expectedStatus}, got ${res.status}`);
+async function get(path, expectedStatus = 200, retries = 3) {
+  let lastErr;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(`${BASE_URL}${path}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (res.status !== expectedStatus) {
+        throw new Error(`Expected ${expectedStatus}, got ${res.status}`);
+      }
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (i < retries - 1) await new Promise(r => setTimeout(r, 3000));
+    }
   }
-  return res;
+  throw lastErr;
 }
 
 async function run() {
