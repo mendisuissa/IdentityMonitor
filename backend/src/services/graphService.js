@@ -244,6 +244,53 @@ async function enableUser(tenantId, userId) {
   await client.api('/users/' + userId).patch({ accountEnabled: true });
 }
 
+// ─── Get device actions (wipe/delete/reset) from Intune ───────────────────
+async function getDeviceActions(tenantId) {
+  const ACTION_MAP = {
+    wipe:           { type: 'wipe',   severity: 'critical' },
+    factoryReset:   { type: 'wipe',   severity: 'critical' },
+    deleteUserData: { type: 'delete', severity: 'high'     },
+    retire:         { type: 'delete', severity: 'high'     },
+    resetPasscode:  { type: 'reset',  severity: 'medium'   },
+    rebootNow:      { type: 'reset',  severity: 'medium'   },
+  };
+  const STATUS_MAP = { done: 'completed', pending: 'pending', failed: 'completed' };
+
+  try {
+    const client = await getClientForTenant(tenantId);
+    const response = await client
+      .api('/deviceManagement/managedDevices')
+      .select('id,deviceName,userDisplayName,userPrincipalName,deviceActionResults,operatingSystem')
+      .top(200)
+      .get();
+
+    const actions = [];
+    for (const device of (response.value || [])) {
+      for (const action of (device.deviceActionResults || [])) {
+        const mapped = ACTION_MAP[action.actionName];
+        if (!mapped || !action.actionState || action.actionState === 'none' || action.actionState === 'notStarted') continue;
+        actions.push({
+          id:                `${device.id}-${action.actionName}-${action.startDateTime}`,
+          type:              mapped.type,
+          deviceName:        device.deviceName        || 'Unknown Device',
+          userDisplayName:   device.userDisplayName   || device.userPrincipalName || 'Unknown',
+          userPrincipalName: device.userPrincipalName || '',
+          initiatedBy:       'IT Admin',
+          timestamp:         action.startDateTime || action.lastUpdatedDateTime || new Date().toISOString(),
+          severity:          mapped.severity,
+          status:            STATUS_MAP[action.actionState] || 'in_progress',
+          os:                device.operatingSystem || undefined,
+        });
+      }
+    }
+    actions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    return actions.slice(0, 50);
+  } catch (err) {
+    console.warn('[GraphService] getDeviceActions failed:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   getClientForTenant,
   getClientFromToken,
@@ -253,5 +300,6 @@ module.exports = {
   sendAlertEmail,
   revokeUserSessions,
   disableUser,
-  enableUser
+  enableUser,
+  getDeviceActions,
 };
