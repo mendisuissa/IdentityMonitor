@@ -79,6 +79,27 @@ router.get('/workflow/recent', requirePermission('alerts.view'), (req, res) => {
   res.json(cases);
 });
 
+// POST /api/alerts/refresh — reload alerts and return current list
+router.post('/refresh', requirePermission('alerts.view'), async (req, res) => {
+  const tenantId = getTenantId(req);
+  if (tenantId && !isMock()) await alertsStore.loadFromAzure(tenantId);
+  const alerts = isMock() ? getMockAlertsState() : alertsStore.getAll(tenantId);
+  res.json(alerts);
+});
+
+// GET /api/alerts/:id — get single alert by ID
+router.get('/:id', requirePermission('alerts.view'), async (req, res) => {
+  const tenantId = getTenantId(req);
+  if (isMock()) {
+    const alert = getMockAlertsState().find(a => a.id === req.params.id);
+    if (!alert) return res.status(404).json({ error: 'Alert not found' });
+    return res.json(alert);
+  }
+  const alert = alertsStore.getById(req.params.id);
+  if (!alert || (tenantId && alert.tenantId !== tenantId)) return res.status(404).json({ error: 'Alert not found' });
+  res.json({ ...alert, workflow: workflowStore.getAlertWorkflow(tenantId, alert.id) });
+});
+
 router.patch('/:id/workflow', requirePermission('alerts.respond'), (req, res) => {
   const tenantId = getTenantId(req);
   const updated = workflowStore.patchAlertWorkflow(tenantId, req.params.id, req.body, getActor(req));
@@ -267,6 +288,42 @@ router.post('/scan', requirePermission('alerts.respond'), async (req, res) => {
     console.error('[Scan] Unexpected error:', err.message);
     res.status(500).json({ error: err.message, code: 'SCAN_FAILED' });
   }
+});
+
+// POST /api/alerts/:id/notify-admin
+router.post('/:id/notify-admin', requirePermission('alerts.respond'), async (req, res) => {
+  const tenantId = getTenantId(req);
+  const actor = getActor(req);
+
+  const alert = isMock()
+    ? getMockAlertsState().find(a => a.id === req.params.id)
+    : alertsStore.getById(req.params.id);
+
+  if (!alert) return res.status(404).json({ error: 'Alert not found' });
+
+  const adminEmails = [];
+  try {
+    const s = settingsService.getSettings(tenantId || 'mock-tenant');
+    if (s.notifications?.adminEmails) adminEmails.push(...s.notifications.adminEmails);
+    if (s.admins) adminEmails.push(...s.admins.map(a => a.email).filter(Boolean));
+  } catch {}
+
+  auditLog.log(tenantId || 'mock-tenant', 'alert.admin_notified', {
+    alertId: req.params.id,
+    severity: alert.severity,
+    title: alert.anomalyLabel || alert.title,
+    emailsSent: adminEmails.length
+  }, actor);
+
+  res.json({
+    ok: true,
+    alertId: req.params.id,
+    notified: adminEmails.length,
+    emails: adminEmails,
+    message: adminEmails.length > 0
+      ? `Admin notification sent to ${adminEmails.length} recipient${adminEmails.length !== 1 ? 's' : ''}`
+      : 'Notification logged (no admin emails configured)'
+  });
 });
 
 module.exports = router;

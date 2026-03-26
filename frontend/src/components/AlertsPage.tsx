@@ -25,6 +25,8 @@ export default function AlertsPage() {
   const [acting, setActing] = useState<string | null>(null);
   const [access, setAccess] = useState<AccessProfile | null>(null);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [disabledUsers, setDisabledUsers] = useState<Record<string, boolean>>({});
+  const [notifyFeedback, setNotifyFeedback] = useState<Record<string, boolean>>({});
 
   const fetchAlerts = () => {
     setLoading(true);
@@ -59,6 +61,34 @@ export default function AlertsPage() {
     setActing(alert.id);
     try { const result = await api.revokeUserSessions(alert.userId); window.alert(result.message); } catch (err: any) { window.alert('Failed: ' + err.message); } finally { setActing(null); }
   };
+  const handleDisableUser = async (alert: Alert) => {
+    const isDisabled = disabledUsers[alert.userId] ?? (alert as any).accountDisabled;
+    setActing(alert.id);
+    try {
+      if (isDisabled) {
+        await api.enableUser(alert.userId);
+        setDisabledUsers(prev => ({ ...prev, [alert.userId]: false }));
+      } else {
+        await api.disableUser(alert.userId);
+        setDisabledUsers(prev => ({ ...prev, [alert.userId]: true }));
+      }
+    } catch (err: any) {
+      window.alert('Failed: ' + err.message);
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const handleNotifyAdmin = async (alert: Alert) => {
+    try {
+      await api.notifyAdmin(alert.id);
+      setNotifyFeedback(prev => ({ ...prev, [alert.id]: true }));
+      setTimeout(() => setNotifyFeedback(prev => ({ ...prev, [alert.id]: false })), 3000);
+    } catch (err: any) {
+      window.alert('Failed: ' + err.message);
+    }
+  };
+
   const handleAddComment = async (alertId: string) => {
     const message = commentDrafts[alertId]?.trim();
     if (!message) return;
@@ -176,6 +206,20 @@ export default function AlertsPage() {
                 <div style={{ display: 'flex', gap: 8, paddingTop: 12, paddingBottom: 16, borderTop: '1px solid var(--navy-border)', flexWrap: 'wrap', marginTop: 16 }}>
                   {alert.status === 'open' && canRespond && <>
                     <button className="btn btn-danger btn-sm" onClick={() => handleRevoke(alert)} disabled={acting === alert.id}>⊘ Revoke Sessions</button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => handleDisableUser(alert)}
+                      disabled={acting === alert.id}
+                    >
+                      {(disabledUsers[alert.userId] ?? (alert as any).accountDisabled) ? '🔓 Enable Account' : '🔒 Disable Account'}
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => handleNotifyAdmin(alert)}
+                      disabled={notifyFeedback[alert.id]}
+                    >
+                      {notifyFeedback[alert.id] ? 'Admin notified ✓' : '📧 Notify Admin'}
+                    </button>
                     <button className="btn btn-primary btn-sm" onClick={() => handleResolve(alert)} disabled={acting === alert.id}>✓ Mark Resolved</button>
                     <button className="btn btn-ghost btn-sm" onClick={() => handleDismiss(alert)} disabled={acting === alert.id}>Dismiss</button>
                   </>}

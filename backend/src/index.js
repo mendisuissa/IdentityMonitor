@@ -10,6 +10,8 @@ const cron    = require('node-cron');
 const path    = require('path');
 const fs      = require('fs');
 const remediationRouter = require('./routes/remediation');
+const auditRoutes   = require('./routes/audit');
+const deviceActionsRoutes = require('./routes/deviceActions');
 
 const authRoutes    = require('./routes/auth');
 const usersRoutes   = require('./routes/users');
@@ -75,7 +77,9 @@ app.use('/api/pim',     pimRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/tenant',  tenantRoutes);
 app.use('/api/remediation', remediationRouter);
-app.use('/api/defender', defenderVulnerabilityRoutes);
+app.use('/api/audit',     auditRoutes);
+app.use('/api/device-actions', deviceActionsRoutes);
+app.use('/api/defender',  defenderVulnerabilityRoutes);
 
 // Settings route
 try {
