@@ -211,7 +211,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Executive + Trust ── */}
-      <div className="two-col" style={{ marginBottom: 20 }}>
+      <div className="two-col" style={{ marginBottom: 14 }}>
         <div className="card executive-hero">
           <div className="card-header">
             <div><div className="card-title">Executive Snapshot</div><div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>Management-ready summary</div></div>
