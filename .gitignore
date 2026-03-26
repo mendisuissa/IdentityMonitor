@@ -7,3 +7,10 @@ public/
 # Azure publish profiles (contain credentials — never commit)
 *.PublishSettings
 *.publishsettings
+
+# Claude Code internal files
+.claude/
+
+# Preview artifacts
+design-preview.html
+preview-server.js

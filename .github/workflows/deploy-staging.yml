@@ -1,0 +1,68 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    outputs:
+      staging-url: ${{ steps.get-url.outputs.url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ── Build Frontend ─────────────────────────────────────────────
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Copy frontend dist → backend/public
+        run: |
+          mkdir -p backend/public
+          cp -r frontend/dist/. backend/public/
+
+      # ── Install backend deps ───────────────────────────────────────
+      - name: Install backend deps
+        working-directory: backend
+        run: npm install --omit=dev
+
+      # ── Deploy to STAGING ──────────────────────────────────────────
+      - name: Deploy to Azure App Service (Staging)
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_STAGING_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_STAGING_PUBLISH_PROFILE }}
+          package: ./backend
+
+      - name: Get staging URL
+        id: get-url
+        run: echo "url=https://${{ secrets.AZURE_STAGING_APP_NAME }}.azurewebsites.net" >> $GITHUB_OUTPUT
+
+      # ── Smoke Tests ────────────────────────────────────────────────
+      - name: Wait for staging to warm up
+        run: sleep 15
+
+      - name: Run smoke tests
+        run: node backend/tests/smoke.js
+        env:
+          TEST_URL: https://${{ secrets.AZURE_STAGING_APP_NAME }}.azurewebsites.net
+          MOCK_MODE: "true"
+
+      - name: ✅ Staging OK — ready to promote to production
+        run: |
+          echo "Staging deployment succeeded."
+          echo "Run the 'Deploy to Production' workflow or use the /deploy-to-prod skill to promote."
