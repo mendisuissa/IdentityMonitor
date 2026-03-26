@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { AlertStats, Alert, PrivilegedUser } from '../types';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 import { formatDistanceToNow } from 'date-fns';
+import DeviceActionsPanel from './DeviceActionsPanel';
 
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
 
@@ -184,6 +185,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <DeviceActionsPanel />
 
       {/* ── KPI Row ── */}
       <div className="stats-grid">

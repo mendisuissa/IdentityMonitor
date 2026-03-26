@@ -1,0 +1,74 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmed:
+        description: 'Type "yes" to confirm production deploy'
+        required: true
+        default: ''
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm deploy intent
+        run: |
+          if [ "${{ github.event.inputs.confirmed }}" != "yes" ]; then
+            echo "❌ Deploy not confirmed. Type 'yes' in the input field."
+            exit 1
+          fi
+          echo "✅ Production deploy confirmed by ${{ github.actor }}"
+
+  deploy-production:
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # ── Build Frontend ─────────────────────────────────────────────
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Copy frontend dist → backend/public
+        run: |
+          mkdir -p backend/public
+          cp -r frontend/dist/. backend/public/
+
+      # ── Install backend deps ───────────────────────────────────────
+      - name: Install backend deps
+        working-directory: backend
+        run: npm install --omit=dev
+
+      # ── Final smoke test on staging before promoting ───────────────
+      - name: Final smoke test on staging
+        run: node backend/tests/smoke.js
+        env:
+          TEST_URL: https://${{ secrets.AZURE_STAGING_APP_NAME }}.azurewebsites.net
+          MOCK_MODE: "true"
+
+      # ── Deploy to PRODUCTION ───────────────────────────────────────
+      - name: 🚀 Deploy to Azure App Service (Production)
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
+          package: ./backend
+
+      - name: ✅ Production deploy complete
+        run: |
+          echo "🚀 Production is live!"
+          echo "URL: https://${{ secrets.AZURE_APP_NAME }}.azurewebsites.net"

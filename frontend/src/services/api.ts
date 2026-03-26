@@ -499,6 +499,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  notifyAdmin: (alertId: string) =>
+    apiFetch<any>(`/alerts/${alertId}/notify-admin`, { method: 'POST' }),
+
+  disableUser: (userId: string) =>
+    apiFetch<any>(`/users/${userId}/disable`, { method: 'POST' }),
+
+  enableUser: (userId: string) =>
+    apiFetch<any>(`/users/${userId}/enable`, { method: 'POST' }),
+
+  getDeviceActions: () =>
+    apiFetch<any>('/device-actions'),
+
+  acknowledgeDeviceAction: (id: string) =>
+    apiFetch<any>(`/device-actions/${id}/acknowledge`, { method: 'POST' }),
 };
 
 export default api;
