@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low';
-type Tab = 'trial' | 'detection' | 'actions' | 'admins' | 'notifications' | 'automation' | 'whitelist' | 'siem' | 'audit';
+type Tab = 'trial' | 'detection' | 'actions' | 'admins' | 'notifications' | 'automation' | 'whitelist' | 'siem' | 'audit' | 'hours';
+
+const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const DEFAULT_HOURS = DAYS.map((day, i) => ({ day, enabled: i >= 1 && i <= 5, start: '08:00', end: '18:00' }));
 
 type SiemSettings = {
   logAnalytics?: { enabled?: boolean; workspaceId?: string; sharedKey?: string };
@@ -39,6 +42,9 @@ export default function SettingsPage() {
   const [whitelistValue, setWhitelistValue] = useState('');
   const [siem, setSiem] = useState<SiemSettings>({ logAnalytics: { enabled: false, workspaceId: '', sharedKey: '' }, webhooks: [] });
   const [siemTest, setSiemTest] = useState('');
+  const [businessHours, setBusinessHours] = useState<Array<{ day: string; enabled: boolean; start: string; end: string }>>(DEFAULT_HOURS);
+  const [userHours, setUserHours] = useState<Array<{ email: string; start: string; end: string }>>([]);
+  const [newUserHour, setNewUserHour] = useState({ email: '', start: '08:00', end: '18:00' });
 
   const load = async () => {
     setLoading(true);
@@ -126,6 +132,7 @@ export default function SettingsPage() {
     { id: 'notifications', label: 'Notifications', icon: '🔔' },
     { id: 'automation', label: 'Automation & Approvals', icon: '🧠' },
     { id: 'whitelist', label: 'Whitelist', icon: '✅' },
+    { id: 'hours', label: 'Business Hours', icon: '🕐' },
     { id: 'siem', label: 'SIEM & Log Analytics', icon: '📡' },
     { id: 'audit', label: 'Audit Log', icon: '📋' }
   ];
@@ -149,7 +156,85 @@ export default function SettingsPage() {
 
       {tab === 'automation' && <div className="card"><div className="card-header"><div className="card-title">Automation & approvals</div></div><div className="text-muted" style={{ marginBottom: 12 }}>Save assignment rules, approval policies, and runbooks for this tenant.</div><button className="btn btn-primary" disabled={saving} onClick={saveAutomation}>Save automation & approvals</button></div>}
 
-      {tab === 'whitelist' && <div className="card"><div className="card-header"><div className="card-title">Whitelist</div></div><div style={{ display: 'flex', gap: 8, marginBottom: 16 }}><select className="input" value={whitelistType} onChange={e => setWhitelistType(e.target.value as any)}><option value="ips">IP</option><option value="countries">Country</option><option value="devices">Device</option><option value="users">User</option></select><input className="input" placeholder="Value" value={whitelistValue} onChange={e => setWhitelistValue(e.target.value)} /><button className="btn btn-primary" onClick={addWhitelist}>Add</button></div><div style={{ display: 'grid', gap: 12 }}>{(['ips', 'countries', 'devices', 'users'] as const).map(type => <div key={type}><div className="label" style={{ marginBottom: 6 }}>{type}</div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{(settings.whitelist?.[type] || []).map(value => <button key={value} className="btn btn-ghost btn-sm" onClick={() => removeWhitelist(type, value)}>{value} ×</button>)}</div></div>)}</div></div>}
+      {tab === 'whitelist' && <div className="card">
+        <div className="card-header"><div className="card-title">Whitelist</div></div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+          <select className="input" style={{ maxWidth: 160 }} value={whitelistType} onChange={e => setWhitelistType(e.target.value as any)}>
+            <option value="ips">IP Address</option>
+            <option value="countries">Country</option>
+            <option value="devices">Device</option>
+            <option value="users">User</option>
+          </select>
+          <input className="input" placeholder="Enter value…" value={whitelistValue} onChange={e => setWhitelistValue(e.target.value)} onKeyDown={e => e.key === 'Enter' && addWhitelist()} />
+          <button className="btn btn-primary" onClick={addWhitelist}>Add</button>
+        </div>
+        <div style={{ display: 'grid', gap: 16 }}>
+          {([['ips','IP Addresses'],['countries','Countries'],['devices','Devices'],['users','Users']] as const).map(([type, label]) => (
+            <div key={type}>
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--text-muted)', marginBottom: 8 }}>{label}</div>
+              {(settings.whitelist?.[type] || []).length === 0
+                ? <div className="text-muted" style={{ fontSize: 12 }}>No entries</div>
+                : <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {(settings.whitelist?.[type] || []).map(v => (
+                      <button key={v} className="btn btn-ghost btn-sm" onClick={() => removeWhitelist(type, v)} style={{ fontSize: 12 }}>{v} ×</button>
+                    ))}
+                  </div>
+              }
+            </div>
+          ))}
+        </div>
+      </div>}
+
+      {tab === 'hours' && <div style={{ display: 'grid', gap: 16 }}>
+        <div className="card">
+          <div className="card-header"><div className="card-title">General Business Hours</div></div>
+          <div className="text-muted" style={{ fontSize: 12, marginBottom: 16 }}>Define working hours used by alert scoring and Off-Hours detection rules.</div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {businessHours.map((row, i) => (
+              <div key={row.day} style={{ display: 'grid', gridTemplateColumns: '120px 80px 110px 16px 110px', gap: 12, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--navy-border)' }}>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 500 }}>
+                  <input type="checkbox" checked={row.enabled} onChange={e => setBusinessHours(prev => prev.map((r,j) => j===i ? {...r, enabled: e.target.checked} : r))} />
+                  {row.day}
+                </label>
+                <span className="text-muted" style={{ fontSize: 12 }}>{row.enabled ? 'Active' : 'Off'}</span>
+                <input type="time" className="input" value={row.start} disabled={!row.enabled} onChange={e => setBusinessHours(prev => prev.map((r,j) => j===i ? {...r, start: e.target.value} : r))} />
+                <span className="text-muted" style={{ textAlign: 'center' }}>→</span>
+                <input type="time" className="input" value={row.end} disabled={!row.enabled} onChange={e => setBusinessHours(prev => prev.map((r,j) => j===i ? {...r, end: e.target.value} : r))} />
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <button className="btn btn-primary" disabled={saving} onClick={() => saveSettings({ businessHours })}>Save business hours</button>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header"><div className="card-title">Per-User Overrides</div></div>
+          <div className="text-muted" style={{ fontSize: 12, marginBottom: 16 }}>Override hours for specific users (e.g. shift workers, overseas employees).</div>
+          <div style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
+            {userHours.map((u, i) => (
+              <div key={u.email} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 16px 110px auto', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--navy-border)' }}>
+                <div style={{ fontWeight: 500, fontSize: 13 }}>{u.email}</div>
+                <input type="time" className="input" value={u.start} onChange={e => setUserHours(prev => prev.map((r,j) => j===i ? {...r, start: e.target.value} : r))} />
+                <span className="text-muted" style={{ textAlign: 'center' }}>→</span>
+                <input type="time" className="input" value={u.end} onChange={e => setUserHours(prev => prev.map((r,j) => j===i ? {...r, end: e.target.value} : r))} />
+                <button className="btn btn-ghost btn-sm" onClick={() => setUserHours(prev => prev.filter((_,j) => j!==i))}>×</button>
+              </div>
+            ))}
+            {userHours.length === 0 && <div className="text-muted" style={{ fontSize: 12 }}>No overrides configured.</div>}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px 16px 110px auto', gap: 10, alignItems: 'center' }}>
+            <input className="input" placeholder="user@company.com" value={newUserHour.email} onChange={e => setNewUserHour(p => ({...p, email: e.target.value}))} />
+            <input type="time" className="input" value={newUserHour.start} onChange={e => setNewUserHour(p => ({...p, start: e.target.value}))} />
+            <span className="text-muted" style={{ textAlign: 'center' }}>→</span>
+            <input type="time" className="input" value={newUserHour.end} onChange={e => setNewUserHour(p => ({...p, end: e.target.value}))} />
+            <button className="btn btn-primary btn-sm" onClick={() => { if (!newUserHour.email.trim()) return; setUserHours(p => [...p, {...newUserHour}]); setNewUserHour({ email: '', start: '08:00', end: '18:00' }); }}>Add</button>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <button className="btn btn-primary" disabled={saving} onClick={() => saveSettings({ userBusinessHours: userHours })}>Save overrides</button>
+          </div>
+        </div>
+      </div>}
 
       {tab === 'siem' && <div className="grid-two-responsive"><div className="card"><div className="card-header"><div className="card-title">Azure Log Analytics</div></div><label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}><input type="checkbox" checked={!!siem.logAnalytics?.enabled} onChange={e => setSiem(prev => ({ ...prev, logAnalytics: { ...(prev.logAnalytics || {}), enabled: e.target.checked } }))} /> Enabled</label><input className="input" placeholder="Workspace ID" value={siem.logAnalytics?.workspaceId || ''} onChange={e => setSiem(prev => ({ ...prev, logAnalytics: { ...(prev.logAnalytics || {}), workspaceId: e.target.value } }))} style={{ marginBottom: 10 }} /><input className="input" placeholder="Shared key" value={siem.logAnalytics?.sharedKey || ''} onChange={e => setSiem(prev => ({ ...prev, logAnalytics: { ...(prev.logAnalytics || {}), sharedKey: e.target.value } }))} /><div className="text-muted" style={{ fontSize: 12, marginTop: 10 }}>Use this to forward alerts into Log Analytics / Sentinel.</div><div style={{ display: 'flex', gap: 8, marginTop: 14 }}><button className="btn btn-primary" disabled={saving} onClick={saveSiem}>Save SIEM settings</button><button className="btn btn-ghost" onClick={testLogAnalytics}>Send test event</button></div>{siemTest ? <div className="detail-card" style={{ marginTop: 12 }}>{siemTest}</div> : null}</div><div className="card"><div className="card-header"><div className="card-title">Outbound webhooks</div></div><div style={{ display: 'grid', gap: 10 }}>{(siem.webhooks || []).map((hook, index) => <div key={index} className="detail-card"><input className="input" placeholder="Name" value={hook.name || ''} onChange={e => updateWebhook(index, { name: e.target.value })} style={{ marginBottom: 8 }} /><input className="input" placeholder="Webhook URL" value={hook.url || ''} onChange={e => updateWebhook(index, { url: e.target.value })} style={{ marginBottom: 8 }} /><label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={hook.enabled !== false} onChange={e => updateWebhook(index, { enabled: e.target.checked })} /> Enabled</label><div style={{ marginTop: 10 }}><button className="btn btn-ghost btn-sm" onClick={() => removeWebhook(index)}>Remove webhook</button></div></div>)}</div><div style={{ display: 'flex', gap: 8, marginTop: 14 }}><button className="btn btn-ghost" onClick={addWebhook}>Add webhook</button><button className="btn btn-primary" disabled={saving} onClick={saveSiem}>Save webhooks</button></div></div></div>}
 
