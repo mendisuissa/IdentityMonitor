@@ -12,6 +12,7 @@ interface DeviceAction {
   severity: 'critical' | 'high' | 'medium';
   status: 'completed' | 'in_progress' | 'pending';
   os?: string;
+  _isMock?: boolean;
 }
 
 function timeAgo(ts: string) {
@@ -47,6 +48,7 @@ export default function DeviceActionsPanel() {
   };
 
   const visible = actions.filter(a => !dismissed.has(a.id));
+  const isMockData = visible.length > 0 && visible[0]._isMock === true;
   if (!loading && visible.length === 0) return null;
 
   return (
@@ -55,11 +57,25 @@ export default function DeviceActionsPanel() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 18 }}>⚠️</span>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#ef4444' }}>
-              Destructive Device Actions Detected
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontWeight: 700, fontSize: 14, color: '#ef4444' }}>
+                Destructive Device Actions Detected
+              </span>
+              {isMockData && (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+                  background: 'rgba(245,158,11,0.15)', color: '#f59e0b',
+                  border: '1px solid rgba(245,158,11,0.3)', textTransform: 'uppercase', letterSpacing: '0.05em'
+                }}>
+                  Demo Data
+                </span>
+              )}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-              {visible.length} event{visible.length !== 1 ? 's' : ''} — Wipe / Delete / Reset
+              {isMockData
+                ? 'No Intune device actions found — showing sample data'
+                : `${visible.length} event${visible.length !== 1 ? 's' : ''} — Wipe / Delete / Reset`
+              }
             </div>
           </div>
         </div>

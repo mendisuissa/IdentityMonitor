@@ -20,13 +20,23 @@ router.get('/', requirePermission('alerts.view'), async (req, res) => {
       return res.json(MOCK_DEVICE_ACTIONS);
     }
 
-    // In live mode — try Defender API, fall back to mock data for demo
+    // In live mode — try Intune via Graph API
     try {
       const graphService = require('../services/graphService');
-      const actions = await graphService.getDeviceActions(tenantId).catch(() => null);
-      return res.json(Array.isArray(actions) && actions.length > 0 ? actions : MOCK_DEVICE_ACTIONS);
-    } catch {
-      return res.json(MOCK_DEVICE_ACTIONS);
+      const actions = await graphService.getDeviceActions(tenantId).catch((err) => {
+        console.error('[DeviceActions] graphService.getDeviceActions threw:', err?.message);
+        return null;
+      });
+      console.log('[DeviceActions] live result: actions=', Array.isArray(actions) ? actions.length : actions);
+      if (Array.isArray(actions) && actions.length > 0) {
+        return res.json(actions);
+      }
+      // No real actions found — return mock with a flag so frontend can show it
+      console.log('[DeviceActions] no real Intune actions found, returning mock');
+      return res.json(MOCK_DEVICE_ACTIONS.map(a => ({ ...a, _isMock: true })));
+    } catch (err) {
+      console.error('[DeviceActions] unexpected error:', err?.message);
+      return res.json(MOCK_DEVICE_ACTIONS.map(a => ({ ...a, _isMock: true })));
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
