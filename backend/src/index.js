@@ -32,6 +32,7 @@ const tableStorage    = require('./services/tableStorage');
 const webhookService  = require('./services/webhookService');
 const telegramService = require('./services/telegramService');
 const automationService = require('./services/automationService');
+const deviceActionMonitor = require('./services/deviceActionMonitor');
 const tenantRegistry = require('./services/tenantRegistry');
 const defenderVulnerabilityRoutes = require('./routes/defenderVulnerabilities');
 
@@ -154,6 +155,15 @@ if (!MOCK) {
       console.log('[CRON] Automation summary:', JSON.stringify(results));
     } catch (err) {
       console.error('[CRON] Automation failed:', err.message);
+    }
+  });
+
+  // Device action monitor — check Intune for wipe/delete/reset every 5 minutes
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      await deviceActionMonitor.runDeviceActionCheck();
+    } catch (err) {
+      console.error('[CRON] Device action monitor failed:', err.message);
     }
   });
 
