@@ -58,10 +58,23 @@ jobs:
         run: npm install --omit=dev
 
       # ── Final smoke test on staging before promoting ───────────────
+      - name: Resolve staging URL
+        id: get-staging-url
+        run: |
+          if [ -n "${{ secrets.AZURE_STAGING_URL }}" ]; then
+            echo "url=${{ secrets.AZURE_STAGING_URL }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ secrets.AZURE_STAGING_APP_NAME }}" ]; then
+            echo "url=https://${{ secrets.AZURE_STAGING_APP_NAME }}.azurewebsites.net" >> $GITHUB_OUTPUT
+            echo "⚠️ AZURE_STAGING_URL not set — constructed from AZURE_STAGING_APP_NAME"
+          else
+            echo "❌ No staging URL available — cannot run smoke tests"
+            exit 1
+          fi
+
       - name: Final smoke test on staging
         run: node backend/tests/smoke.js
         env:
-          TEST_URL: ${{ secrets.AZURE_STAGING_URL }}
+          TEST_URL: ${{ steps.get-staging-url.outputs.url }}
           MOCK_MODE: "true"
 
       # ── Deploy to PRODUCTION ───────────────────────────────────────

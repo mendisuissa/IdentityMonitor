@@ -52,24 +52,42 @@ jobs:
           publish-profile: ${{ secrets.AZURE_STAGING_PUBLISH_PROFILE }}
           package: ./backend
 
-      - name: Get staging URL
+      - name: Resolve staging URL
         id: get-url
-        run: echo "url=${{ secrets.AZURE_STAGING_URL }}" >> $GITHUB_OUTPUT
+        run: |
+          # Prefer explicit secret, fall back to constructing from app name
+          if [ -n "${{ secrets.AZURE_STAGING_URL }}" ]; then
+            STAGING_URL="${{ secrets.AZURE_STAGING_URL }}"
+            echo "Using AZURE_STAGING_URL secret"
+          elif [ -n "${{ secrets.AZURE_STAGING_APP_NAME }}" ]; then
+            STAGING_URL="https://${{ secrets.AZURE_STAGING_APP_NAME }}.azurewebsites.net"
+            echo "⚠️ AZURE_STAGING_URL not set — constructed URL from AZURE_STAGING_APP_NAME"
+          else
+            echo "❌ Neither AZURE_STAGING_URL nor AZURE_STAGING_APP_NAME is set"
+            exit 1
+          fi
+          echo "url=$STAGING_URL" >> $GITHUB_OUTPUT
+          echo "Staging URL: $STAGING_URL"
 
       # ── Smoke Tests ────────────────────────────────────────────────
       - name: Wait for staging to become healthy
         run: |
-          URL="${{ secrets.AZURE_STAGING_URL }}/api/health"
-          echo "Polling $URL ..."
-          for i in $(seq 1 24); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+          STAGING_URL="${{ steps.get-url.outputs.url }}"
+          URL="$STAGING_URL/api/health"
+          echo "Polling: $URL"
+          for i in $(seq 1 36); do
+            STATUS=$(curl -s -o /tmp/curl_body -w "%{http_code}" \
+              --connect-timeout 10 --max-time 15 "$URL" 2>/tmp/curl_err) || STATUS="000"
             echo "Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "000" ]; then
+              echo "  curl error: $(cat /tmp/curl_err 2>/dev/null || echo 'unknown')"
+            fi
             if [ "$STATUS" = "200" ]; then
-              echo "App is healthy ✅"
+              echo "✅ App is healthy"
               break
             fi
-            if [ "$i" = "24" ]; then
-              echo "App did not become healthy after 2 minutes ❌"
+            if [ "$i" = "36" ]; then
+              echo "❌ App did not become healthy after 3 minutes"
               exit 1
             fi
             sleep 5
@@ -78,7 +96,7 @@ jobs:
       - name: Run smoke tests
         run: node backend/tests/smoke.js
         env:
-          TEST_URL: ${{ secrets.AZURE_STAGING_URL }}
+          TEST_URL: ${{ steps.get-url.outputs.url }}
           MOCK_MODE: "true"
 
       - name: ✅ Staging OK — ready to promote to production
