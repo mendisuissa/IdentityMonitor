@@ -349,10 +349,27 @@ async function executeIntunePolicy({ tenantId, finding = {}, options = {} }) {
 async function executeScriptRemediation({ tenantId, finding = {}, options = {} }) {
   const scriptPolicyId = await resolveDeviceHealthScriptId(tenantId, options.scriptPolicyId || options.scriptName || finding?.productName || finding?.name || '');
   if (!scriptPolicyId) {
-    const err = new Error('The remediation script could not be resolved. Enter a device health script policy ID or exact display name.');
-    err.status = 404;
-    err.details = { scriptInput: options.scriptName || '' };
-    throw err;
+    // deviceHealthScripts requires Intune Suite / Plan 2 — return guided-manual fallback
+    return {
+      queued: false,
+      supported: false,
+      status: 'manual-review-required',
+      executionMode: 'guided-manual',
+      message: 'Device Health Scripts (Intune Suite / Plan 2) are not available for this tenant. Use manual remediation instead.',
+      statusCard: {
+        code: 'intune-suite-required',
+        label: 'Intune Suite required',
+        tone: 'warning',
+        message: 'deviceHealthScripts requires Intune Suite or Plan 2 license.'
+      },
+      manualSteps: [
+        'Open Microsoft Intune admin center (intune.microsoft.com).',
+        `Search for devices affected by "${finding?.productName || finding?.name || 'this vulnerability'}".`,
+        'Apply the recommended update or remediation action manually.',
+        'Document the action taken and close the case.'
+      ],
+      notes: options.notes || ''
+    };
   }
   const targets = await resolveManagedDeviceTargets(tenantId, options, finding);
   if (!targets.managedTargets.length) {

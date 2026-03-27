@@ -1309,7 +1309,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
                       <div className="plan-actions-row">
                         <button className="btn btn-secondary" onClick={handlePlan} disabled={planning}>{planning ? 'Refreshing…' : 'Refresh plan'}</button>
-                        <button className="btn btn-primary" onClick={handleExecute} disabled={executing}>{executing ? 'Executing…' : 'Execute remediation'}</button>
+                        {planResult.plan.autoRemediate !== false && planResult.plan.executionMode !== 'guided-manual' && (
+                          <button className="btn btn-primary" onClick={handleExecute} disabled={executing}>{executing ? 'Executing…' : 'Execute remediation'}</button>
+                        )}
                       </div>
 
                       {Array.isArray(planResult.plan.manualSteps) && planResult.plan.manualSteps.length ? (

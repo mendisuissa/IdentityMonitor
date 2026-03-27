@@ -115,28 +115,34 @@ router.post('/plan', async (req, res) => {
             app: null,
             candidates: [],
             checkedSources: [],
-            message: error?.details?.message || 'Not connected. Click Connect first.',
-            executionMode: 'external-not-connected',
+            message: 'No external remediation service is configured for this tenant. Use manual remediation steps below.',
+            executionMode: 'guided-manual',
             statusCard: {
-              code: 'external-not-connected',
-              label: 'external not connected',
-              tone: 'danger',
-              message: error?.details?.message || 'Not connected. Click Connect first.'
+              code: 'no-external-service',
+              label: 'manual remediation',
+              tone: 'warning',
+              message: 'No external remediation service is connected. Follow the manual steps to remediate this finding.'
             },
             executionPath: {
               classification: 'application',
               family: 'software',
-              executor: 'webapp',
-              status: 'external-not-connected',
-              route: 'Application -> Webapp external remediation'
+              executor: 'guided-manual',
+              status: 'manual',
+              route: 'Application -> Manual remediation'
             },
+            manualSteps: [
+              'Identify all affected devices using the Exposed devices tab.',
+              'Apply the vendor-recommended update or patch on each affected device.',
+              'Verify remediation by re-running a Defender scan.',
+              'Document the action taken and mark the case as resolved.'
+            ],
             external: {
               connected: false,
-              status: error.status || 401,
+              status: error.status || 503,
               details: error.details || { message: error.message }
             }
           },
-          warning: 'External app remediation is not connected.'
+          warning: 'No external remediation service configured — showing manual steps.'
         });
       }
     }
