@@ -192,11 +192,17 @@ async function resolveDeviceHealthScriptId(tenantId, input = '') {
   const raw = String(input || '').trim();
   if (!raw) return null;
   if (isGuid(raw)) return raw;
-  const client = await getClientForTenant(tenantId);
-  const safe = raw.replace(/'/g, "''");
-  const page = await client.api(`/deviceManagement/deviceHealthScripts?$select=id,displayName&$filter=displayName eq '${safe}' or startswith(displayName,'${safe}')`).top(10).get();
-  const match = (page?.value || []).find((item) => String(item.displayName || '').toLowerCase() === raw.toLowerCase()) || (page?.value || [])[0];
-  return match?.id || null;
+  try {
+    const client = await getClientForTenant(tenantId);
+    const safe = raw.replace(/'/g, "''");
+    const page = await client.api(`/deviceManagement/deviceHealthScripts?$select=id,displayName&$filter=displayName eq '${safe}' or startswith(displayName,'${safe}')`).top(10).get();
+    const match = (page?.value || []).find((item) => String(item.displayName || '').toLowerCase() === raw.toLowerCase()) || (page?.value || [])[0];
+    return match?.id || null;
+  } catch (err) {
+    // deviceHealthScripts requires Intune Suite / Plan 2 — gracefully return null
+    console.warn('[Remediation] deviceHealthScripts not available for this tenant (requires Intune Suite/Plan 2):', err?.message);
+    return null;
+  }
 }
 
 async function resolveConfigurationPolicyId(tenantId, input = '') {

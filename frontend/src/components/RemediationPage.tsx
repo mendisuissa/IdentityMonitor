@@ -1006,11 +1006,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             <div>Showing: <strong>{shownFindings} of {totalFindings}</strong></div>
           </div>
         </div>
-        <div className="remediation-hero-actions">
-          <button className="btn btn-primary" onClick={handlePlan} disabled={planning || !selectedFinding || needsAdminConsent}>
-            {planning ? 'Planning…' : 'Plan remediation'}
-          </button>
-        </div>
       </section>
 
       <section className="remediation-stats-grid">
@@ -1185,6 +1180,15 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                       ))}
                     </div>
                   ) : null}
+                  <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => { handlePlan(); setActiveTab('plan'); }}
+                      disabled={planning || needsAdminConsent}
+                    >
+                      {planning ? 'Planning…' : 'Plan remediation →'}
+                    </button>
+                  </div>
                 </section>
               )}
 
