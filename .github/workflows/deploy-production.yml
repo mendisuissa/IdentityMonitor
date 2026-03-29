@@ -84,6 +84,11 @@ jobs:
           app-name: ${{ secrets.AZURE_APP_NAME }}
           publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
           package: ./backend
+          app-settings-json: |
+            [
+              {"name": "WEBAPP_REMEDIATION_BASE_URL", "value": "${{ secrets.WEBAPP_REMEDIATION_BASE_URL }}", "slotSetting": false},
+              {"name": "WEBAPP_REMEDIATION_TOKEN", "value": "${{ secrets.WEBAPP_REMEDIATION_TOKEN }}", "slotSetting": false}
+            ]
 
       - name: ✅ Production deploy complete
         run: |

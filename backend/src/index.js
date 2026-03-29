@@ -54,15 +54,17 @@ const sessionDir = process.env.NODE_ENV === 'production'
   : path.join(__dirname, '../../sessions');
 if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
 
+const SESSION_TTL_SEC = 24 * 60 * 60; // 24 hours
 app.use(session({
-  store: new FileStore({ path: sessionDir, ttl: 28800, retries: 1, logFn: () => {} }),
+  store: new FileStore({ path: sessionDir, ttl: SESSION_TTL_SEC, retries: 1, logFn: () => {} }),
   secret: process.env.SESSION_SECRET || 'priv-monitor-dev-secret',
   resave: false,
   saveUninitialized: false,
+  rolling: true, // extend session on every request — keeps active users logged in
   cookie: {
     secure:   process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge:   8 * 60 * 60 * 1000,
+    maxAge:   SESSION_TTL_SEC * 1000,
     sameSite: 'lax'
   }
 }));

@@ -57,9 +57,11 @@ router.get('/login', (req, res) => {
     redirect_uri:  REDIRECT_URI,
     scope:         'openid profile email offline_access ' + REQUIRED_SCOPES,
     response_mode: 'query',
-    prompt:        'consent',
     state:         'login'
   });
+  // Do NOT set prompt=consent — Microsoft will only ask for consent the first
+  // time or when new permissions are added. Forcing it every login is the cause
+  // of the repeated consent UX.
 
   res.redirect('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?' + params.toString());
 });

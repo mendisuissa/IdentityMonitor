@@ -768,6 +768,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const isWindowsExecutor = selectedExecutor === 'native-windows-update';
   const isIntuneExecutor = selectedExecutor === 'native-intune-policy';
   const isScriptExecutor = selectedExecutor === 'native-script';
+  const isWebappExecutor = selectedExecutor === 'webapp';
   const planBadge = getPlanBadge(planResult);
   const primaryProducts = Array.isArray(selectedFinding?.relatedProducts) ? selectedFinding!.relatedProducts!.slice(0, 6) : [];
   const recommendedBuiltInScripts = useMemo(() => getRecommendedBuiltInScripts(selectedFinding), [selectedFinding]);
@@ -932,13 +933,20 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     if (!selectedFinding || !planResult?.plan) return;
     const deviceIds = toCsvLines(deviceIdsText);
     let resolvedNames = affectedMachines.length ? affectedMachines : (planResult?.plan?.inferredDeviceNames || []);
-    if (!deviceIds.length && !resolvedNames.length) {
-      resolvedNames = await ensureAffectedMachinesLoaded();
-    }
-    if (!deviceIds.length && !resolvedNames.length) {
-      setError('No target devices were resolved yet. Open Exposed devices or enter Microsoft Entra device IDs manually before executing remediation.');
-      setTechnicalError('');
-      return;
+
+    // Webapp executor targets devices autonomously via the external service —
+    // no local device resolution required before execution.
+    const isWebapp = planResult.plan.executor === 'webapp';
+
+    if (!isWebapp) {
+      if (!deviceIds.length && !resolvedNames.length) {
+        resolvedNames = await ensureAffectedMachinesLoaded();
+      }
+      if (!deviceIds.length && !resolvedNames.length) {
+        setError('No target devices were resolved yet. Open Exposed devices or enter Microsoft Entra device IDs manually before executing remediation.');
+        setTechnicalError('');
+        return;
+      }
     }
     setExecuting(true);
     setError('');
@@ -1230,6 +1238,40 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                         </div>
                       </div>
 
+                      {isWebappExecutor && (
+                        <div className="plan-form-grid">
+                          <label className="span-2" style={{ flexDirection: 'column', gap: 8 }}>
+                            <span>External remediation service</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--surface-raised, rgba(255,255,255,0.04))', borderRadius: 8, border: '1px solid var(--border)' }}>
+                              <span style={{ fontSize: 18 }}>{planResult.plan.external?.connected ? '🟢' : '🔴'}</span>
+                              <div>
+                                <div style={{ fontWeight: 600, fontSize: 13 }}>
+                                  {planResult.plan.external?.connected ? 'Connected — ready to patch' : 'Not connected'}
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                  {planResult.plan.external?.connected
+                                    ? 'The external remediation service will identify affected devices and apply the patch automatically.'
+                                    : 'Configure WEBAPP_REMEDIATION_BASE_URL and WEBAPP_REMEDIATION_TOKEN in Azure App Service settings.'}
+                                </div>
+                              </div>
+                            </div>
+                          </label>
+                          {planResult.plan.app?.name && (
+                            <div style={{ padding: '8px 14px', background: 'var(--surface-raised, rgba(255,255,255,0.04))', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }}>
+                              <span style={{ color: 'var(--text-muted)', fontSize: 11, display: 'block', marginBottom: 3 }}>Application</span>
+                              <strong>{planResult.plan.app.name}</strong>
+                              {planResult.plan.app.version && <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: 12 }}>v{planResult.plan.app.version}</span>}
+                            </div>
+                          )}
+                          {planResult.plan.remediationType && (
+                            <div style={{ padding: '8px 14px', background: 'var(--surface-raised, rgba(255,255,255,0.04))', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }}>
+                              <span style={{ color: 'var(--text-muted)', fontSize: 11, display: 'block', marginBottom: 3 }}>Remediation type</span>
+                              <strong style={{ textTransform: 'capitalize' }}>{planResult.plan.remediationType.replace(/-/g, ' ')}</strong>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {isWindowsExecutor && (
                         <div className="plan-form-grid">
                           <label>
@@ -1309,7 +1351,12 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
                       <div className="plan-actions-row">
                         <button className="btn btn-secondary" onClick={handlePlan} disabled={planning}>{planning ? 'Refreshing…' : 'Refresh plan'}</button>
-                        {planResult.plan.autoRemediate !== false && planResult.plan.executionMode !== 'guided-manual' && (
+                        {/* Webapp: show Execute whenever the external service is connected */}
+                        {isWebappExecutor && planResult.plan.external?.connected && (
+                          <button className="btn btn-primary" onClick={handleExecute} disabled={executing}>{executing ? 'Executing…' : 'Execute remediation'}</button>
+                        )}
+                        {/* Native executors: use autoRemediate + executionMode guards */}
+                        {!isWebappExecutor && planResult.plan.autoRemediate !== false && planResult.plan.executionMode !== 'guided-manual' && (
                           <button className="btn btn-primary" onClick={handleExecute} disabled={executing}>{executing ? 'Executing…' : 'Execute remediation'}</button>
                         )}
                       </div>
@@ -1327,12 +1374,25 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                     <div className="finding-empty">Plan remediation to calculate the route and execution mode for this finding.</div>
                   )}
 
-                  {execResult ? (
-                    <div className="detail-summary-block compact success-block">
-                      <h4>Execution result</h4>
-                      <pre>{JSON.stringify(execResult, null, 2)}</pre>
-                    </div>
-                  ) : null}
+                  {execResult ? (() => {
+                    const r = execResult?.result ?? execResult;
+                    const ok = r?.ok !== false && r?.status !== 'external-not-connected' && r?.status !== 'failed';
+                    const statusLabel = r?.status ?? (ok ? 'success' : 'failed');
+                    const msg = r?.message || r?.details?.message || (ok ? 'Remediation dispatched successfully.' : 'Execution failed — check the external service.');
+                    return (
+                      <div className={`detail-summary-block compact ${ok ? 'success-block' : ''}`} style={{ marginTop: 16, borderLeft: `3px solid ${ok ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)'}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                          <span style={{ fontSize: 20 }}>{ok ? '✅' : '❌'}</span>
+                          <h4 style={{ margin: 0 }}>Execution {ok ? 'dispatched' : 'failed'}</h4>
+                          {statusLabel && <span className="role-tag" style={{ marginLeft: 'auto', textTransform: 'capitalize' }}>{statusLabel.replace(/-/g, ' ')}</span>}
+                        </div>
+                        <p style={{ margin: 0, fontSize: 13 }}>{msg}</p>
+                        {r?.jobId && <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Job ID: <code>{r.jobId}</code></p>}
+                        {r?.trackingUrl && <p style={{ margin: '4px 0 0', fontSize: 12 }}><a href={r.trackingUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>Track remediation →</a></p>}
+                        {r?.forwardedTo && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Forwarded to: {r.forwardedTo}</p>}
+                      </div>
+                    );
+                  })() : null}
                 </section>
               )}
             </>
