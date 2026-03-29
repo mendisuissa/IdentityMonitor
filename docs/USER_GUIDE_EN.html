@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IdentityMonitor — User Guide</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    line-height: 1.7;
+  }
+  .cover {
+    background: linear-gradient(135deg, #1a1f2e 0%, #0d1117 60%);
+    border-bottom: 2px solid #30363d;
+    padding: 80px 60px 60px;
+    text-align: center;
+  }
+  .cover .logo { font-size: 52px; margin-bottom: 16px; }
+  .cover h1 { font-size: 42px; font-weight: 800; color: #fff; margin-bottom: 12px; }
+  .cover h1 span { color: #6366f1; }
+  .cover .subtitle { font-size: 18px; color: #8b949e; max-width: 600px; margin: 0 auto 32px; }
+  .cover .meta { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
+  .cover .meta span {
+    background: rgba(99,102,241,0.12);
+    border: 1px solid rgba(99,102,241,0.3);
+    color: #a5b4fc;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+  }
+
+  .toc {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 32px 40px;
+    margin: 40px 60px;
+  }
+  .toc h2 { font-size: 18px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; }
+  .toc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .toc-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    background: #0d1117;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #e6edf3;
+    font-size: 14px;
+    transition: border-color 0.2s;
+  }
+  .toc-item:hover { border-color: #6366f1; color: #a5b4fc; }
+  .toc-item .icon { font-size: 18px; }
+  .toc-item .num { color: #6366f1; font-weight: 700; font-size: 12px; margin-left: auto; }
+
+  .section {
+    padding: 50px 60px;
+    border-bottom: 1px solid #21262d;
+  }
+  .section:nth-child(even) { background: #0d1117; }
+  .section:nth-child(odd) { background: #0a0f18; }
+
+  .section-header {
+    display: flex; align-items: center; gap: 16px; margin-bottom: 28px;
+  }
+  .section-icon {
+    width: 56px; height: 56px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    flex-shrink: 0;
+    box-shadow: 0 4px 16px rgba(99,102,241,0.3);
+  }
+  .section-header h2 { font-size: 28px; font-weight: 700; color: #fff; }
+  .section-header p { color: #8b949e; font-size: 15px; margin-top: 4px; }
+  .badge {
+    padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .badge-security { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+  .badge-ops { background: rgba(99,102,241,0.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); }
+  .badge-mgmt { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+
+  .screenshot-box {
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 24px 0;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .screenshot-bar {
+    background: #161b22;
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid #30363d;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-r { background: #ef4444; }
+  .dot-y { background: #f59e0b; }
+  .dot-g { background: #22c55e; }
+  .url-bar {
+    flex: 1; background: #0d1117; border: 1px solid #21262d;
+    border-radius: 6px; padding: 4px 12px; font-size: 12px;
+    color: #8b949e; margin: 0 12px;
+  }
+  .screenshot-img { width: 100%; display: block; background: #161b22; }
+  .screenshot-placeholder {
+    background: linear-gradient(135deg, #161b22, #1a1f2e);
+    padding: 60px;
+    text-align: center;
+    color: #30363d;
+    font-size: 48px;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .feature-card {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .feature-card h4 { font-size: 14px; font-weight: 600; color: #e6edf3; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .feature-card p { font-size: 13px; color: #8b949e; }
+
+  .actions-list { list-style: none; margin: 16px 0; }
+  .actions-list li {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #21262d;
+    font-size: 14px;
+  }
+  .actions-list li:last-child { border-bottom: none; }
+  .actions-list .action-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+
+  .tip-box {
+    background: rgba(99,102,241,0.08);
+    border: 1px solid rgba(99,102,241,0.25);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 14px;
+    color: #a5b4fc;
+    display: flex; gap: 10px;
+  }
+  .warn-box {
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.25);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 14px;
+    color: #fcd34d;
+    display: flex; gap: 10px;
+  }
+
+  .divider { height: 1px; background: #21262d; margin: 0 60px; }
+  @media print { .section { page-break-inside: avoid; } }
+  @media (max-width: 768px) {
+    .section, .toc { padding: 24px 20px; margin: 20px; }
+    .toc-grid { grid-template-columns: 1fr 1fr; }
+    .features-grid { grid-template-columns: 1fr; }
+    .cover { padding: 40px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════ COVER ═══════════════════════════════ -->
+<div class="cover">
+  <div class="logo">🛡️</div>
+  <h1>Identity<span>Monitor</span></h1>
+  <p class="subtitle">Complete User Guide — Security Operations Platform</p>
+  <div class="meta">
+    <span>📅 Updated: March 2026</span>
+    <span>🔖 Version 2.0</span>
+    <span>🌐 Modern Endpoint</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ TOC ═══════════════════════════════ -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <div class="toc-grid">
+    <a href="#dashboard"    class="toc-item"><span class="icon">⊞</span> Dashboard<span class="num">01</span></a>
+    <a href="#alerts"       class="toc-item"><span class="icon">⚡</span> Alerts<span class="num">02</span></a>
+    <a href="#cases"        class="toc-item"><span class="icon">📋</span> Case Board<span class="num">03</span></a>
+    <a href="#exposure"     class="toc-item"><span class="icon">👥</span> Exposure<span class="num">04</span></a>
+    <a href="#signins"      class="toc-item"><span class="icon">🔍</span> Sign-in Activity<span class="num">05</span></a>
+    <a href="#remediation"  class="toc-item"><span class="icon">🛠️</span> Remediation<span class="num">06</span></a>
+    <a href="#reports"      class="toc-item"><span class="icon">📊</span> Reports<span class="num">07</span></a>
+    <a href="#audit"        class="toc-item"><span class="icon">📜</span> Audit Center<span class="num">08</span></a>
+    <a href="#pim"          class="toc-item"><span class="icon">🔑</span> PIM Analysis<span class="num">09</span></a>
+    <a href="#ops"          class="toc-item"><span class="icon">🏢</span> Tenant Ops<span class="num">10</span></a>
+    <a href="#msp"          class="toc-item"><span class="icon">🌐</span> MSP Fleet<span class="num">11</span></a>
+    <a href="#settings"     class="toc-item"><span class="icon">⚙️</span> Settings<span class="num">12</span></a>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ 01 DASHBOARD ═══════════════════════ -->
+<div id="dashboard" class="section">
+  <div class="section-header">
+    <div class="section-icon">⊞</div>
+    <div>
+      <h2>Dashboard — Privileged Security Overview</h2>
+      <p>Real-time bird's-eye view of all active threats, privileged exposure and organisational posture</p>
+    </div>
+    <span class="badge badge-ops">Overview</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/dashboard.png" alt="Dashboard"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">⊞ Dashboard</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🚨 Device Actions Alert</h4>
+      <p>A dedicated banner surfaces destructive device actions (Wipe, Delete, Reset) — including device name, the admin who initiated the action, and the affected user.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📊 KPI Tiles</h4>
+      <p>Six colour-coded metrics at a glance: Critical Threats, High Priority, Active Threats, Privileged Accounts, Posture Score, Avg Risk Score.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📝 Executive Snapshot</h4>
+      <p>Auto-generated management summary ready for presentations. Displays Posture Score, average Risk, open threats and Auto-Contained incident counts.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔗 Trust Center</h4>
+      <p>Real-time connection monitor: Graph API, Webhook Ingestion, Alert Delivery, Telegram Bot. Green = active, Yellow = not configured.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔄</span><div><strong>Setup guide</strong> — top-right button — opens the built-in quick-start guide</div></li>
+    <li><span class="action-icon">✅</span><div><strong>Acknowledge</strong> — on each Device Action card — confirms awareness and removes it from the banner</div></li>
+    <li><span class="action-icon">⚡</span><div><strong>Trigger Test Alert</strong> (Mock Mode only) — sends a demo alert to verify the entire notification pipeline</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ 02 ALERTS ═══════════════════════════ -->
+<div id="alerts" class="section">
+  <div class="section-header">
+    <div class="section-icon">⚡</div>
+    <div>
+      <h2>Alerts — Active Threats</h2>
+      <p>Central workstation for managing all active threats — Investigation, Approval, Collaboration</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/alerts</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/alerts.png" alt="Alerts"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">⚡ Alerts</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🎯 Advanced Filtering</h4>
+      <p>Filter by Status (Open / Assigned / Resolved) and Severity (Critical / High / Medium). Free-text search by user, IP, country, or application name.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🏷️ Automatic Tagging</h4>
+      <p>Every alert receives a Severity badge (CRITICAL / HIGH / MEDIUM) and a Confidence badge (HIGH / MEDIUM CONFIDENCE) automatically based on the detection algorithm.</p>
+    </div>
+    <div class="feature-card">
+      <h4>👤 Assign &amp; Ownership</h4>
+      <p>Assign an alert to a specific team member. Track ownership and accountability. Change ownership directly from within the alert panel.</p>
+    </div>
+    <div class="feature-card">
+      <h4>✅ Approval Workflow</h4>
+      <p>Critical actions (Wipe, Block, Reset Password) go through an Approval flow — Approved, Rejected, or assigned for closure.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔍</span><div><strong>Click an alert</strong> — opens the Investigation panel with Timeline, Raw data, Evidence and Recommended actions</div></li>
+    <li><span class="action-icon">🙋</span><div><strong>Assign to me</strong> — takes ownership of an open alert</div></li>
+    <li><span class="action-icon">✅</span><div><strong>Approve / Reject</strong> — approve or reject a pending action</div></li>
+    <li><span class="action-icon">📌</span><div><strong>Acknowledge</strong> — marks the threat as reviewed and moves it to Documented status</div></li>
+    <li><span class="action-icon">🔄</span><div><strong>Refresh</strong> — reloads the alert queue from the backend</div></li>
+    <li><span class="action-icon">👑</span><div><strong>Role owner</strong> — top-right button — adds Role-based ownership across the entire tenant</div></li>
+  </ul>
+
+  <div class="tip-box">💡 <span>An alert tagged <strong>HIGH CONFIDENCE</strong> was triggered by multiple simultaneous indicators (unusual IP + new country + unrecognised device). These require immediate attention.</span></div>
+</div>
+
+<!-- ═══════════════════════════════ 03 CASE BOARD ═══════════════════════ -->
+<div id="cases" class="section">
+  <div class="section-header">
+    <div class="section-icon">📋</div>
+    <div>
+      <h2>Case Board</h2>
+      <p>Operational work queue with SLA tracking, comments, centralised approvals and bulk actions</p>
+    </div>
+    <span class="badge badge-ops">Overview</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/cases</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/cases.png" alt="Case Board"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">📋 Case Board</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>⏰ SLA Tracking</h4>
+      <p>Quick counters for: Cases Overdue (SLA breach), Unassigned, Pending Approval, and Ready to Execute.</p>
+    </div>
+    <div class="feature-card">
+      <h4>⚡ Bulk Actions</h4>
+      <p>Select multiple cases and act on them simultaneously: Assign owner, Comment, Approve, Resolve, Dismiss.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🤖 Automation Sweep</h4>
+      <p>"Run automation sweep" button — runs all automation rules across every case: assigns, classifies, marks Overdue, and triggers Approval flows.</p>
+    </div>
+    <div class="feature-card">
+      <h4>💬 Mentions &amp; Comments</h4>
+      <p>Inline comment field per case — supports @mentions, decision documentation and cross-linking to related incidents.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">📝</span><div><strong>Assign owner for selected</strong> — enter an email and click Assign(N) — assigns ownership to all selected cases at once</div></li>
+    <li><span class="action-icon">💬</span><div><strong>Bulk comment / mention</strong> — add a comment to all selected cases in one action</div></li>
+    <li><span class="action-icon">🔍</span><div><strong>Filter</strong> — by Case Status and Approval Status</div></li>
+    <li><span class="action-icon">🤖</span><div><strong>Run automation sweep</strong> — executes all SLA rules and automation policies</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ 04 EXPOSURE ══════════════════════════ -->
+<div id="exposure" class="section">
+  <div class="section-header">
+    <div class="section-icon">👥</div>
+    <div>
+      <h2>Exposure Center</h2>
+      <p>Track at-risk identities, over-privileged accounts and blast radius for every privileged account</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/users</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/exposure.png" alt="Exposure Center"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">👥 Exposure</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🎯 Privileged Identity Watchlist</h4>
+      <p>A table of all high-privilege identities, sorted by Risk Score. Shows Roles, Account state, and Open threats per user.</p>
+    </div>
+    <div class="feature-card">
+      <h4>💥 Blast Radius</h4>
+      <p>Automatic calculation — how much damage could a user cause if their account were compromised. Includes a Role spread map and Suggested next steps.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🏥 Hygiene Score</h4>
+      <p>Per-identity hygiene score: MFA, Conditional Access, JIT status, Last sign-in. Identifies accounts an attacker could use immediately.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🎨 Risk Colour Coding</h4>
+      <p>CRITICAL (red) / HIGH (orange) / MEDIUM (yellow) / CLEAN (green). Click a row to open a full detail panel on the right.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔍</span><div><strong>Search</strong> — search by name, UPN or Role</div></li>
+    <li><span class="action-icon">👁️</span><div><strong>Click a row</strong> — opens the "Exposure Drill" panel with threat history, role assignment and hygiene signals</div></li>
+    <li><span class="action-icon">📊</span><div><strong>Ordered by risk</strong> — sorted by descending Risk Score</div></li>
+  </ul>
+
+  <div class="warn-box">⚠️ <span>A user with <strong>CRITICAL risk + Enabled account + Global Admin</strong> is an immediate threat. Apply a Conditional Access Policy or perform an urgent MFA reset.</span></div>
+</div>
+
+<!-- ═══════════════════════════════ 05 SIGN-IN ACTIVITY ══════════════════ -->
+<div id="signins" class="section">
+  <div class="section-header">
+    <div class="section-icon">🔍</div>
+    <div>
+      <h2>Sign-in Activity</h2>
+      <p>Full log of every authentication event for privileged users</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/signins</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/signins.png" alt="Sign-in Activity"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">🔍 Sign-in Activity</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🗂️ Full Log Table</h4>
+      <p>Each row shows: Status (✓ Success / ✗ Failed), Time, User, IP Address, Location, Device, Application, Risk Score.</p>
+    </div>
+    <div class="feature-card">
+      <h4>⏱️ Time Window Filter</h4>
+      <p>Select a time range: Last 24 hours, Last 48 hours, Last 7 days. Displays total event count for the selected window.</p>
+    </div>
+    <div class="feature-card">
+      <h4>❌ Failed-Only Filter</h4>
+      <p>Checkbox to show only failed sign-ins — quickly spot Brute Force attempts or MFA issues.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🌍 Location-Based Risk</h4>
+      <p>Sign-ins from unusual countries or locations are automatically flagged with a HIGH risk badge.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔎</span><div><strong>Search</strong> — by user name, IP, country, or application name</div></li>
+    <li><span class="action-icon">⏰</span><div><strong>Time window</strong> — dropdown to select range (24h / 48h / 7d)</div></li>
+    <li><span class="action-icon">❌</span><div><strong>Failed only</strong> — checkbox to show only failed sign-ins</div></li>
+    <li><span class="action-icon">🔴</span><div><strong>Click a row</strong> — opens full details including raw token claims</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ 06 REMEDIATION ══════════════════════ -->
+<div id="remediation" class="section">
+  <div class="section-header">
+    <div class="section-icon">🛠️</div>
+    <div>
+      <h2>Vulnerability Remediation</h2>
+      <p>Close vulnerabilities directly from the portal — no need to switch to another tool</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/remediation</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/remediation.png" alt="Remediation"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">🛠️ Remediation</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>📋 Vulnerability List</h4>
+      <p>All CVEs and findings from Defender, with filters by: CVE ID, Product, Publisher, Category, Severity. Includes "Remediation required only" and "Exposed devices only" toggles.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🗂️ 3 Tabs per Finding</h4>
+      <p><strong>Details</strong> — CVE info, severity, description. <strong>Exposed Devices</strong> — affected machines. <strong>Remediation Plan</strong> — execution plan.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🤖 4 Executor Types</h4>
+      <p><strong>Webapp</strong> — patch applications (Edge, Chrome, 7-Zip) via external service. <strong>Windows Update</strong> — OS updates. <strong>Intune Policy</strong> — push Intune config. <strong>Script</strong> — PowerShell remediation.</p>
+    </div>
+    <div class="feature-card">
+      <h4>⚡ One-Click Execute</h4>
+      <p>Click "Plan remediation" → the system determines the optimal execution path. Click "Execute remediation" → runs the fix. Result shown with ✅ / ❌ and detailed status.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔍</span><div><strong>Filter</strong> — by CVE ID, Product, Publisher, Category, Severity</div></li>
+    <li><span class="action-icon">📱</span><div><strong>Exposed devices tab</strong> — list of affected devices with Device ID and Device Name</div></li>
+    <li><span class="action-icon">📝</span><div><strong>Plan remediation</strong> — calculates the automatic execution path based on finding type</div></li>
+    <li><span class="action-icon">▶️</span><div><strong>Execute remediation</strong> — runs the fix (only appears when the service is connected and ready)</div></li>
+    <li><span class="action-icon">🔄</span><div><strong>Refresh plan</strong> — recalculates the execution plan</div></li>
+    <li><span class="action-icon">📌</span><div><strong>Admin Consent button</strong> — appears when Intune permissions are missing — click to request Admin Consent</div></li>
+  </ul>
+
+  <div class="tip-box">💡 <span>Applications such as Microsoft Edge, Chrome, 7-Zip and Firefox are automatically routed to the <strong>Webapp Executor</strong> — an external service at app.modernendpoint.tech that identifies and patches them without additional configuration.</span></div>
+</div>
+
+<!-- ═══════════════════════════════ 07 REPORTS ══════════════════════════ -->
+<div id="reports" class="section">
+  <div class="section-header">
+    <div class="section-icon">📊</div>
+    <div>
+      <h2>Posture &amp; Reports</h2>
+      <p>Management reporting, risk scores, trends and integration health checks</p>
+    </div>
+    <span class="badge badge-ops">Overview</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/reports</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/reports.png" alt="Reports"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">📊 Reports</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>📈 Executive Metrics</h4>
+      <p>Executive score, Avg risk score, MTTA (Mean Time to Acknowledge), MTTR (Mean Time to Resolve), Auto-contained incidents, Dismissed trend.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📄 Executive Narrative</h4>
+      <p>Automatically generated narrative text ready for management presentations: risk summary, monitored account count, observed incidents and retention period.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📥 Export Reports</h4>
+      <p>Export in 3 formats: <strong>Executive PDF</strong> (management presentation), <strong>Executive CSV</strong> (Excel), <strong>Executive JSON</strong> (API / SIEM). Monthly PDF also available.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🧪 Integration Tests</h4>
+      <p><strong>Test Email Alert</strong> — sends a test email to ALERT_ADMIN_EMAIL. <strong>Test Telegram Bot</strong> — sends an alert to the bot with Approve / Reject action buttons.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">📄</span><div><strong>↓ Executive PDF</strong> — generates a full management PDF report</div></li>
+    <li><span class="action-icon">📊</span><div><strong>↓ Executive CSV</strong> — exports to Excel for further analysis</div></li>
+    <li><span class="action-icon">📦</span><div><strong>↓ Executive JSON</strong> — exports for SIEM / API integration</div></li>
+    <li><span class="action-icon">✉️</span><div><strong>Send Test</strong> — sends a test email to verify Mail.Send is working</div></li>
+    <li><span class="action-icon">📱</span><div><strong>Send Test Alert to Telegram</strong> — tests the Telegram bot with Approve / Reject buttons</div></li>
+    <li><span class="action-icon">🗄️</span><div><strong>Retention 180d incidents</strong> — click to display all incidents in the last 180 days</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ 08 AUDIT CENTER ═════════════════════ -->
+<div id="audit" class="section">
+  <div class="section-header">
+    <div class="section-icon">📜</div>
+    <div>
+      <h2>Audit Center</h2>
+      <p>Complete evidence stream of every action performed on the platform — for Compliance and Forensics</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/audit</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/audit.png" alt="Audit Center"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">📜 Audit Center</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🗂️ Evidence Stream</h4>
+      <p>Every action recorded: Responses, Playbook decisions, Policy changes, Workflow updates — with timestamp, actor and context.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔢 Counter Cards</h4>
+      <p>Quick overview: Total Events, Last 7 days, Settings changes, Session revokes.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔍 Searchable &amp; Filterable</h4>
+      <p>Filter by Action (keyword), Actor (All / specific user) and Date Range.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📥 Export CSV</h4>
+      <p>Export the filtered Evidence Stream to CSV for external audits, SOC reporting or forensic investigation.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔎</span><div><strong>Filter by action</strong> — search by action type (e.g. "workflow", "approve", "policy")</div></li>
+    <li><span class="action-icon">👤</span><div><strong>All actors</strong> — dropdown to filter by a specific user who performed actions</div></li>
+    <li><span class="action-icon">📅</span><div><strong>Date filter</strong> — select a specific date for targeted investigation</div></li>
+    <li><span class="action-icon">📥</span><div><strong>↓ Export filtered CSV</strong> — export the filtered data</div></li>
+    <li><span class="action-icon">🔄</span><div><strong>Refresh</strong> — reload the Evidence stream</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ 09 PIM ANALYSIS ═════════════════════ -->
+<div id="pim" class="section">
+  <div class="section-header">
+    <div class="section-icon">🔑</div>
+    <div>
+      <h2>PIM Security Analysis</h2>
+      <p>Privileged Identity Management analysis — detect Permanent Admins, missing JIT, over-privileged accounts</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/pim</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/pim.png" alt="PIM Analysis"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">🔑 PIM Analysis</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🎓 PIM Score</h4>
+      <p>A–F grade based on the organisation's PIM posture. D = Poor. Composed of: Permanent Roles, JIT Eligible assignments, Global Admin count, PIM Enabled status.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🚨 Findings</h4>
+      <p>Specific findings with severity: "PIM Just-in-Time is not configured", "2 permanent Global Administrator assignments" — each with remediation instructions.</p>
+    </div>
+    <div class="feature-card">
+      <h4>💡 Recommendations</h4>
+      <p>Actionable recommendations with exact paths: "Enable PIM → Entra Admin Center → Identity Governance → Privileged Identity Management → Discover". Labelled Quick Win or Some effort.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🛡️ Risk Labels</h4>
+      <p>Each recommendation is tagged CRITICAL / HIGH + RISK, with a clear explanation of why it matters ("JIT access eliminates 80%+ of insider threat").</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">📋</span><div><strong>Findings</strong> — list of existing issues, each with a Remediation Path button</div></li>
+    <li><span class="action-icon">💡</span><div><strong>Recommendations</strong> — prioritised remediation steps with Quick Win marking</div></li>
+    <li><span class="action-icon">🔄</span><div><strong>Last analyzed</strong> — shows when the last analysis ran + Refresh button</div></li>
+  </ul>
+
+  <div class="warn-box">⚠️ <span><strong>PIM Score D (Poor)</strong> = all Admin assignments are Permanent with no JIT. An attacker who gains access has permanent privileges with no time limit. Enable Entra ID P2 and configure Eligible assignments.</span></div>
+</div>
+
+<!-- ═══════════════════════════════ 10 TENANT OPS ═══════════════════════ -->
+<div id="ops" class="section">
+  <div class="section-header">
+    <div class="section-icon">🏢</div>
+    <div>
+      <h2>Tenant Ops Dashboard</h2>
+      <p>Orchestrate policies, permissions, notification backlog and fleet-wide actions</p>
+    </div>
+    <span class="badge badge-mgmt">Management</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/ops</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/tenant.png" alt="Tenant Ops"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">🏢 Tenant Ops</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🏥 Health Controls</h4>
+      <p>Policy Pack Selector: Conservative / Balanced / Strict. Choosing a pack sets global policy for the tenant — affecting thresholds, auto-actions and alert sensitivity.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🛡️ Orchestration Guardrails</h4>
+      <p>Phase 11 controls: Cross-tenant sweep, Bulk notify, Disable approval requirement, Max tenants/run. Prevents unintended large-scale actions.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📊 Role Matrix</h4>
+      <p>Current role matrix: who is authorised to perform which actions. Manage platform-level permissions.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📦 Multi-Tenant Orchestration</h4>
+      <p>Phase 11 Fleet view: Fleet open alerts, Fleet overdue, Fleet pending approvals, Notification backlog — across all tenants combined.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🤖</span><div><strong>Run automation sweep (0)</strong> — runs an automation sweep across the entire tenant fleet</div></li>
+    <li><span class="action-icon">📋</span><div><strong>Queue review notice</strong> — sends a review notification to all case owners</div></li>
+    <li><span class="action-icon">☑️</span><div><strong>Select all</strong> — selects all tenants for a bulk action</div></li>
+    <li><span class="action-icon">⚖️</span><div><strong>Policy pack buttons</strong> — Conservative / Balanced / Strict — change global policy</div></li>
+    <li><span class="action-icon">📈</span><div><strong>Workflow vs response trend</strong> — chart showing response time vs. volume over time</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ 11 MSP FLEET ════════════════════════ -->
+<div id="msp" class="section">
+  <div class="section-header">
+    <div class="section-icon">🌐</div>
+    <div>
+      <h2>MSP Fleet Dashboard</h2>
+      <p>Multi-tenant management — all customers in a single view with consolidated security status</p>
+    </div>
+    <span class="badge badge-mgmt">Management</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/msp</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/msp.png" alt="MSP Fleet"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">🌐 MSP Fleet</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🏢 All Tenants View</h4>
+      <p>A card for each connected tenant showing: Critical Alerts, Open Alerts, Need Action, All Clear. Sorted by Highest Risk by default.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🚨 Fleet Counters</h4>
+      <p>Consolidated totals: Total Tenants, Critical Alerts across the fleet, Open Alerts, Need Action, All Clear.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔗 Quick Connect</h4>
+      <p>Share the login URL with new customers. They perform Admin Consent on their side and are automatically added to the fleet.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📊 Sort by Risk</h4>
+      <p>Sort tenants by Highest Risk — the most at-risk customer always appears first.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔗</span><div><strong>Share login URL</strong> — copy the URL to share with new customers</div></li>
+    <li><span class="action-icon">📊</span><div><strong>Sort: Highest Risk</strong> — Fleet sort dropdown</div></li>
+    <li><span class="action-icon">🏢</span><div><strong>Click a tenant card</strong> — enter the specific tenant's management interface</div></li>
+  </ul>
+
+  <div class="tip-box">💡 <span>MSP Fleet is designed for Managed Service Providers managing multiple customers. Each customer connects once via Admin Consent and is then monitored automatically.</span></div>
+</div>
+
+<!-- ═══════════════════════════════ 12 SETTINGS ═════════════════════════ -->
+<div id="settings" class="section">
+  <div class="section-header">
+    <div class="section-icon">⚙️</div>
+    <div>
+      <h2>Settings</h2>
+      <p>Per-tenant configuration: Detection rules, Notifications, Admins, Approvals, SIEM integrations</p>
+    </div>
+    <span class="badge badge-mgmt">Management</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/settings</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/settings.png" alt="Settings"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">⚙️ Settings</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>💳 Plan &amp; Trial</h4>
+      <p>Shows current plan and Trial expiry. Notification Center snapshot with Unread / Approval / Mentions / Escalations counters.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔍 Detection Rules</h4>
+      <p>Tune detection sensitivity: Impossible Travel, New Country, Unrecognised Device, Suspicious App. Each rule can be enabled / disabled and have its threshold adjusted.</p>
+    </div>
+    <div class="feature-card">
+      <h4>⚡ Auto-Actions</h4>
+      <p>Automated responses by severity: Block user, Reset MFA, Require re-auth, Send Telegram alert. Configure trigger conditions per action.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔔 Notifications</h4>
+      <p>Configure recipients: Email addresses, Telegram Chat IDs. Select notification triggers by severity and event type.</p>
+    </div>
+    <div class="feature-card">
+      <h4>👥 Admins</h4>
+      <p>Manage who can access the platform and at what permission level (SOC Analyst / Security Manager / Admin).</p>
+    </div>
+    <div class="feature-card">
+      <h4>✅ Automation &amp; Approvals</h4>
+      <p>Define which actions require two-step Approval before execution (Wipe, Block, Password Reset). Configure the Approvers list.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🚫 Whitelist</h4>
+      <p>Add IPs, Users and Countries to the Whitelist — they will not generate alerts. Useful for MSP IPs and travelling executives.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🏢 Business Hours</h4>
+      <p>Define business hours — alerts triggered outside those hours automatically receive Higher severity.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📡 SIEM &amp; Log Analytics</h4>
+      <p>Connect to an external SIEM (Sentinel, Splunk): Webhook URL, API Key, Log format (CEF / JSON).</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">💳</span><div><strong>Plan &amp; Trial</strong> — first tab — plan status and notification counters</div></li>
+    <li><span class="action-icon">🔍</span><div><strong>Detection</strong> — tune detection rules and sensitivity thresholds</div></li>
+    <li><span class="action-icon">⚡</span><div><strong>Auto-Actions</strong> — automated actions per trigger</div></li>
+    <li><span class="action-icon">👥</span><div><strong>Admins</strong> — manage platform access</div></li>
+    <li><span class="action-icon">🔔</span><div><strong>Notifications</strong> — manage recipients</div></li>
+    <li><span class="action-icon">✅</span><div><strong>Automation &amp; Approvals</strong> — Approval workflows</div></li>
+    <li><span class="action-icon">🚫</span><div><strong>Whitelist</strong> — trusted IPs / Users / Countries</div></li>
+    <li><span class="action-icon">🕒</span><div><strong>Business Hours</strong> — monitoring hours configuration</div></li>
+    <li><span class="action-icon">📡</span><div><strong>SIEM &amp; Log Analytics</strong> — external SIEM connection</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ FOOTER ══════════════════════════════ -->
+<div style="background:#161b22; border-top:1px solid #30363d; padding:40px 60px; text-align:center; color:#8b949e; font-size:13px;">
+  <div style="font-size:32px; margin-bottom:12px;">🛡️</div>
+  <div style="font-size:16px; font-weight:700; color:#e6edf3; margin-bottom:8px;">IdentityMonitor — Modern Endpoint</div>
+  <div>This guide covers all 12 pages of the platform. For additional support, contact the Modern Endpoint team.</div>
+  <div style="margin-top:16px; display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
+    <a href="https://identitymonitor.modernendpoint.tech" style="color:#6366f1; text-decoration:none;">🌐 identitymonitor.modernendpoint.tech</a>
+    <span>|</span>
+    <span>📅 March 2026</span>
+  </div>
+</div>
+
+</body>
+</html>
