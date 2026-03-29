@@ -83,7 +83,7 @@ function NotificationDrawer({ open, items, onClose, onAck, onApprove, onReject, 
   );
 }
 
-function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, onAckNotification, onApproveNotification, onRejectNotification, onAssignNotification }: {
+function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, onAckNotification, onApproveNotification, onRejectNotification, onAssignNotification, open, onClose }: {
   user: TenantUser | null;
   scanLoading: boolean;
   onScan: () => void;
@@ -94,13 +94,16 @@ function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, on
   onApproveNotification: (alertId: string) => void;
   onRejectNotification: (alertId: string) => void;
   onAssignNotification: (alertId: string) => void;
+  open: boolean;
+  onClose: () => void;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const unread = inbox.filter(i => i.status !== 'acked').length;
 
   return (
     <>
-      <aside className="sidebar">
+      <div className={`sidebar-overlay ${open ? 'open' : ''}`} onClick={onClose} />
+      <aside className={`sidebar ${open ? 'open' : ''}`}>
         {/* Logo */}
         <div className="sidebar-logo">
           <div className="logo-icon">🛡️</div>
@@ -111,7 +114,7 @@ function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, on
         </div>
 
         {/* Nav sections */}
-        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 8 }}>
+        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 8 }} onClick={onClose}>
           <div className="nav-section">
             <div className="nav-label">Overview</div>
             <NavLink to="/" end className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
@@ -164,7 +167,7 @@ function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, on
 
         {/* Footer */}
         <div className="sidebar-footer">
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
             {!mockMode && (
               <button className="btn btn-primary btn-sm" onClick={onScan} disabled={scanLoading} style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}>
                 {scanLoading ? <><span className="spin">⟳</span> Scanning...</> : '⟳ Run Scan'}
@@ -225,6 +228,7 @@ function AppShell() {
   const [mockMode, setMockMode] = useState(false);
   const [showMockPanel, setShowMockPanel] = useState(false);
   const [inbox, setInbox] = useState<any[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -273,6 +277,7 @@ function AppShell() {
 
   return (
     <div className="app">
+      <button className="hamburger-btn" onClick={() => setSidebarOpen(v => !v)} aria-label="Open menu">☰</button>
       <Sidebar
         user={user}
         scanLoading={scanLoading}
@@ -284,9 +289,11 @@ function AppShell() {
         onApproveNotification={(alertId) => api.approveAlertAction(alertId).then(() => api.getNotificationInbox({ limit: 12, dedupe: true }).then((res: any) => setInbox(res.items || [])))}
         onRejectNotification={(alertId) => api.rejectAlertAction(alertId).then(() => api.getNotificationInbox({ limit: 12, dedupe: true }).then((res: any) => setInbox(res.items || [])))}
         onAssignNotification={(alertId) => user && api.assignAlertOwner(alertId, user.userEmail).then(() => api.getNotificationInbox({ limit: 12, dedupe: true }).then((res: any) => setInbox(res.items || [])))}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
-      <div style={{ flex: 1, marginLeft: 220, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <div className="app-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         {mockMode && (
           <div className="mock-banner">
             <span>🟡 MOCK MODE — Simulated data active</span>

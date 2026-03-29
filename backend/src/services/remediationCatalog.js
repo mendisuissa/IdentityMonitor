@@ -72,6 +72,13 @@ function classifyFinding(finding = {}) {
     return { type: 'windows-update', family: 'platform' };
   }
 
+  // Known third-party applications take priority over script/intune hints,
+  // because Defender recommendations for apps often mention "proactive remediation"
+  // which would otherwise mis-classify an app finding as 'script'.
+  if (category === 'application' || appHints.some((hint) => productName.includes(hint))) {
+    return { type: 'application', family: 'software' };
+  }
+
   if (intuneHints.some((hint) => text.includes(hint)) || category === 'intune-policy') {
     return { type: 'intune-policy', family: 'configuration' };
   }
@@ -82,10 +89,6 @@ function classifyFinding(finding = {}) {
 
   if (identityHints.some((hint) => text.includes(hint)) || category === 'identity') {
     return { type: 'identity', family: 'identity' };
-  }
-
-  if (category === 'application' || appHints.some((hint) => text.includes(hint))) {
-    return { type: 'application', family: 'software' };
   }
 
   if (category.includes('configuration') || category.includes('config')) {

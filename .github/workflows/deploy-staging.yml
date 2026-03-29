@@ -51,6 +51,11 @@ jobs:
           app-name: ${{ secrets.AZURE_STAGING_APP_NAME }}
           publish-profile: ${{ secrets.AZURE_STAGING_PUBLISH_PROFILE }}
           package: ./backend
+          app-settings-json: |
+            [
+              {"name": "WEBAPP_REMEDIATION_BASE_URL", "value": "${{ secrets.WEBAPP_REMEDIATION_BASE_URL }}", "slotSetting": false},
+              {"name": "WEBAPP_REMEDIATION_TOKEN", "value": "${{ secrets.WEBAPP_REMEDIATION_TOKEN }}", "slotSetting": false}
+            ]
 
       - name: Resolve staging URL
         id: get-url

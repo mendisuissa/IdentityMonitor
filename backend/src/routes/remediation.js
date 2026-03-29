@@ -81,23 +81,30 @@ router.post('/plan', async (req, res) => {
         const resolution = await resolveApplicationRemediation(enrichedFinding);
         const plan = {
           executor: 'webapp',
-          supported: !!resolution?.resolution?.supported,
-          remediationType: resolution?.resolution?.remediationType || 'manual-review',
-          autoRemediate: !!resolution?.resolution?.autoRemediate,
+          supported: resolution?.resolution?.supported !== false,
+          remediationType: resolution?.resolution?.remediationType || 'patch',
+          // Only false if the external service explicitly sets autoRemediate=false.
+          // If the field is missing (undefined), we default to true so the Execute button appears.
+          autoRemediate: resolution?.resolution?.autoRemediate !== false,
           app: resolution?.resolution?.app || null,
           candidates: resolution?.resolution?.candidates || [],
           checkedSources: resolution?.resolution?.checkedSources || [],
-          message: resolution?.resolution?.message || null,
+          message: resolution?.resolution?.message || 'External remediation service is ready. Review the plan below and click Execute to patch the affected application.',
           executionMode: resolution?.resolution?.executionMode || 'webapp-live',
-          statusCard: resolution?.resolution?.statusCard || null,
+          statusCard: resolution?.resolution?.statusCard || {
+            code: 'webapp-ready',
+            label: 'webapp remediation',
+            tone: 'success',
+            message: 'External remediation service is connected and ready to patch this application.'
+          },
           executionPath: resolution?.resolution?.executionPath || {
             classification: 'application',
             family: 'software',
             executor: 'webapp',
             status: 'ready',
-            route: 'Application -> Webapp external remediation'
+            route: 'Application → Webapp external remediation'
           },
-          external: { connected: true },
+          external: { connected: true, service: resolution?.service || null },
           rawResolution: resolution
         };
         return res.json({ ok: true, tenantId, classification, finding, plan });

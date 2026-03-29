@@ -47,6 +47,22 @@ router.get('/status', (req, res) => {
   res.json({ authenticated: false });
 });
 
+// GET /api/auth/mock-login  — dev/screenshot only, requires MOCK_MODE=true
+router.get('/mock-login', (req, res) => {
+  if (process.env.MOCK_MODE !== 'true') {
+    return res.status(403).json({ error: 'Only available in MOCK_MODE' });
+  }
+  req.session.tenant = {
+    tenantId:   'demo-tenant-id',
+    tenantName: 'Demo Organisation',
+    userEmail:  'admin@demo.onmicrosoft.com',
+    userName:   'Demo Admin',
+  };
+  req.session.tokens = { accessToken: 'mock-token', expiresAt: Date.now() + 86400000 };
+  const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+  res.redirect(FRONTEND_URL + '/');
+});
+
 // GET /api/auth/login
 router.get('/login', (req, res) => {
   if (!CLIENT_ID) return res.status(500).json({ error: 'CLIENT_ID not configured' });
@@ -57,9 +73,11 @@ router.get('/login', (req, res) => {
     redirect_uri:  REDIRECT_URI,
     scope:         'openid profile email offline_access ' + REQUIRED_SCOPES,
     response_mode: 'query',
-    prompt:        'consent',
     state:         'login'
   });
+  // Do NOT set prompt=consent — Microsoft will only ask for consent the first
+  // time or when new permissions are added. Forcing it every login is the cause
+  // of the repeated consent UX.
 
   res.redirect('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?' + params.toString());
 });

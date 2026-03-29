@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IdentityMonitor — מדריך משתמש</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    line-height: 1.7;
+    direction: rtl;
+  }
+  .cover {
+    background: linear-gradient(135deg, #1a1f2e 0%, #0d1117 60%);
+    border-bottom: 2px solid #30363d;
+    padding: 80px 60px 60px;
+    text-align: center;
+  }
+  .cover .logo { font-size: 52px; margin-bottom: 16px; }
+  .cover h1 { font-size: 42px; font-weight: 800; color: #fff; margin-bottom: 12px; }
+  .cover h1 span { color: #6366f1; }
+  .cover .subtitle { font-size: 18px; color: #8b949e; max-width: 600px; margin: 0 auto 32px; }
+  .cover .meta { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
+  .cover .meta span {
+    background: rgba(99,102,241,0.12);
+    border: 1px solid rgba(99,102,241,0.3);
+    color: #a5b4fc;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+  }
+
+  .toc {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 32px 40px;
+    margin: 40px 60px;
+  }
+  .toc h2 { font-size: 18px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; }
+  .toc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .toc-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    background: #0d1117;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #e6edf3;
+    font-size: 14px;
+    transition: border-color 0.2s;
+  }
+  .toc-item:hover { border-color: #6366f1; color: #a5b4fc; }
+  .toc-item .icon { font-size: 18px; }
+  .toc-item .num { color: #6366f1; font-weight: 700; font-size: 12px; margin-right: auto; }
+
+  .section {
+    padding: 50px 60px;
+    border-bottom: 1px solid #21262d;
+  }
+  .section:nth-child(even) { background: #0d1117; }
+  .section:nth-child(odd) { background: #0a0f18; }
+
+  .section-header {
+    display: flex; align-items: center; gap: 16px; margin-bottom: 28px;
+  }
+  .section-icon {
+    width: 56px; height: 56px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    flex-shrink: 0;
+    box-shadow: 0 4px 16px rgba(99,102,241,0.3);
+  }
+  .section-header h2 {
+    font-size: 28px; font-weight: 700; color: #fff;
+  }
+  .section-header p { color: #8b949e; font-size: 15px; margin-top: 4px; }
+  .badge {
+    padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .badge-security { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+  .badge-ops { background: rgba(99,102,241,0.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); }
+  .badge-mgmt { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+
+  .screenshot-box {
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 24px 0;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .screenshot-bar {
+    background: #161b22;
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid #30363d;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-r { background: #ef4444; }
+  .dot-y { background: #f59e0b; }
+  .dot-g { background: #22c55e; }
+  .url-bar {
+    flex: 1; background: #0d1117; border: 1px solid #21262d;
+    border-radius: 6px; padding: 4px 12px; font-size: 12px;
+    color: #8b949e; margin: 0 12px;
+    direction: ltr; text-align: left;
+  }
+  .screenshot-img {
+    width: 100%;
+    display: block;
+    background: #161b22;
+  }
+  .screenshot-placeholder {
+    background: linear-gradient(135deg, #161b22, #1a1f2e);
+    padding: 60px;
+    text-align: center;
+    color: #30363d;
+    font-size: 48px;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .feature-card {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .feature-card h4 {
+    font-size: 14px; font-weight: 600; color: #e6edf3;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .feature-card p { font-size: 13px; color: #8b949e; }
+
+  .actions-list {
+    list-style: none; margin: 16px 0;
+  }
+  .actions-list li {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #21262d;
+    font-size: 14px;
+  }
+  .actions-list li:last-child { border-bottom: none; }
+  .actions-list .action-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+
+  .tip-box {
+    background: rgba(99,102,241,0.08);
+    border: 1px solid rgba(99,102,241,0.25);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 14px;
+    color: #a5b4fc;
+    display: flex; gap: 10px;
+  }
+  .warn-box {
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.25);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 14px;
+    color: #fcd34d;
+    display: flex; gap: 10px;
+  }
+
+  .divider { height: 1px; background: #21262d; margin: 0 60px; }
+  @media print {
+    .section { page-break-inside: avoid; }
+  }
+  @media (max-width: 768px) {
+    .section, .toc { padding: 24px 20px; margin: 20px; }
+    .toc-grid { grid-template-columns: 1fr 1fr; }
+    .features-grid { grid-template-columns: 1fr; }
+    .cover { padding: 40px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════ COVER ═══════════════════════════════ -->
+<div class="cover">
+  <div class="logo">🛡️</div>
+  <h1>Identity<span>Monitor</span></h1>
+  <p class="subtitle">מדריך משתמש מלא — Security Operations Platform</p>
+  <div class="meta">
+    <span>📅 עודכן: מרץ 2026</span>
+    <span>🔖 גרסה 2.0</span>
+    <span>🌐 Modern Endpoint</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ TOC ═══════════════════════════════ -->
+<div class="toc">
+  <h2>תוכן עניינים</h2>
+  <div class="toc-grid">
+    <a href="#dashboard" class="toc-item"><span class="icon">⊞</span> Dashboard<span class="num">01</span></a>
+    <a href="#alerts" class="toc-item"><span class="icon">⚡</span> Alerts<span class="num">02</span></a>
+    <a href="#cases" class="toc-item"><span class="icon">📋</span> Case Board<span class="num">03</span></a>
+    <a href="#exposure" class="toc-item"><span class="icon">👥</span> Exposure<span class="num">04</span></a>
+    <a href="#signins" class="toc-item"><span class="icon">🔍</span> Sign-in Activity<span class="num">05</span></a>
+    <a href="#remediation" class="toc-item"><span class="icon">🛠️</span> Remediation<span class="num">06</span></a>
+    <a href="#reports" class="toc-item"><span class="icon">📊</span> Reports<span class="num">07</span></a>
+    <a href="#audit" class="toc-item"><span class="icon">📜</span> Audit Center<span class="num">08</span></a>
+    <a href="#pim" class="toc-item"><span class="icon">🔑</span> PIM Analysis<span class="num">09</span></a>
+    <a href="#ops" class="toc-item"><span class="icon">🏢</span> Tenant Ops<span class="num">10</span></a>
+    <a href="#msp" class="toc-item"><span class="icon">🌐</span> MSP Fleet<span class="num">11</span></a>
+    <a href="#settings" class="toc-item"><span class="icon">⚙️</span> Settings<span class="num">12</span></a>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ 01 DASHBOARD ═══════════════════════ -->
+<div id="dashboard" class="section">
+  <div class="section-header">
+    <div class="section-icon">⊞</div>
+    <div>
+      <h2>Dashboard — Privileged Security Overview</h2>
+      <p>מבט-על בזמן אמת על כל האיומים, החשיפות והסטטוס הארגוני</p>
+    </div>
+    <span class="badge badge-ops">Overview</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/dashboard.png" alt="Dashboard"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">⊞ Dashboard</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🚨 Device Actions Alert</h4>
+      <p>בנר ייחודי מציג פעולות הרסניות שבוצעו במכשירים (Wipe, Delete, Reset) — כולל שם המכשיר, מבצע הפעולה ומשתמש המכשיר.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📊 KPI Tiles</h4>
+      <p>6 מדדים מרכזיים בצבעי אזהרה: Critical Threats, High Priority, Active Threats, Privileged Accounts, Posture Score, Avg Risk Score.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📝 Executive Snapshot</h4>
+      <p>תמצית ניהולית אוטומטית מוכנה למצגת. מציגה Posture Score, ממוצע Risk, איומים פתוחים ופעולות Auto-Contained.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔗 Trust Center</h4>
+      <p>מוניטור חיבורים בזמן אמת: Graph API, Webhook Ingestion, Alert Delivery, Telegram Bot. ירוק = פעיל, צהוב = לא מוגדר.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔄</span><div><strong>Setup guide</strong> — כפתור עליון ימין — מדריך התקנה מהיר מובנה</div></li>
+    <li><span class="action-icon">✅</span><div><strong>Acknowledge</strong> — על כל Device Action — מאשר שהפעולה ידועה ומסיר מהבנר</div></li>
+    <li><span class="action-icon">⚡</span><div><strong>Trigger Test Alert</strong> (Mock Mode בלבד) — שולח alert דמו לבדיקת כל הזרימה</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ 02 ALERTS ═══════════════════════════ -->
+<div id="alerts" class="section">
+  <div class="section-header">
+    <div class="section-icon">⚡</div>
+    <div>
+      <h2>Alerts — Active Threats</h2>
+      <p>תחנת עבודה מרכזית לניהול כל האיומים הפעילים — Investigation, Approval, Collaboration</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/alerts</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/alerts.png" alt="Alerts"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">⚡ Alerts</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🎯 סינון מתקדם</h4>
+      <p>סינון לפי Status (Open/Assigned/Resolved) ו-Severity (Critical/High/Medium). חיפוש חופשי לפי משתמש, IP, מדינה, אפליקציה.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🏷️ תיוג אוטומטי</h4>
+      <p>כל alert מקבל Severity badge (CRITICAL/HIGH/MEDIUM) ו-Confidence badge (HIGH/MEDIUM CONFIDENCE) אוטומטית לפי אלגוריתם הזיהוי.</p>
+    </div>
+    <div class="feature-card">
+      <h4>👤 Assign & Ownership</h4>
+      <p>הקצאת alert לחבר צוות ספציפי. מעקב אחר בעלות ואחריות. שינוי בעלות מתוך ממשק ה-alert.</p>
+    </div>
+    <div class="feature-card">
+      <h4>✅ Approval Workflow</h4>
+      <p>פעולות קריטיות (Wipe, Block, Reset Password) עוברות Approval flow — מאושר, נדחה, או מוקצה לסגירה.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔍</span><div><strong>לחיצה על alert</strong> — פתיחת פאנל Investigation עם Timeline, Raw data, Evidence ו-Recommended actions</div></li>
+    <li><span class="action-icon">🙋</span><div><strong>Assign to me</strong> — לוקח בעלות על alert פתוח</div></li>
+    <li><span class="action-icon">✅</span><div><strong>Approve / Reject</strong> — אישור/דחייה של פעולה שדורשת Approval</div></li>
+    <li><span class="action-icon">📌</span><div><strong>Acknowledge</strong> — מאשר שהאיום נבדק, מעביר לסטטוס Documented</div></li>
+    <li><span class="action-icon">🔄</span><div><strong>Refresh</strong> — טעינה מחדש של התור מה-backend</div></li>
+    <li><span class="action-icon">👑</span><div><strong>Role owner</strong> — כפתור ימין עליון — מוסיף Role-based ownership לכל ה-tenant</div></li>
+  </ul>
+
+  <div class="tip-box">💡 <span>Alert עם badge <strong>HIGH CONFIDENCE</strong> = זוהה על ידי מספר אינדיקטורים בו-זמנית (IP חריג + מדינה חדשה + מכשיר לא מוכר). כאלה מחייבים טיפול מיידי.</span></div>
+</div>
+
+<!-- ═══════════════════════════════ 03 CASE BOARD ═══════════════════════ -->
+<div id="cases" class="section">
+  <div class="section-header">
+    <div class="section-icon">📋</div>
+    <div>
+      <h2>Case Board</h2>
+      <p>תור עבודה מבצעי עם SLA, הערות, אישורים מרוכזים ופעולות בכמות</p>
+    </div>
+    <span class="badge badge-ops">Overview</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/cases</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/cases.png" alt="Case Board"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">📋 Case Board</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>⏰ SLA Tracking</h4>
+      <p>ספירת Cases Overdue (חריגת SLA), Unassigned (לא מוקצים), Pending Approval, ו-Ready to Execute.</p>
+    </div>
+    <div class="feature-card">
+      <h4>⚡ Bulk Actions</h4>
+      <p>בחירת מספר cases יחד ועריכתם בבת אחת: Assign owner, Comment, Approve, Resolve, Dismiss.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🤖 Automation Sweep</h4>
+      <p>כפתור "Run automation sweep" — מריץ כלל-אוטומציה על כל ה-cases: מקצה, מסווג, מסמן Overdue ומריץ Approval flows.</p>
+    </div>
+    <div class="feature-card">
+      <h4>💬 Mentions & Comments</h4>
+      <p>שדה comment ישיר לכל case — ניתן לציין @משתמש, לתעד החלטות ולקשר לאירועים.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">📝</span><div><strong>Assign owner for selected</strong> — הכנסת כתובת מייל ולחיצת Assign(N) — מקצה בעלות על כל ה-cases המסומנים</div></li>
+    <li><span class="action-icon">💬</span><div><strong>Bulk comment / mention</strong> — הוספת הערה לכל ה-cases המסומנים בבת אחת</div></li>
+    <li><span class="action-icon">🔍</span><div><strong>סינון</strong> — לפי Case Status ולפי Approval Status</div></li>
+    <li><span class="action-icon">🤖</span><div><strong>Run automation sweep</strong> — מריץ את כל ה-SLA rules ו-automation policies</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ 04 EXPOSURE ═══════════════════════ -->
+<div id="exposure" class="section">
+  <div class="section-header">
+    <div class="section-icon">👥</div>
+    <div>
+      <h2>Exposure Center</h2>
+      <p>מעקב אחר זהויות בסיכון, הרשאות יתר ו-Blast Radius לכל חשבון מורשה</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/users</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/exposure.png" alt="Exposure Center"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">👥 Exposure</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🎯 Privileged Identity Watchlist</h4>
+      <p>טבלה של כל הזהויות בעלות הרשאות גבוהות, ממוינת לפי Risk Score. מציגה Roles, Account state, Open threats.</p>
+    </div>
+    <div class="feature-card">
+      <h4>💥 Blast Radius</h4>
+      <p>חישוב אוטומטי — כמה נזק יכול משתמש לגרום אם חשבונו נפרץ. כולל מפת Role spread ו-Suggested next steps.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🏥 Hygiene Score</h4>
+      <p>ציון היגיינה לכל זהות: MFA, Conditional Access, JIT status, Last sign-in. מזהה חשבונות שיכולים להיות בשימוש מיידי על ידי תוקף.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🎨 Risk Color Coding</h4>
+      <p>CRITICAL (אדום) / HIGH (כתום) / MEDIUM (צהוב) / CLEAN (ירוק). לחיצה על שורה פותחת פאנל פירוט מלא ימינה.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔍</span><div><strong>חיפוש</strong> — חיפוש לפי שם/UPN/Role</div></li>
+    <li><span class="action-icon">👁️</span><div><strong>לחיצה על שורה</strong> — פאנל "Exposure Drill" עם threat history, role assignment ו-hygiene signals</div></li>
+    <li><span class="action-icon">📊</span><div><strong>Ordered by risk</strong> — מיון לפי Risk Score יורד</div></li>
+  </ul>
+
+  <div class="warn-box">⚠️ <span>משתמש עם <strong>CRITICAL risk + Enabled account + Global Admin</strong> = סיכון מיידי. יש להפעיל Conditional Access Policy או לבצע MFA reset דחוף.</span></div>
+</div>
+
+<!-- ═══════════════════════════════ 05 SIGN-IN ACTIVITY ══════════════════ -->
+<div id="signins" class="section">
+  <div class="section-header">
+    <div class="section-icon">🔍</div>
+    <div>
+      <h2>Sign-in Activity</h2>
+      <p>לוג מלא של כל אירועי האותנטיקציה של משתמשי הרשאות גבוהות</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/signins</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/signins.png" alt="Sign-in Activity"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">🔍 Sign-in Activity</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🗂️ טבלת לוג מלאה</h4>
+      <p>כל שורה מציגה: Status (✓ Success / X Failed), Time, User, IP Address, Location, Device, Application, Risk Score.</p>
+    </div>
+    <div class="feature-card">
+      <h4>⏱️ Window filter</h4>
+      <p>בחירת חלון זמן: Last 24 hours, Last 48 hours, Last 7 days. הצגה מספר האירועים.</p>
+    </div>
+    <div class="feature-card">
+      <h4>❌ Failed only filter</h4>
+      <p>Checkbox לסינון כניסות כושלות בלבד — זיהוי מהיר של Brute Force או בעיות MFA.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🌍 Location-based Risk</h4>
+      <p>כניסה ממוסקבה, טוקיו או ממדינה שאינה מוכרת — מסומנת אוטומטית ב-HIGH risk badge.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔎</span><div><strong>Search</strong> — חיפוש לפי שם משתמש, IP, מדינה, שם אפליקציה</div></li>
+    <li><span class="action-icon">⏰</span><div><strong>Time window</strong> — Dropdown לבחירת טווח זמן (24h / 48h / 7d)</div></li>
+    <li><span class="action-icon">❌</span><div><strong>Failed only</strong> — Checkbox — מציג רק כניסות שנכשלו</div></li>
+    <li><span class="action-icon">🔴</span><div><strong>לחיצה על שורה</strong> — פתיחת פרטים מלאים כולל Raw token claims</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ 06 REMEDIATION ═══════════════════════ -->
+<div id="remediation" class="section">
+  <div class="section-header">
+    <div class="section-icon">🛠️</div>
+    <div>
+      <h2>Vulnerability Remediation</h2>
+      <p>סגירת vulnerabilities ישירות מהממשק — ללא כניסה לפורטל אחר</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/remediation</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/remediation.png" alt="Remediation"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">🛠️ Remediation</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>📋 Vulnerability List</h4>
+      <p>רשימת כל ה-CVEs ו-findings מ-Defender, עם סינון לפי: CVE ID, Product, Publisher, Category, Severity. כולל Remediation required only ו-Exposed devices only.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🗂️ 3 טאבים לכל Finding</h4>
+      <p><strong>Details</strong> — פרטי ה-CVE, חומרה, תיאור. <strong>Exposed Devices</strong> — מכשירים מושפעים. <strong>Remediation Plan</strong> — תוכנית ביצוע.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🤖 4 Executor Types</h4>
+      <p><strong>webapp</strong> — תיקון אפליקציות (Edge, Chrome, 7-Zip) דרך שירות חיצוני. <strong>Windows Update</strong> — עדכוני מערכת. <strong>Intune Policy</strong> — מדיניות Intune. <strong>Script</strong> — PowerShell Remediation.</p>
+    </div>
+    <div class="feature-card">
+      <h4>⚡ One-Click Execute</h4>
+      <p>לחיצת "Plan remediation" → בחינת הנתיב האוטומטי. לחיצת "Execute remediation" → ביצוע בפועל. תוצאה מוצגת עם ✅ / ❌ וסטטוס מפורט.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔍</span><div><strong>סינון</strong> — CVE ID, Product, Publisher, Category, Severity</div></li>
+    <li><span class="action-icon">📱</span><div><strong>Exposed devices tab</strong> — רשימת מכשירים חשופים עם Device ID ו-Device Name</div></li>
+    <li><span class="action-icon">📝</span><div><strong>Plan remediation</strong> — מחשב נתיב ביצוע אוטומטי לפי סוג ה-finding</div></li>
+    <li><span class="action-icon">▶️</span><div><strong>Execute remediation</strong> — מבצע את התיקון בפועל (מופיע רק כשהשירות מחובר ומוכן)</div></li>
+    <li><span class="action-icon">🔄</span><div><strong>Refresh plan</strong> — חישוב מחדש של תוכנית הביצוע</div></li>
+    <li><span class="action-icon">📌</span><div><strong>Admin Consent button</strong> — מופיע אם חסרות הרשאות Intune — לוחץ לבקשת Admin Consent</div></li>
+  </ul>
+
+  <div class="tip-box">💡 <span>אפליקציות כגון Microsoft Edge, Chrome, 7-Zip, Firefox מנותבות אוטומטית ל-<strong>Webapp Executor</strong> — שירות חיצוני ב-app.modernendpoint.tech שמזהה ומתקן ללא צורך בהגדרות נוספות.</span></div>
+</div>
+
+<!-- ═══════════════════════════════ 07 REPORTS ═══════════════════════════ -->
+<div id="reports" class="section">
+  <div class="section-header">
+    <div class="section-icon">📊</div>
+    <div>
+      <h2>Posture &amp; Reports</h2>
+      <p>דיווח ניהולי, ציוני סיכון, מגמות ובדיקות אינטגרציה</p>
+    </div>
+    <span class="badge badge-ops">Overview</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/reports</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/reports.png" alt="Reports"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">📊 Reports</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>📈 Executive Metrics</h4>
+      <p>Executive score, Avg risk score, MTTA (Mean Time to Acknowledge), MTTR (Mean Time to Resolve), Auto-contained incidents, Dismissed trend.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📄 Executive Narrative</h4>
+      <p>טקסט narrative אוטומטי מוכן להצגה לנהלת: סיכום הסיכונים, כמות חשבונות מנוטרים, אירועים שנראו, Retention period.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📥 Export Reports</h4>
+      <p>ייצוא ל-3 פורמטים: <strong>Executive PDF</strong> (מצגת לנהלת), <strong>Executive CSV</strong> (Excel), <strong>Executive JSON</strong> (API/SIEM). גם Monthly PDF זמין.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🧪 Integration Tests</h4>
+      <p><strong>Test Email Alert</strong> — שליחת מייל בדיקה ל-ALERT_ADMIN_EMAIL. <strong>Test Telegram Bot</strong> — שליחת alert לבוט עם כפתורי פעולה.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">📄</span><div><strong>↓ Executive PDF</strong> — יצירת PDF ניהולי מלא</div></li>
+    <li><span class="action-icon">📊</span><div><strong>↓ Executive CSV</strong> — ייצוא לאקסל לניתוח נוסף</div></li>
+    <li><span class="action-icon">📦</span><div><strong>↓ Executive JSON</strong> — ייצוא לשילוב ב-SIEM / API</div></li>
+    <li><span class="action-icon">✉️</span><div><strong>Send Test</strong> — שליחת מייל בדיקה לוידוא תקינות Mail.Send</div></li>
+    <li><span class="action-icon">📱</span><div><strong>Send Test Alert to Telegram</strong> — בדיקת Telegram bot עם כפתורי Approve/Reject</div></li>
+    <li><span class="action-icon">🗄️</span><div><strong>Retention 180d incidents</strong> — לחיצה מציגה אירועים ב-180 ימים אחרונים</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ 08 AUDIT CENTER ══════════════════════ -->
+<div id="audit" class="section">
+  <div class="section-header">
+    <div class="section-icon">📜</div>
+    <div>
+      <h2>Audit Center</h2>
+      <p>Evidence stream מלא לכל פעולה שבוצעה בפלטפורמה — לצרכי Compliance ו-Forensics</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/audit</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/audit.png" alt="Audit Center"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">📜 Audit Center</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🗂️ Evidence Stream</h4>
+      <p>כל פעולה שבוצעה: Responses, Playbook decisions, Policy changes, Workflow updates — עם timestamp, actor ו-context.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔢 Counter Cards</h4>
+      <p>מד מהיר: Events (סה"כ), Last 7 days, Settings changes, Session revokes.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔍 Searchable</h4>
+      <p>סינון לפי Action (keyword), Actor (All/ספציפי) ו-Date Range.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📥 Export CSV</h4>
+      <p>ייצוא ה-Evidence Stream המסונן ל-CSV לצרכי audit חיצוני, דיווח SOC או חקירה פורנזית.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔎</span><div><strong>Filter by action</strong> — חיפוש לפי סוג פעולה (e.g.: "workflow", "approve", "policy")</div></li>
+    <li><span class="action-icon">👤</span><div><strong>All actors</strong> — Dropdown — סינון לפי משתמש ספציפי שביצע פעולות</div></li>
+    <li><span class="action-icon">📅</span><div><strong>Date filter</strong> — בחירת תאריך מסוים לחקירה</div></li>
+    <li><span class="action-icon">📥</span><div><strong>↓ Export filtered CSV</strong> — ייצוא הנתונים המסוננים</div></li>
+    <li><span class="action-icon">🔄</span><div><strong>Refresh</strong> — טעינה מחדש של ה-Evidence stream</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ 09 PIM ANALYSIS ══════════════════════ -->
+<div id="pim" class="section">
+  <div class="section-header">
+    <div class="section-icon">🔑</div>
+    <div>
+      <h2>PIM Security Analysis</h2>
+      <p>ניתוח Privileged Identity Management — זיהוי Permanent Admins, חסר JIT, הרשאות יתר</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/pim</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/pim.png" alt="PIM Analysis"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">🔑 PIM Analysis</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🎓 PIM Score</h4>
+      <p>ציון A–F לפי מצב ה-PIM בארגון. D = Poor. מורכב מ: Permanent Roles, JIT Eligible, Global Admins, PIM Enabled status.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🚨 Findings</h4>
+      <p>ממצאים ספציפיים עם חומרה: "PIM Just-in-Time is not configured", "2 permanent Global Administrator assignments" — עם הוראות תיקון.</p>
+    </div>
+    <div class="feature-card">
+      <h4>💡 Recommendations</h4>
+      <p>המלצות עם Path מדויק: "Enable PIM → Entra Admin Center → Identity Governance → Privileged Identity Management → Discover". כולל Quick Win / Some effort labeling.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🛡️ Risk Labels</h4>
+      <p>כל המלצה מסומנת: CRITICAL/HIGH + RISK. כולל הסבר מדויק למה זה סיכון ("JIT access eliminates 80%+ of insider threat").</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">📋</span><div><strong>Findings</strong> — רשימת בעיות קיימות עם לחצן Remediation Path לכל אחת</div></li>
+    <li><span class="action-icon">💡</span><div><strong>Recommendations</strong> — צעדי תיקון מדורגים לפי עדיפות עם Quick Win marking</div></li>
+    <li><span class="action-icon">🔄</span><div><strong>Last analyzed</strong> — הצגת מתי בוצע הניתוח האחרון + Refresh</div></li>
+  </ul>
+
+  <div class="warn-box">⚠️ <span><strong>PIM Score D (Poor)</strong> = כל ה-Admin assignments הם Permanent ללא JIT. תוקף שמשיג גישה → יש לו הרשאות קבועות ללא חלון זמן. יש להפעיל Entra ID P2 ולהגדיר Eligible assignments.</span></div>
+</div>
+
+<!-- ═══════════════════════════════ 10 TENANT OPS ═══════════════════════ -->
+<div id="ops" class="section">
+  <div class="section-header">
+    <div class="section-icon">🏢</div>
+    <div>
+      <h2>Tenant Ops Dashboard</h2>
+      <p>תזמור מדיניות, הרשאות, Notification backlog ופעולות Fleet</p>
+    </div>
+    <span class="badge badge-mgmt">Management</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/ops</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/tenant.png" alt="Tenant Ops"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">🏢 Tenant Ops</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🏥 Health Controls</h4>
+      <p>Policy Pack Selector: Conservative / Balanced / Strict. בחירת מדיניות גלובלית לכל ה-tenant המשפיעה על Threshold, Auto-actions ו-Alert sensitivity.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🛡️ Orchestration Guardrails</h4>
+      <p>בקרות Phase 11: Cross-tenant sweep, Bulk notify, Disable approval requirement, Max tenants/run. מגן מפני פעולות בלתי מכוונות בקנה מידה גדול.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📊 Role Matrix</h4>
+      <p>מטריצת תפקידים נוכחית: מי מורשה לבצע אילו פעולות. ניהול הרשאות רמת-פלטפורמה.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📦 Multi-tenant Orchestration</h4>
+      <p>Phase 11 Fleet view: Fleet open alerts, Fleet overdue, Fleet pending approvals, Notification backlog — על כל ה-tenants יחד.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🤖</span><div><strong>Run automation sweep (0)</strong> — הרצת sweep אוטומציה על כל ה-tenant fleet</div></li>
+    <li><span class="action-icon">📋</span><div><strong>Queue review notice</strong> — שליחת הודעת review לכל בעלי cases</div></li>
+    <li><span class="action-icon">☑️</span><div><strong>Select all</strong> — בחירת כל ה-tenants לפעולה מרוכזת</div></li>
+    <li><span class="action-icon">⚖️</span><div><strong>Policy pack buttons</strong> — Conservative / Balanced / Strict — שינוי מדיניות גלובלית</div></li>
+    <li><span class="action-icon">📈</span><div><strong>Workflow vs response trend</strong> — גרף מגמה של זמן תגובה vs. volume</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ 11 MSP FLEET ═════════════════════════ -->
+<div id="msp" class="section">
+  <div class="section-header">
+    <div class="section-icon">🌐</div>
+    <div>
+      <h2>MSP Fleet Dashboard</h2>
+      <p>ניהול multi-tenant — כל הלקוחות במבט אחד עם סטטוס אבטחה מרוכז</p>
+    </div>
+    <span class="badge badge-mgmt">Management</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/msp</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/msp.png" alt="MSP Fleet"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">🌐 MSP Fleet</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>🏢 All Tenants View</h4>
+      <p>כרטיס לכל tenant מחובר עם: Critical Alerts, Open Alerts, Need Action, All Clear. מיון לפי Highest Risk.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🚨 Fleet Counters</h4>
+      <p>מד מרוכז: סך Tenants, Critical Alerts בכל ה-fleet, Open Alerts, Need Action, All Clear.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔗 Quick Connect</h4>
+      <p>שיתוף URL התחברות עם לקוחות חדשים. הם מבצעים Admin Consent בצד שלהם ונוספים אוטומטית לרשימה.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📊 Sort by Risk</h4>
+      <p>מיון ה-tenants לפי Highest Risk מעלה — הלקוח עם הסיכון הגבוה ביותר תמיד ראשון.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔗</span><div><strong>Share login URL</strong> — העתקת URL לשיתוף עם לקוחות חדשים</div></li>
+    <li><span class="action-icon">📊</span><div><strong>Sort: Highest Risk</strong> — Dropdown מיון Fleet</div></li>
+    <li><span class="action-icon">🏢</span><div><strong>לחיצה על Tenant card</strong> — כניסה לממשק של ה-tenant הספציפי</div></li>
+  </ul>
+
+  <div class="tip-box">💡 <span>MSP Fleet מיועד ל-Managed Service Providers המנהלים מספר לקוחות. כל לקוח מתחבר פעם אחת דרך Admin Consent ואז מנוטר אוטומטית.</span></div>
+</div>
+
+<!-- ═══════════════════════════════ 12 SETTINGS ══════════════════════════ -->
+<div id="settings" class="section">
+  <div class="section-header">
+    <div class="section-icon">⚙️</div>
+    <div>
+      <h2>Settings</h2>
+      <p>הגדרות per-tenant: Detection rules, Notifications, Admins, Approvals, SIEM integrations</p>
+    </div>
+    <span class="badge badge-mgmt">Management</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/settings</div>
+    </div>
+    <img class="screenshot-img" src="screenshots/settings.png" alt="Settings"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">⚙️ Settings</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>💳 Plan &amp; Trial</h4>
+      <p>מציג תוכנית נוכחית ותוקף Trial. Notification Center snapshot עם Unread / Approval / Mentions / Escalations counters.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔍 Detection Rules</h4>
+      <p>כיוון רגישות זיהוי: Impossible Travel, New Country, Unrecognized Device, Suspicious App. כל כלל ניתן לפעיל/כיבוי ולהגדרת Threshold.</p>
+    </div>
+    <div class="feature-card">
+      <h4>⚡ Auto-Actions</h4>
+      <p>פעולות אוטומטיות לפי חומרה: Block user, Reset MFA, Require re-auth, Send Telegram alert. הגדרת תנאי הפעלה.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔔 Notifications</h4>
+      <p>הגדרת נמענים: Email recipients, Telegram Chat IDs. בחירת Notification triggers לפי severity וסוג אירוע.</p>
+    </div>
+    <div class="feature-card">
+      <h4>👥 Admins</h4>
+      <p>ניהול מי יכול לגשת לפלטפורמה ובאיזו רמת הרשאה (SOC Analyst / Security Manager / Admin).</p>
+    </div>
+    <div class="feature-card">
+      <h4>✅ Automation &amp; Approvals</h4>
+      <p>הגדרת אילו פעולות דורשות Approval דו-שלבי לפני ביצוע (Wipe, Block, Password Reset). הגדרת Approvers list.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🚫 Whitelist</h4>
+      <p>הוספת IPs, Users, Countries ל-Whitelist — לא יייצרו alerts. שימושי עבור MSP IPs, Traveling executives.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🏢 Business Hours</h4>
+      <p>הגדרת שעות עסקים — alert בשעות לא עסקיות מקבל Higher severity אוטומטית.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📡 SIEM &amp; Log Analytics</h4>
+      <p>חיבור ל-SIEM חיצוני (Sentinel, Splunk): Webhook URL, API Key, Log format (CEF/JSON).</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">💳</span><div><strong>Plan &amp; Trial</strong> — תב ראשון — מצב תוכנית והתראות</div></li>
+    <li><span class="action-icon">🔍</span><div><strong>Detection</strong> — כיוון כללי זיהוי ורגישות</div></li>
+    <li><span class="action-icon">⚡</span><div><strong>Auto-Actions</strong> — פעולות אוטומטיות לפי trigger</div></li>
+    <li><span class="action-icon">👥</span><div><strong>Admins</strong> — ניהול גישה לפלטפורמה</div></li>
+    <li><span class="action-icon">🔔</span><div><strong>Notifications</strong> — ניהול נמענים</div></li>
+    <li><span class="action-icon">✅</span><div><strong>Automation &amp; Approvals</strong> — Approval workflows</div></li>
+    <li><span class="action-icon">🚫</span><div><strong>Whitelist</strong> — IPs/Users/Countries חוקיים</div></li>
+    <li><span class="action-icon">🕒</span><div><strong>Business Hours</strong> — שעות עסקים לניטור</div></li>
+    <li><span class="action-icon">📡</span><div><strong>SIEM &amp; Log Analytics</strong> — חיבור ל-SIEM חיצוני</div></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════ FOOTER ══════════════════════════════ -->
+<div style="background:#161b22; border-top:1px solid #30363d; padding:40px 60px; text-align:center; color:#8b949e; font-size:13px;">
+  <div style="font-size:32px; margin-bottom:12px;">🛡️</div>
+  <div style="font-size:16px; font-weight:700; color:#e6edf3; margin-bottom:8px;">IdentityMonitor — Modern Endpoint</div>
+  <div>מדריך זה מכסה את כל 12 הדפים של הפלטפורמה. לתמיכה נוספת — פנה לצוות Modern Endpoint.</div>
+  <div style="margin-top:16px; display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
+    <a href="https://identitymonitor.modernendpoint.tech" style="color:#6366f1; text-decoration:none;">🌐 identitymonitor.modernendpoint.tech</a>
+    <span>|</span>
+    <span>📅 מרץ 2026</span>
+  </div>
+</div>
+
+</body>
+</html>

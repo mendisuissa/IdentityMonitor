@@ -292,7 +292,7 @@ export default function LoginPage({ onLogin }: Props) {
 
         <div style={styles.footer}>
           <div>One-time admin consent per tenant</div>
-          <div>Your credentials are never stored — tokens expire after 8 hours</div>
+          <div>Your credentials are never stored — session expires after 24 hours of inactivity</div>
         </div>
       </div>
     </div>
