@@ -713,7 +713,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       try {
         const [config, result] = await Promise.all([
           api.getDefenderTenantConfig(),
-          api.getDefenderVulnerabilities(0)  // 0 = fetch all
+          api.getDefenderVulnerabilities(500)  // load top 500; specific CVEs fetched on-demand via direct lookup
         ]);
         if (!mounted) return;
         const items = Array.isArray(result?.items) ? result.items : [];
