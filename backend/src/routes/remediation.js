@@ -172,7 +172,9 @@ router.post('/execute', async (req, res) => {
       try {
         const result = await executeApplicationRemediation({ tenantId, approvalId, finding: enrichedFinding, devices, plan, options });
         return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'webapp', result });
-      } catch (_error) {
+      } catch (execError) {
+        console.error('[Remediation/execute] webapp call failed:', execError?.message, execError?.status, JSON.stringify(execError?.details || {}));
+        const isNotSupported = execError?.status === 400;
         return res.json({
           ok: true,
           tenantId,
@@ -180,9 +182,11 @@ router.post('/execute', async (req, res) => {
           forwardedTo: 'webapp',
           result: {
             supported: false,
-            status: 'external-not-connected',
+            status: isNotSupported ? 'unsupported-application' : 'external-error',
             executionMode: 'guided-manual',
-            message: 'External application remediation is not connected. Review the plan and connect the Webapp remediation service first.'
+            message: isNotSupported
+              ? 'No automated remediation path was found for this application. Use the bundle or manual steps below.'
+              : (execError?.message || 'The external remediation service returned an unexpected error.'),
           }
         });
       }
