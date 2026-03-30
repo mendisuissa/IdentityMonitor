@@ -7,7 +7,7 @@ const DEFENDER_API_BASE = 'https://api.security.microsoft.com';
 
 const vulnerabilityCache = new Map();
 const VULNERABILITY_CACHE_TTL_MS = Number(process.env.DEFENDER_VULNERABILITY_CACHE_TTL_MS || 5 * 60 * 1000);
-const VULNERABILITY_CACHE_MAX_TOP = Number(process.env.DEFENDER_VULNERABILITY_CACHE_MAX_TOP || 1000);
+const VULNERABILITY_CACHE_MAX_TOP = Number(process.env.DEFENDER_VULNERABILITY_CACHE_MAX_TOP || 5000);
 
 function getVulnerabilityCacheKey(tenantId) {
   return String(tenantId || '').trim().toLowerCase();
@@ -522,10 +522,36 @@ async function listTenantVulnerabilityMachines(tenantId, cveId, top = 100) {
   return { count: items.length, items };
 }
 
+/**
+ * Fetch a single CVE directly from Defender by ID.
+ * Used when the CVE is not in the cached vulnerability list (e.g. low-exposure CVEs).
+ */
+async function getTenantVulnerabilityByCveId(tenantId, cveId) {
+  const normalized = String(cveId || '').toUpperCase().trim();
+  if (!normalized.startsWith('CVE-')) return null;
+
+  // Check cache first
+  const cacheEntry = readVulnerabilityCache(tenantId);
+  if (cacheEntry) {
+    const found = cacheEntry.items.find((item) =>
+      String(item.cveId || item.id || '').toUpperCase() === normalized
+    );
+    if (found) return found;
+  }
+
+  // Fetch directly from Defender
+  const { config } = await getTenantConfigOrThrow(tenantId);
+  const data = await defenderGet(config, `/api/vulnerabilities/${encodeURIComponent(normalized)}`).catch(() => null);
+  if (!data) return null;
+
+  return normalizeVulnerability(data);
+}
+
 module.exports = {
   listTenantVulnerabilities,
   listTenantRecommendations,
   listTenantVulnerabilityMachines,
+  getTenantVulnerabilityByCveId,
   getTenantConfigOrThrow,
   readVulnerabilityCache,
 };

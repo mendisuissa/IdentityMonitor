@@ -5,6 +5,7 @@ const {
   listTenantVulnerabilities,
   listTenantRecommendations,
   listTenantVulnerabilityMachines,
+  getTenantVulnerabilityByCveId,
   readVulnerabilityCache,
 } = require('../services/tenantDefenderClient');
 const { enrichFinding } = require('../services/remediationCatalog');
@@ -216,6 +217,35 @@ router.get('/recommendations', async (req, res) => {
       error: friendly.message,
       details: friendly.details,
     });
+  }
+});
+
+router.get('/vulnerabilities/:cveId', async (req, res) => {
+  try {
+    const tenantId = resolveActiveTenantId(req);
+    if (!tenantId) {
+      return res.status(401).json({ ok: false, error: 'No authenticated tenant session was found for this request.' });
+    }
+
+    const cveId = String(req.params.cveId || '').toUpperCase();
+    if (!cveId.startsWith('CVE-')) {
+      return res.status(400).json({ ok: false, error: 'Invalid CVE identifier. Must start with CVE-.' });
+    }
+
+    const item = await getTenantVulnerabilityByCveId(tenantId, cveId);
+    if (!item) {
+      return res.status(404).json({ ok: false, tenantId, cveId, error: 'CVE not found in Defender for this tenant.' });
+    }
+
+    const { enrichFinding } = require('../services/remediationCatalog');
+    return res.json({ ok: true, tenantId, cveId, item: enrichFinding(item) });
+  } catch (error) {
+    const friendly = getFriendlyError(error);
+    if (friendly.requiresAdminConsent) {
+      const consent = buildConsentResponse(req, resolveActiveTenantId(req), friendly.message, friendly.details, friendly.statusCode);
+      return res.status(consent.statusCode).json(consent.payload);
+    }
+    return res.status(friendly.statusCode).json({ ok: false, error: friendly.message, details: friendly.details });
   }
 });
 

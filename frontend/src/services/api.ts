@@ -444,6 +444,9 @@ export const api = {
     return apiFetch<any>(`/defender/vulnerabilities${q ? `?${q}` : ''}`);
   },
 
+  getDefenderVulnerabilityByCveId: (cveId: string) =>
+    apiFetch<any>(`/defender/vulnerabilities/${encodeURIComponent(cveId)}`),
+
   getDefenderVulnerabilityMachines: (cveId: string, top = 0) =>
     apiFetch<any>(top > 0 ? `/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines?top=${top}` : `/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines`),
 
