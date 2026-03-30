@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: azure-staging
+  group: azure-production
   cancel-in-progress: false
 
 jobs:

@@ -71,6 +71,25 @@ jobs:
             exit 1
           fi
 
+      - name: Wait for staging to become healthy
+        run: |
+          URL="${{ steps.get-staging-url.outputs.url }}/api/health"
+          echo "Polling: $URL"
+          for i in $(seq 1 36); do
+            STATUS=$(curl -s -o /tmp/curl_body -w "%{http_code}" \
+              --connect-timeout 10 --max-time 15 "$URL" 2>/tmp/curl_err) || STATUS="000"
+            echo "Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Staging is healthy"
+              break
+            fi
+            if [ "$i" = "36" ]; then
+              echo "❌ Staging did not become healthy after 3 minutes"
+              exit 1
+            fi
+            sleep 5
+          done
+
       - name: Final smoke test on staging
         run: node backend/tests/smoke.js
         env:
