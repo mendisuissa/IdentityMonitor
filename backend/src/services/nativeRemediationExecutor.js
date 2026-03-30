@@ -117,7 +117,15 @@ function extractGraphError(error) {
   if (status >= 500 || lower.includes('unknownerror') || lower.includes('internal error')) {
     return {
       code: 'windows-update-service-unavailable',
-      message: 'Microsoft Graph Windows Update deployment APIs returned an internal error for this tenant. This usually means the tenant or targeted devices are not ready for Windows Update deployment service execution yet.',
+      message: [
+        'Microsoft Graph Windows Update deployment APIs returned an internal error for this tenant.',
+        '',
+        'Common causes:',
+        '• The targeted device is a Windows Server — WUfB Deployment Service only supports Windows 10/11 Client devices. Use Azure Update Manager for servers.',
+        '• Devices are not yet enrolled in the Windows Update for Business deployment service. Enrollment happens automatically when Intune-managed Windows 10 21H2+ / Windows 11 devices check in.',
+        '• The WindowsUpdates.ReadWrite.All Application permission is missing or admin consent has not been granted.',
+        '• No active Windows Update ring policy exists in Intune for this tenant.',
+      ].join('\n'),
       technical: rawMessage,
     };
   }
