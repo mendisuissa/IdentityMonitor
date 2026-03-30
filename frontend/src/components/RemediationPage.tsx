@@ -713,7 +713,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       try {
         const [config, result] = await Promise.all([
           api.getDefenderTenantConfig(),
-          api.getDefenderVulnerabilities(250)
+          api.getDefenderVulnerabilities(0)  // 0 = fetch all
         ]);
         if (!mounted) return;
         const items = Array.isArray(result?.items) ? result.items : [];
@@ -762,6 +762,26 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   useEffect(() => {
     setSelectedIndex(0);
   }, [search, filterCve, filterProduct, filterPublisher, filterCategory, filterSeverity, remediationRequiredOnly, exposedDevicesOnly]);
+
+  // When user types a specific CVE ID and it's not in the loaded list → fetch it directly
+  useEffect(() => {
+    const cvePattern = /^CVE-\d{4}-\d+$/i;
+    const trimmed = filterCve.trim();
+    if (!cvePattern.test(trimmed)) return;
+    if (findings.some((f) => (f.cveId || f.id || '').toUpperCase() === trimmed.toUpperCase())) return;
+
+    let mounted = true;
+    api.getDefenderVulnerabilityByCveId(trimmed.toUpperCase())
+      .then((res: any) => {
+        if (!mounted || !res?.item) return;
+        setFindings((prev: any[]) => {
+          const already = prev.some((f) => (f.cveId || f.id || '').toUpperCase() === trimmed.toUpperCase());
+          return already ? prev : [res.item, ...prev];
+        });
+      })
+      .catch(() => {/* not found — filter will just show 0 results */});
+    return () => { mounted = false; };
+  }, [filterCve, findings.length]);
 
   const selectedFinding = useMemo(() => filteredFindings[selectedIndex] || null, [filteredFindings, selectedIndex]);
   const selectedExecutor = planResult?.plan?.executor || null;
