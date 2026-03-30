@@ -1351,8 +1351,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
                       <div className="plan-actions-row">
                         <button className="btn btn-secondary" onClick={handlePlan} disabled={planning}>{planning ? 'Refreshing…' : 'Refresh plan'}</button>
-                        {/* Webapp: show Execute only when connected AND plan is supported */}
-                        {isWebappExecutor && planResult.plan.external?.connected && planResult.plan.supported !== false && planResult.plan.executionMode !== 'guided-manual' && (
+                        {/* Webapp: show Execute when connected (webapp will attempt deep resolution on execute) */}
+                        {isWebappExecutor && planResult.plan.external?.connected && planResult.plan.executionMode !== 'guided-manual' && (
                           <button className="btn btn-primary" onClick={handleExecute} disabled={executing}>{executing ? 'Executing…' : 'Execute remediation'}</button>
                         )}
                         {/* Native executors: use autoRemediate + executionMode guards */}
