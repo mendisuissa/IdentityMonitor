@@ -7,7 +7,7 @@ const DEFENDER_API_BASE = 'https://api.security.microsoft.com';
 
 const vulnerabilityCache = new Map();
 const VULNERABILITY_CACHE_TTL_MS = Number(process.env.DEFENDER_VULNERABILITY_CACHE_TTL_MS || 5 * 60 * 1000);
-const VULNERABILITY_CACHE_MAX_TOP = Number(process.env.DEFENDER_VULNERABILITY_CACHE_MAX_TOP || 5000);
+const VULNERABILITY_CACHE_MAX_TOP = Number(process.env.DEFENDER_VULNERABILITY_CACHE_MAX_TOP || 1000);
 
 function getVulnerabilityCacheKey(tenantId) {
   return String(tenantId || '').trim().toLowerCase();
