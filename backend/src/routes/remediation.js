@@ -8,7 +8,8 @@ const {
 const {
   planNativeRemediation,
   executeNativeRemediation,
-  listTenantConfigurationPolicies
+  listTenantConfigurationPolicies,
+  listTenantDeviceScripts
 } = require('../services/nativeRemediationExecutor');
 const { BUILT_IN_POLICY_TEMPLATES, getRecommendedPolicyTemplates } = require('../services/builtInPolicyTemplates');
 
@@ -54,6 +55,16 @@ router.get('/catalog/intune-policies', async (req, res) => {
       builtIn: BUILT_IN_POLICY_TEMPLATES,
       tenantPolicies,
     });
+  } catch (error) {
+    return res.status(error.status || 500).json({ ok: false, error: error.message, details: error.details || null });
+  }
+});
+
+router.get('/catalog/intune-scripts', async (req, res) => {
+  try {
+    const tenantId = getTenantIdFromRequest({ session: req.session, body: { tenantId: req.query?.tenantId || null } });
+    const scripts = await listTenantDeviceScripts(tenantId);
+    res.json({ ok: true, tenantId, scripts });
   } catch (error) {
     return res.status(error.status || 500).json({ ok: false, error: error.message, details: error.details || null });
   }

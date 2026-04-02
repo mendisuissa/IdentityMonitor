@@ -196,6 +196,110 @@ async function resolveManagedDeviceTargets(tenantId, options = {}, finding = {})
   };
 }
 
+const POWERSHELL_SCRIPT_TEMPLATES = {
+  'Update Microsoft Edge': `$ErrorActionPreference = 'Continue'
+$paths = @("${env:ProgramFiles(x86)}\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe","${env:ProgramFiles}\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe")
+$updater = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($updater) { Start-Process -FilePath $updater -ArgumentList "/silent /update" -Wait; Write-Output "Microsoft Edge update triggered." }
+else { Write-Output "MicrosoftEdgeUpdate.exe not found."; exit 1 }`,
+
+  'Update Google Chrome': `$ErrorActionPreference = 'Continue'
+$paths = @("${env:ProgramFiles(x86)}\\Google\\Update\\GoogleUpdate.exe","${env:ProgramFiles}\\Google\\Update\\GoogleUpdate.exe")
+$updater = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($updater) { Start-Process -FilePath $updater -ArgumentList "/ua /installsource scheduler" -Wait; Write-Output "Google Chrome update triggered." }
+else { Write-Output "GoogleUpdate.exe not found."; exit 1 }`,
+
+  'Restart Microsoft Edge': `Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Stop-Process -Force
+Write-Output "Microsoft Edge processes stopped."`,
+
+  'Clear Edge cache': `$ErrorActionPreference = 'Continue'
+Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$cachePath = "$env:LOCALAPPDATA\\Microsoft\\Edge\\User Data\\Default\\Cache"
+if (Test-Path $cachePath) { Remove-Item -Path "$cachePath\\*" -Recurse -Force -ErrorAction SilentlyContinue; Write-Output "Edge cache cleared." }
+else { Write-Output "Edge cache path not found." }`,
+
+  'Reset Windows Update components': `$ErrorActionPreference = 'Continue'
+$svcs = @('wuauserv','cryptsvc','bits','msiserver')
+foreach ($s in $svcs) { Stop-Service -Name $s -Force -ErrorAction SilentlyContinue }
+Rename-Item "$env:SystemRoot\\SoftwareDistribution" "SoftwareDistribution.bak" -ErrorAction SilentlyContinue
+Rename-Item "$env:SystemRoot\\System32\\catroot2" "catroot2.bak" -ErrorAction SilentlyContinue
+foreach ($s in $svcs) { Start-Service -Name $s -ErrorAction SilentlyContinue }
+Write-Output "Windows Update components reset."`,
+
+  'Trigger Windows Update scan': `UsoClient.exe StartScan
+Write-Output "Windows Update scan triggered."`,
+
+  'Repair Windows Update services': `$ErrorActionPreference = 'Continue'
+Stop-Service wuauserv -Force -ErrorAction SilentlyContinue
+$dlls = @('wuapi.dll','wuaueng.dll','wucltui.dll','wups.dll','wups2.dll','wuweb.dll','qmgr.dll','qmgrprxy.dll','wucltux.dll','muweb.dll','wuwebv.dll','atl.dll','urlmon.dll','mshtml.dll','softpub.dll','wintrust.dll','initpki.dll','dssenh.dll','rsaenh.dll','ole32.dll','oleaut32.dll')
+foreach ($dll in $dlls) { regsvr32.exe /s $dll 2>$null }
+Start-Service wuauserv -ErrorAction SilentlyContinue
+Write-Output "Windows Update services repaired."`,
+
+  'Force Intune device sync': `$ErrorActionPreference = 'Continue'
+Get-ScheduledTask -TaskName "Schedule*" -TaskPath "\\Microsoft\\Windows\\EnterpriseMgmt\\" -ErrorAction SilentlyContinue | Start-ScheduledTask -ErrorAction SilentlyContinue
+Write-Output "Intune device sync triggered."`,
+
+  'Repair MDM enrollment tasks': `$ErrorActionPreference = 'Continue'
+Get-ScheduledTask -TaskPath "\\Microsoft\\Windows\\EnterpriseMgmt\\" -ErrorAction SilentlyContinue | Start-ScheduledTask -ErrorAction SilentlyContinue
+Get-ScheduledTask -TaskPath "\\Microsoft\\Windows\\EnterpriseMgmtNonCritical\\" -ErrorAction SilentlyContinue | Start-ScheduledTask -ErrorAction SilentlyContinue
+Write-Output "MDM enrollment tasks triggered."`,
+
+  'Clear Teams cache': `$ErrorActionPreference = 'Continue'
+Get-Process -Name "Teams","ms-teams" -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+$paths = @("$env:APPDATA\\Microsoft\\Teams\\Cache","$env:APPDATA\\Microsoft\\Teams\\blob_storage","$env:APPDATA\\Microsoft\\Teams\\databases","$env:APPDATA\\Microsoft\\Teams\\GPUCache","$env:APPDATA\\Microsoft\\Teams\\IndexedDB","$env:APPDATA\\Microsoft\\Teams\\Local Storage","$env:APPDATA\\Microsoft\\Teams\\tmp")
+foreach ($p in $paths) { if (Test-Path $p) { Remove-Item -Path "$p\\*" -Recurse -Force -ErrorAction SilentlyContinue } }
+Write-Output "Teams cache cleared."`,
+
+  'Repair Office Click-to-Run': `$ErrorActionPreference = 'Continue'
+$paths = @("${env:ProgramFiles}\\Common Files\\microsoft shared\\ClickToRun\\OfficeClickToRun.exe","${env:ProgramFiles(x86)}\\Common Files\\microsoft shared\\ClickToRun\\OfficeClickToRun.exe")
+$c2r = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($c2r) { Start-Process -FilePath $c2r -ArgumentList "scenario=Repair RepairType=FullRepair DisplayLevel=None AcceptEula=True" -Wait; Write-Output "Office Click-to-Run repair started." }
+else { Write-Output "Office Click-to-Run not found."; exit 1 }`,
+
+  'Refresh Defender signatures': `Update-MpSignature -ErrorAction SilentlyContinue
+Write-Output "Microsoft Defender signatures refresh triggered."`,
+};
+
+async function findExistingDeviceManagementScript(tenantId, displayName) {
+  try {
+    const safe = String(displayName || '').replace(/'/g, "''");
+    const result = await graphBetaRequest(tenantId, `/deviceManagement/deviceManagementScripts?$filter=displayName eq '${safe}'&$select=id,displayName`);
+    return (result?.value || [])[0] || null;
+  } catch (err) {
+    console.warn('[Remediation] deviceManagementScripts lookup failed:', err?.message);
+    return null;
+  }
+}
+
+async function createDeviceManagementScript(tenantId, displayName, scriptContent) {
+  const fileName = displayName.replace(/[^a-zA-Z0-9_\- ]/g, '').replace(/\s+/g, '_').replace(/_+/g, '_').substring(0, 64) + '.ps1';
+  const scriptContentBase64 = Buffer.from(scriptContent, 'utf8').toString('base64');
+  return graphBetaRequest(tenantId, '/deviceManagement/deviceManagementScripts', {
+    method: 'POST',
+    body: { displayName, description: `Auto-created by IdentityMonitor remediation — ${new Date().toISOString()}`, scriptContent: scriptContentBase64, runAsAccount: 'system', enforceSignatureCheck: false, runAs32Bit: false, fileName },
+  });
+}
+
+async function assignDeviceManagementScriptAllDevices(tenantId, scriptId) {
+  return graphBetaRequest(tenantId, `/deviceManagement/deviceManagementScripts/${scriptId}/assign`, {
+    method: 'POST',
+    body: { deviceManagementScriptAssignments: [{ target: { '@odata.type': '#microsoft.graph.allDevicesAssignmentTarget' } }] },
+  });
+}
+
+async function listTenantDeviceScripts(tenantId) {
+  try {
+    const page = await graphBetaRequest(tenantId, '/deviceManagement/deviceManagementScripts?$select=id,displayName,description,fileName,runAsAccount&$top=50');
+    return (page?.value || []).map((item) => ({ id: item.id, displayName: item.displayName, description: item.description || '', fileName: item.fileName || null, runAsAccount: item.runAsAccount || null }));
+  } catch (err) {
+    console.warn('[Remediation] Could not list deviceManagementScripts:', err?.message);
+    return [];
+  }
+}
+
 async function resolveDeviceHealthScriptId(tenantId, input = '') {
   const raw = String(input || '').trim();
   if (!raw) return null;
@@ -355,65 +459,117 @@ async function executeIntunePolicy({ tenantId, finding = {}, options = {} }) {
   return { queued: true, supported: true, status: 'live-deploy', executionMode: 'native-policy-assign', policyId, groupId, target: `${policyInput || policyId}|${groupId}`, notes: options.notes || '', summary: 'Assigned the Intune configuration policy to the supplied Entra group.', message: 'Intune policy assignment was submitted through Microsoft Graph.' };
 }
 async function executeScriptRemediation({ tenantId, finding = {}, options = {} }) {
-  const scriptPolicyId = await resolveDeviceHealthScriptId(tenantId, options.scriptPolicyId || options.scriptName || finding?.productName || finding?.name || '');
-  if (!scriptPolicyId) {
-    // deviceHealthScripts requires Intune Suite / Plan 2 — return guided-manual fallback
+  const scriptInput = options.scriptPolicyId || options.scriptName || finding?.productName || finding?.name || '';
+  const scriptPolicyId = await resolveDeviceHealthScriptId(tenantId, scriptInput);
+
+  if (scriptPolicyId) {
+    // Path 1: Device Health Script (on-demand, requires Intune Suite / Plan 2)
+    const targets = await resolveManagedDeviceTargets(tenantId, options, finding);
+    if (!targets.managedTargets.length) {
+      const err = new Error('No Intune managed devices could be resolved from the supplied devices. Load Exposed devices first or enter Microsoft Entra device IDs manually.');
+      err.status = 400;
+      err.details = { sourceInputs: targets.sourceInputs, unmatchedInputs: targets.unmatchedManagedDeviceInputs };
+      throw err;
+    }
+    const results = [];
+    for (const target of targets.managedTargets) {
+      try {
+        await graphBetaRequest(tenantId, `/deviceManagement/managedDevices/${target.managedDeviceId}/initiateOnDemandProactiveRemediation`, {
+          method: 'POST',
+          body: { scriptPolicyId }
+        });
+        results.push({ ok: true, managedDeviceId: target.managedDeviceId, azureADDeviceId: target.azureADDeviceId, deviceName: target.deviceName || null });
+      } catch (error) {
+        results.push({ ok: false, managedDeviceId: target.managedDeviceId, azureADDeviceId: target.azureADDeviceId, deviceName: target.deviceName || null, error: error?.message || 'Failed to start proactive remediation.' });
+      }
+    }
+    const successCount = results.filter((item) => item.ok).length;
+    const failed = results.filter((item) => !item.ok);
+    return {
+      queued: successCount > 0,
+      supported: successCount > 0,
+      status: failed.length ? (successCount ? 'partial-success' : 'script-execution-failed') : 'live-deploy',
+      executionMode: 'native-script-now',
+      scriptPolicyId,
+      resolvedTargets: { sourceInputs: targets.sourceInputs, resolvedDeviceIds: targets.resolvedDeviceIds, unmatchedInputs: targets.unmatchedManagedDeviceInputs },
+      targetDevices: results,
+      summary: failed.length ? `Started proactive remediation on ${successCount} device(s); ${failed.length} device(s) failed.` : `Started proactive remediation on ${successCount} device(s).`,
+      message: failed.length ? 'On-demand proactive remediation was started for some devices. Review per-device results.' : 'On-demand proactive remediation was started successfully.',
+      notes: options.notes || ''
+    };
+  }
+
+  // Path 2: Create/assign a deviceManagementScript (standard Intune, no Suite required)
+  // Script will run on all Intune-managed devices at next check-in (~30 min).
+  const templateContent = POWERSHELL_SCRIPT_TEMPLATES[scriptInput] || null;
+  const scriptDisplayName = scriptInput
+    ? scriptInput.substring(0, 100)
+    : `Remediation — ${(finding?.productName || finding?.name || 'unknown').substring(0, 80)}`;
+
+  if (!templateContent && !isGuid(scriptInput)) {
     return {
       queued: false,
       supported: false,
       status: 'manual-review-required',
       executionMode: 'guided-manual',
-      message: 'Device Health Scripts (Intune Suite / Plan 2) are not available for this tenant. Use manual remediation instead.',
-      statusCard: {
-        code: 'intune-suite-required',
-        label: 'Intune Suite required',
-        tone: 'warning',
-        message: 'deviceHealthScripts requires Intune Suite or Plan 2 license.'
-      },
+      message: `No Device Health Script found matching "${scriptInput}" and no built-in script template is available for this name. Select a built-in script option from the dropdown or enter an existing Intune script ID.`,
+      statusCard: { code: 'script-not-found', label: 'script not found', tone: 'warning', message: 'Select a built-in script option or enter a valid script ID.' },
       manualSteps: [
-        'Open Microsoft Intune admin center (intune.microsoft.com).',
-        `Search for devices affected by "${finding?.productName || finding?.name || 'this vulnerability'}".`,
-        'Apply the recommended update or remediation action manually.',
-        'Document the action taken and close the case.'
+        'Open Microsoft Intune admin center > Devices > Scripts.',
+        `Create a PowerShell script for "${finding?.productName || finding?.name || 'this vulnerability'}".`,
+        'Assign it to the affected device group.',
+        'Monitor the script run status in Intune.'
       ],
       notes: options.notes || ''
     };
   }
-  const targets = await resolveManagedDeviceTargets(tenantId, options, finding);
-  if (!targets.managedTargets.length) {
-    const err = new Error('No Intune managed devices could be resolved from the supplied devices. Load Exposed devices first or enter Microsoft Entra device IDs manually.');
-    err.status = 400;
-    err.details = { sourceInputs: targets.sourceInputs, unmatchedInputs: targets.unmatchedManagedDeviceInputs };
-    throw err;
-  }
-  const results = [];
-  for (const target of targets.managedTargets) {
-    try {
-      await graphBetaRequest(tenantId, `/deviceManagement/managedDevices/${target.managedDeviceId}/initiateOnDemandProactiveRemediation`, {
-        method: 'POST',
-        body: { scriptPolicyId }
-      });
-      results.push({ ok: true, managedDeviceId: target.managedDeviceId, azureADDeviceId: target.azureADDeviceId, deviceName: target.deviceName || null });
-    } catch (error) {
-      results.push({ ok: false, managedDeviceId: target.managedDeviceId, azureADDeviceId: target.azureADDeviceId, deviceName: target.deviceName || null, error: error?.message || 'Failed to start proactive remediation.' });
+
+  try {
+    let existing = await findExistingDeviceManagementScript(tenantId, scriptDisplayName);
+    let scriptId;
+    let created = false;
+    if (existing) {
+      scriptId = existing.id;
+    } else {
+      const newScript = await createDeviceManagementScript(tenantId, scriptDisplayName, templateContent);
+      scriptId = newScript.id;
+      created = true;
     }
+    await assignDeviceManagementScriptAllDevices(tenantId, scriptId);
+    return {
+      queued: true,
+      supported: true,
+      status: 'script-scheduled',
+      executionMode: 'native-script-scheduled',
+      scriptId,
+      scriptDisplayName,
+      created,
+      assigned: true,
+      assignmentTarget: 'all-devices',
+      message: created
+        ? `PowerShell script "${scriptDisplayName}" created in Intune and assigned to all managed devices. It will run at next device check-in (within ~30 minutes). View at: Intune > Devices > Scripts.`
+        : `Existing PowerShell script "${scriptDisplayName}" re-assigned to all managed devices. It will run at next device check-in (within ~30 minutes).`,
+      manualUrl: 'https://intune.microsoft.com/#view/Microsoft_Intune_DeviceSettings/DevicesMenu/~/scripts',
+      notes: options.notes || ''
+    };
+  } catch (scriptErr) {
+    return {
+      queued: false,
+      supported: false,
+      status: 'manual-review-required',
+      executionMode: 'guided-manual',
+      message: `Script deployment failed: ${scriptErr?.message || 'Unknown error'}. Ensure the app registration has DeviceManagementConfiguration.ReadWrite.All with admin consent.`,
+      statusCard: { code: 'script-deploy-failed', label: 'script deploy failed', tone: 'danger', message: scriptErr?.message || 'Script creation or assignment failed.' },
+      manualSteps: [
+        'Verify the app registration has DeviceManagementConfiguration.ReadWrite.All Application permission with admin consent.',
+        'Open Microsoft Intune admin center > Devices > Scripts and create the script manually.',
+        'Assign it to the affected device group.',
+      ],
+      notes: options.notes || ''
+    };
   }
-  const successCount = results.filter((item) => item.ok).length;
-  const failed = results.filter((item) => !item.ok);
-  return {
-    queued: successCount > 0,
-    supported: successCount > 0,
-    status: failed.length ? (successCount ? 'partial-success' : 'script-execution-failed') : 'live-deploy',
-    executionMode: 'native-script-now',
-    scriptPolicyId,
-    resolvedTargets: { sourceInputs: targets.sourceInputs, resolvedDeviceIds: targets.resolvedDeviceIds, unmatchedInputs: targets.unmatchedManagedDeviceInputs },
-    targetDevices: results,
-    summary: failed.length ? `Started proactive remediation on ${successCount} device(s); ${failed.length} device(s) failed.` : `Started proactive remediation on ${successCount} device(s).`,
-    message: failed.length ? 'On-demand proactive remediation was started for some devices. Review per-device results.' : 'On-demand proactive remediation was started successfully.',
-    notes: options.notes || ''
-  };
 }
 async function executeNativeRemediation({ tenantId, finding = {}, classification, options = {} }) {
   switch (classification.type) { case 'windows-update': return executeWindowsUpdate({ tenantId, finding, options }); case 'intune-policy': return executeIntunePolicy({ tenantId, finding, options }); case 'script': return executeScriptRemediation({ tenantId, finding, options }); default: return { queued: false, supported: true, status: 'manual-review-required', executionMode: 'guided-manual', message: 'This finding requires guided manual remediation.' }; }
 }
-module.exports = { planNativeRemediation, executeNativeRemediation, resolveEntraDeviceIds, resolveManagedDeviceTargets, listTenantConfigurationPolicies };
+module.exports = { planNativeRemediation, executeNativeRemediation, resolveEntraDeviceIds, resolveManagedDeviceTargets, listTenantConfigurationPolicies, listTenantDeviceScripts };

@@ -698,8 +698,10 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [deviceIdsText, setDeviceIdsText] = useState('');
   const [policyTarget, setPolicyTarget] = useState('');
   const [scriptName, setScriptName] = useState('');
-  const [scriptMode, setScriptMode] = useState<'recommended' | 'builtin' | 'custom'>('recommended');
+  const [scriptMode, setScriptMode] = useState<'recommended' | 'builtin' | 'custom' | 'intune'>('recommended');
   const [selectedBuiltInScript, setSelectedBuiltInScript] = useState('');
+  const [intuneScripts, setIntuneScripts] = useState<{ id: string; displayName: string }[]>([]);
+  const [selectedIntuneScript, setSelectedIntuneScript] = useState('');
   const [executionNotes, setExecutionNotes] = useState('');
 
   useEffect(() => {
@@ -882,6 +884,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
   function getEffectiveScriptName() {
     if (scriptMode === 'custom') return scriptName.trim();
+    if (scriptMode === 'intune') return selectedIntuneScript.trim();
     if (selectedBuiltInScript.trim()) return selectedBuiltInScript.trim();
     return recommendedBuiltInScripts[0]?.value || scriptName.trim();
   }
@@ -1330,9 +1333,16 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                           <div className="plan-form-grid">
                             <label>
                               <span>Script source</span>
-                              <select value={scriptMode} onChange={(e) => setScriptMode(e.target.value as 'recommended' | 'builtin' | 'custom')}>
+                              <select value={scriptMode} onChange={(e) => {
+                                const mode = e.target.value as 'recommended' | 'builtin' | 'custom' | 'intune';
+                                setScriptMode(mode);
+                                if (mode === 'intune' && !intuneScripts.length) {
+                                  api.getIntuneScripts().then((r: any) => setIntuneScripts(r?.scripts || [])).catch(() => {});
+                                }
+                              }}>
                                 <option value="recommended">Recommended built-ins</option>
                                 <option value="builtin">All built-in remediations</option>
+                                <option value="intune">Existing Intune scripts</option>
                                 <option value="custom">Custom policy ID / display name</option>
                               </select>
                             </label>
@@ -1340,7 +1350,18 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                               <span>Resolved target devices</span>
                               <input value={affectedMachines.length ? `${affectedMachines.length} device(s) ready` : (machinesLoading ? 'Resolving devices…' : 'Will resolve from Exposed devices')} readOnly />
                             </label>
-                            {scriptMode !== 'custom' ? (
+                            {scriptMode === 'intune' ? (
+                              <label className="span-2">
+                                <span>Intune PowerShell script</span>
+                                <select value={selectedIntuneScript} onChange={(e) => setSelectedIntuneScript(e.target.value)}>
+                                  <option value="">— select a script —</option>
+                                  {intuneScripts.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.displayName}</option>
+                                  ))}
+                                </select>
+                                {!intuneScripts.length && <small style={{ color: 'var(--text-secondary)', marginTop: 4, display: 'block' }}>No existing scripts found or still loading…</small>}
+                              </label>
+                            ) : scriptMode !== 'custom' ? (
                               <label className="span-2">
                                 <span>{scriptMode === 'recommended' ? 'Recommended built-in remediation' : 'Built-in remediation catalog'}</span>
                                 <select value={selectedBuiltInScript} onChange={(e) => setSelectedBuiltInScript(e.target.value)}>
@@ -1357,7 +1378,11 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                             )}
                           </div>
                           <div className="detail-summary-block compact">
-                            <p>{scriptMode === 'custom' ? 'Enter an existing Intune device health script policy ID or exact display name.' : `The remediation run will use: ${getEffectiveScriptName() || 'Select a remediation script.'}`}</p>
+                            {scriptMode === 'intune'
+                              ? <p>Select an existing Intune PowerShell script. It will be re-assigned to all managed devices and run at next check-in.</p>
+                              : scriptMode === 'custom'
+                                ? <p>Enter an existing Intune device health script policy ID or exact display name.</p>
+                                : <p>The remediation will deploy: <strong>{getEffectiveScriptName() || 'Select a script above.'}</strong> — a PowerShell script will be created in Intune and assigned to all managed devices (runs at next check-in, ~30 min).</p>}
                           </div>
                         </>
                       )}
@@ -1408,6 +1433,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                         </div>
                         <p style={{ margin: 0, fontSize: 13 }}>{msg}</p>
                         {r?.jobId && <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Job ID: <code>{r.jobId}</code></p>}
+                        {r?.scriptId && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Script ID: <code>{r.scriptId}</code>{r?.created ? ' (newly created)' : ''}</p>}
+                        {r?.manualUrl && <p style={{ margin: '4px 0 0', fontSize: 12 }}><a href={r.manualUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>View in Intune →</a></p>}
                         {r?.trackingUrl && <p style={{ margin: '4px 0 0', fontSize: 12 }}><a href={r.trackingUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>Track remediation →</a></p>}
                         {r?.forwardedTo && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Forwarded to: {r.forwardedTo}</p>}
                       </div>
