@@ -512,6 +512,9 @@ export const api = {
   enableUser: (userId: string) =>
     apiFetch<any>(`/users/${userId}/enable`, { method: 'POST' }),
 
+  getIntuneScripts: () =>
+    apiFetch<any>('/remediation/catalog/intune-scripts'),
+
   getDeviceActions: () =>
     apiFetch<any>('/device-actions'),
 
