@@ -99,12 +99,12 @@ async function getExternalHealth() {
 }
 
 async function resolveApplicationRemediation(finding) {
-  return requestJson('POST', '/api/remediation/resolve', { finding: buildHints(finding) });
+  return requestJson('POST', '/api/remediation/resolve', { finding: buildHints(finding) }, 30000);
 }
 
 async function executeApplicationRemediation(payload) {
   const { finding = {}, ...rest } = payload || {};
-  return requestJson('POST', '/api/remediation/execute', { ...rest, finding: buildHints(finding) });
+  return requestJson('POST', '/api/remediation/execute', { ...rest, finding: buildHints(finding) }, 60000);
 }
 
 module.exports = {
