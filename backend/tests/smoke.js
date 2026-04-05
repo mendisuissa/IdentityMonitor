@@ -106,6 +106,52 @@ async function run() {
     if (![200, 401].includes(res.status)) throw new Error(`unexpected status ${res.status}`);
   });
 
+  // ── Remediation ───────────────────────────────────────────────────
+  await check('GET /api/remediation/health returns 200', async () => {
+    const res = await fetch(`${BASE_URL}/api/remediation/health`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(20000)
+    });
+    if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+    const body = await res.json();
+    if (!body.ok) throw new Error(`ok=${body.ok}`);
+  });
+
+  await check('GET /api/remediation/catalog/intune-policies responds (200 or 401)', async () => {
+    const res = await fetch(`${BASE_URL}/api/remediation/catalog/intune-policies`, { signal: AbortSignal.timeout(10000) });
+    if (![200, 401].includes(res.status)) throw new Error(`unexpected status ${res.status}`);
+  });
+
+  await check('GET /api/remediation/catalog/intune-scripts responds (200 or 401)', async () => {
+    const res = await fetch(`${BASE_URL}/api/remediation/catalog/intune-scripts`, { signal: AbortSignal.timeout(10000) });
+    if (![200, 401].includes(res.status)) throw new Error(`unexpected status ${res.status}`);
+  });
+
+  await check('POST /api/remediation/plan responds (200 or 401)', async () => {
+    const res = await fetch(`${BASE_URL}/api/remediation/plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ finding: { productName: 'Microsoft Edge', category: 'application' } }),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (![200, 401].includes(res.status)) throw new Error(`unexpected status ${res.status}`);
+  });
+
+  await check('POST /api/remediation/execute responds (200 or 401)', async () => {
+    const res = await fetch(`${BASE_URL}/api/remediation/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ finding: { productName: 'Microsoft Edge' }, plan: {} }),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (![200, 401].includes(res.status)) throw new Error(`unexpected status ${res.status}`);
+  });
+
+  await check('GET /api/defender/vulnerabilities responds (200 or 401)', async () => {
+    const res = await fetch(`${BASE_URL}/api/defender/vulnerabilities?top=1`, { signal: AbortSignal.timeout(10000) });
+    if (![200, 401].includes(res.status)) throw new Error(`unexpected status ${res.status}`);
+  });
+
   // ── Summary ───────────────────────────────────────────────────────
   console.log('\n' + '─'.repeat(40));
   console.log(`  Total:  ${passed + failed}`);

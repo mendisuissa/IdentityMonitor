@@ -38,13 +38,14 @@ function buildHeaders(extraHeaders = {}) {
   return headers;
 }
 
-async function requestJson(method, path, payload) {
+async function requestJson(method, path, payload, timeoutMs = 15000) {
   const { baseUrl } = getWebappConfig();
   const isBodyMethod = method !== 'GET' && method !== 'HEAD';
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     headers: buildHeaders(isBodyMethod ? { 'Content-Type': 'application/json' } : {}),
-    body: isBodyMethod ? JSON.stringify(payload || {}) : undefined
+    body: isBodyMethod ? JSON.stringify(payload || {}) : undefined,
+    signal: AbortSignal.timeout(timeoutMs)
   });
 
   const data = await response.json().catch(() => ({}));
