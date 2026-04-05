@@ -104,7 +104,7 @@ async function resolveApplicationRemediation(finding) {
 
 async function executeApplicationRemediation(payload) {
   const { finding = {}, ...rest } = payload || {};
-  return requestJson('POST', '/api/remediation/execute', { ...rest, finding: buildHints(finding) }, 60000);
+  return requestJson('POST', '/api/remediation/execute', { ...rest, finding: buildHints(finding) }, 120000);
 }
 
 module.exports = {
