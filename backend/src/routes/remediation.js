@@ -88,83 +88,81 @@ router.post('/plan', async (req, res) => {
     const classification = enrichedFinding.classification || classifyFinding(enrichedFinding);
 
     if (classification.type === 'application') {
-      try {
-        const resolution = await resolveApplicationRemediation(enrichedFinding);
+      // Plan step: health-check only — fast (~1s). Full WinGet resolve happens during Execute.
+      // Doing a full resolve here causes 30s+ timeouts due to deep package lookups.
+      const externalHealth = await getExternalHealth();
+      if (externalHealth.ok) {
         const plan = {
           executor: 'webapp',
-          supported: resolution?.resolution?.supported !== false,
-          remediationType: resolution?.resolution?.remediationType || 'patch',
-          // Only false if the external service explicitly sets autoRemediate=false.
-          // If the field is missing (undefined), we default to true so the Execute button appears.
-          autoRemediate: resolution?.resolution?.autoRemediate !== false,
-          app: resolution?.resolution?.app || null,
-          candidates: resolution?.resolution?.candidates || [],
-          checkedSources: resolution?.resolution?.checkedSources || [],
-          message: resolution?.resolution?.message || 'External remediation service is ready. Review the plan below and click Execute to patch the affected application.',
-          executionMode: resolution?.resolution?.executionMode || 'webapp-live',
-          statusCard: resolution?.resolution?.statusCard || {
+          supported: true,
+          remediationType: 'winget-intune-upgrade',
+          autoRemediate: true,
+          app: null,
+          candidates: [],
+          checkedSources: [],
+          message: 'External remediation service is connected. Click Execute to resolve the package and deploy via Intune.',
+          executionMode: 'webapp-live',
+          statusCard: {
             code: 'webapp-ready',
             label: 'webapp remediation',
             tone: 'success',
-            message: 'External remediation service is connected and ready to patch this application.'
+            message: 'Webapp is connected — package resolution and Intune deployment will happen on Execute.'
           },
-          executionPath: resolution?.resolution?.executionPath || {
+          executionPath: {
             classification: 'application',
             family: 'software',
             executor: 'webapp',
             status: 'ready',
             route: 'Application → Webapp external remediation'
           },
-          external: { connected: true, service: resolution?.service || null },
-          rawResolution: resolution
+          external: { connected: true, service: externalHealth.service || 'webapp-remediation-executor', baseUrl: externalHealth.baseUrl }
         };
         return res.json({ ok: true, tenantId, classification, finding, plan });
-      } catch (error) {
-        console.error('[Remediation/plan] webapp resolve failed — status:', error?.status, '| message:', error?.message, '| details:', JSON.stringify(error?.details || {}));
-        const externalErrorMsg = error?.details?.message || error?.details?.error || error?.message || 'External remediation service is unreachable.';
-        return res.json({
-          ok: true,
-          tenantId,
-          classification,
-          finding: enrichedFinding,
-          plan: {
-            executor: 'webapp',
-            supported: false,
-            remediationType: 'manual-review',
-            autoRemediate: false,
-            app: null,
-            candidates: [],
-            checkedSources: [],
-            message: `External remediation service error: ${externalErrorMsg}`,
-            executionMode: 'guided-manual',
-            statusCard: {
-              code: 'no-external-service',
-              label: 'manual remediation',
-              tone: 'warning',
-              message: `Webapp error (HTTP ${error?.status || '?'}): ${externalErrorMsg}`
-            },
-            executionPath: {
-              classification: 'application',
-              family: 'software',
-              executor: 'guided-manual',
-              status: 'manual',
-              route: 'Application -> Manual remediation'
-            },
-            manualSteps: [
-              'Identify all affected devices using the Exposed devices tab.',
-              'Apply the vendor-recommended update or patch on each affected device.',
-              'Verify remediation by re-running a Defender scan.',
-              'Document the action taken and mark the case as resolved.'
-            ],
-            external: {
-              connected: false,
-              status: error.status || 503,
-              details: error.details || { message: error.message }
-            }
-          },
-          warning: 'No external remediation service configured — showing manual steps.'
-        });
       }
+      // Webapp unreachable
+      console.error('[Remediation/plan] webapp health failed:', externalHealth.error, '| status:', externalHealth.status);
+      return res.json({
+        ok: true,
+        tenantId,
+        classification,
+        finding: enrichedFinding,
+        plan: {
+          executor: 'webapp',
+          supported: false,
+          remediationType: 'manual-review',
+          autoRemediate: false,
+          app: null,
+          candidates: [],
+          checkedSources: [],
+          message: `External remediation service unreachable: ${externalHealth.error || 'health check failed'}`,
+          executionMode: 'guided-manual',
+          statusCard: {
+            code: 'no-external-service',
+            label: 'manual remediation',
+            tone: 'warning',
+            message: `Webapp unreachable (HTTP ${externalHealth.status || '?'}): ${externalHealth.error || 'health check failed'}`
+          },
+          executionPath: {
+            classification: 'application',
+            family: 'software',
+            executor: 'guided-manual',
+            status: 'manual',
+            route: 'Application -> Manual remediation'
+          },
+          manualSteps: [
+            'Identify all affected devices using the Exposed devices tab.',
+            'Apply the vendor-recommended update or patch on each affected device.',
+            'Verify remediation by re-running a Defender scan.',
+            'Document the action taken and mark the case as resolved.'
+          ],
+          external: {
+            connected: false,
+            status: externalHealth.status || 503,
+            details: { message: externalHealth.error }
+          }
+        },
+        warning: 'External remediation service is unreachable — showing manual steps.'
+      });
     }
 
     const plan = await planNativeRemediation({ classification, finding: enrichedFinding, options });
