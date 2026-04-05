@@ -120,6 +120,8 @@ router.post('/plan', async (req, res) => {
         };
         return res.json({ ok: true, tenantId, classification, finding, plan });
       } catch (error) {
+        console.error('[Remediation/plan] webapp resolve failed — status:', error?.status, '| message:', error?.message, '| details:', JSON.stringify(error?.details || {}));
+        const externalErrorMsg = error?.details?.message || error?.details?.error || error?.message || 'External remediation service is unreachable.';
         return res.json({
           ok: true,
           tenantId,
@@ -133,13 +135,13 @@ router.post('/plan', async (req, res) => {
             app: null,
             candidates: [],
             checkedSources: [],
-            message: 'No external remediation service is configured for this tenant. Use manual remediation steps below.',
+            message: `External remediation service error: ${externalErrorMsg}`,
             executionMode: 'guided-manual',
             statusCard: {
               code: 'no-external-service',
               label: 'manual remediation',
               tone: 'warning',
-              message: 'No external remediation service is connected. Follow the manual steps to remediate this finding.'
+              message: `Webapp error (HTTP ${error?.status || '?'}): ${externalErrorMsg}`
             },
             executionPath: {
               classification: 'application',
