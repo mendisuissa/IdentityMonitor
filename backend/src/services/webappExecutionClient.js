@@ -65,8 +65,8 @@ function buildHints(finding = {}) {
   return {
     id: finding.id || finding.cveId || finding.name || null,
     cveId: finding.cveId || null,
-    productName: finding.productName || finding.softwareName || finding.name || null,
-    publisher: finding.publisher || null,
+    productName: finding.productName || finding.displayProductName || finding.softwareName || finding.name || null,
+    publisher: finding.publisher || finding.displayPublisher || null,
     recommendation: finding.recommendation || null,
     description: finding.description || null,
     category: finding.category || null,
