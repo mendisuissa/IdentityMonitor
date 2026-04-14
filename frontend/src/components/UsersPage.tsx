@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { PrivilegedUser, RiskPosture } from '../types';
 
@@ -9,6 +10,7 @@ function severityColor(s: string) {
 }
 
 export default function UsersPage() {
+  const [searchParams] = useSearchParams();
   const [users, setUsers] = useState<PrivilegedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [revoking, setRevoking] = useState<string | null>(null);
@@ -23,7 +25,10 @@ export default function UsersPage() {
         RISK_ORDER.indexOf(a.riskLevel) - RISK_ORDER.indexOf(b.riskLevel)
       );
       setUsers(sorted);
-      setSelectedUserId(sorted[0]?.id ?? null);
+      // Prefer userId from URL query param (navigated from dashboard), else first user
+      const urlUserId = searchParams.get('userId');
+      const match = urlUserId ? sorted.find(u => u.id === urlUserId) : null;
+      setSelectedUserId(match?.id ?? sorted[0]?.id ?? null);
       setPosture(p as RiskPosture | null);
     }).finally(() => setLoading(false));
   }, []);
