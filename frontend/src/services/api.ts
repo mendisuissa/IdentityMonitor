@@ -488,6 +488,7 @@ export const api = {
     finding: any;
     plan: any;
     options?: {
+      updateMode?: 'immediate' | 'ring';
       updateType?: 'security' | 'feature';
       rebootBehavior?: 'ifRequired' | 'force' | 'defer';
       targetDeviceIds?: string[];

@@ -631,6 +631,48 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       padding:16px;
     }
     .success-block{ border-color:rgba(16,185,129,.22); }
+    .update-now-panel{
+      margin-top:18px;
+      padding:16px 18px;
+      border-radius:14px;
+      background:rgba(245,158,11,.06);
+      border:1px solid rgba(245,158,11,.28);
+    }
+    .update-now-panel h4{
+      margin:0 0 4px;
+      color:var(--text-primary);
+      font-size:15px;
+    }
+    .update-now-panel p{
+      margin:0 0 12px;
+      color:var(--text-secondary);
+      font-size:13px;
+    }
+    .update-now-radio-row{
+      display:flex;
+      gap:20px;
+      margin-bottom:14px;
+    }
+    .update-now-radio-row label{
+      display:flex;
+      align-items:center;
+      gap:7px;
+      color:var(--text-primary);
+      font-size:14px;
+      cursor:pointer;
+    }
+    .btn-update-now{
+      background:rgba(245,158,11,.18);
+      color:#fbbf24;
+      border:1px solid rgba(245,158,11,.45);
+      border-radius:12px;
+      padding:10px 18px;
+      font-weight:700;
+      cursor:pointer;
+      transition:.18s ease;
+    }
+    .btn-update-now:hover{ background:rgba(245,158,11,.28); transform:translateY(-1px); }
+    .btn-update-now:disabled{ opacity:.55; cursor:not-allowed; transform:none; }
     @media (max-width: 1100px){
       .remediation-layout{ grid-template-columns:1fr; }
       .remediation-list-card{ position:static; min-height:unset; }
@@ -695,6 +737,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [activeTab, setActiveTab] = useState<DetailTab>('details');
   const [updateType, setUpdateType] = useState<'security' | 'feature'>('security');
   const [rebootBehavior, setRebootBehavior] = useState<'ifRequired' | 'force' | 'defer'>('ifRequired');
+  const [updateNowType, setUpdateNowType] = useState<'security' | 'feature'>('security');
+  const [executingUpdateNow, setExecutingUpdateNow] = useState(false);
+  const [updateNowResult, setUpdateNowResult] = useState<any>(null);
   const [deviceIdsText, setDeviceIdsText] = useState('');
   const [policyTarget, setPolicyTarget] = useState('');
   const [scriptName, setScriptName] = useState('');
@@ -791,6 +836,10 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const isIntuneExecutor = selectedExecutor === 'native-intune-policy';
   const isScriptExecutor = selectedExecutor === 'native-script';
   const isWebappExecutor = selectedExecutor === 'webapp';
+  const isWindowsUpdateFinding =
+    planResult?.plan?.classification?.type === 'windows-update' ||
+    planResult?.plan?.executionPath?.classification === 'windows-update' ||
+    isWindowsExecutor;
   const planBadge = getPlanBadge(planResult);
   const primaryProducts = Array.isArray(selectedFinding?.relatedProducts) ? selectedFinding!.relatedProducts!.slice(0, 6) : [];
   const recommendedBuiltInScripts = useMemo(() => getRecommendedBuiltInScripts(selectedFinding), [selectedFinding]);
@@ -798,6 +847,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   useEffect(() => {
     setPlanResult(null);
     setExecResult(null);
+    setUpdateNowResult(null);
     setActiveTab('details');
     setAffectedMachines([]);
     setAffectedMachinesError('');
@@ -1002,6 +1052,43 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : '');
     } finally {
       setExecuting(false);
+    }
+  }
+
+  async function handleUpdateNow() {
+    if (!selectedFinding) return;
+    let resolvedNames = affectedMachines.length ? affectedMachines : (planResult?.plan?.inferredDeviceNames || []);
+    if (!resolvedNames.length) {
+      resolvedNames = await ensureAffectedMachinesLoaded();
+    }
+    const deviceIds = toCsvLines(deviceIdsText);
+    setExecutingUpdateNow(true);
+    setError('');
+    setTechnicalError('');
+    try {
+      const result = await api.executeRemediation({
+        tenantId,
+        approvalId: 'apr-ui-updatenow',
+        devices: deviceIds,
+        finding: {
+          ...selectedFinding,
+          affectedMachines: resolvedNames,
+        },
+        plan: planResult?.plan || {},
+        options: {
+          updateMode: 'immediate',
+          updateType: updateNowType,
+          deviceIds,
+          targetDeviceIds: deviceIds,
+          affectedDeviceNames: resolvedNames,
+        },
+      });
+      setUpdateNowResult(result);
+    } catch (err: any) {
+      setError(err?.message || 'Update Now failed.');
+      setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : '');
+    } finally {
+      setExecutingUpdateNow(false);
     }
   }
 
@@ -1393,6 +1480,48 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                           <textarea rows={3} value={executionNotes} onChange={(e) => setExecutionNotes(e.target.value)} placeholder="Optional notes for the remediation run" />
                         </label>
                       </div>
+
+                      {isWindowsUpdateFinding && (
+                        <div className="update-now-panel">
+                          <h4>🔄 Immediate Update</h4>
+                          <p>Push update directly to device — bypasses rings</p>
+                          <div className="update-now-radio-row">
+                            <label>
+                              <input type="radio" name="updateNowType" value="security" checked={updateNowType === 'security'} onChange={() => setUpdateNowType('security')} />
+                              Security update
+                            </label>
+                            <label>
+                              <input type="radio" name="updateNowType" value="feature" checked={updateNowType === 'feature'} onChange={() => setUpdateNowType('feature')} />
+                              Feature update
+                            </label>
+                          </div>
+                          <button
+                            className="btn-update-now"
+                            onClick={handleUpdateNow}
+                            disabled={executingUpdateNow}
+                          >
+                            {executingUpdateNow ? 'Pushing update…' : 'Update Now'}
+                          </button>
+                          {updateNowResult && (() => {
+                            const r = updateNowResult?.result ?? updateNowResult;
+                            const ok = r?.ok !== false && r?.result?.ok !== false;
+                            const inner = r?.result ?? r;
+                            const msg = inner?.message || (ok ? 'Update pushed successfully.' : 'Update Now failed.');
+                            return (
+                              <div className={`detail-summary-block compact ${ok ? 'success-block' : ''}`} style={{ marginTop: 12, borderLeft: `3px solid ${ok ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)'}` }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                                  <span style={{ fontSize: 18 }}>{ok ? '✅' : '❌'}</span>
+                                  <h4 style={{ margin: 0 }}>Update Now {ok ? 'dispatched' : 'failed'}</h4>
+                                </div>
+                                <p style={{ margin: 0, fontSize: 13 }}>{msg}</p>
+                                {inner?.scriptId && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Script ID: <code>{inner.scriptId}</code></p>}
+                                {inner?.scriptName && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Script: <code>{inner.scriptName}</code></p>}
+                                {inner?.manualUrl && <p style={{ margin: '4px 0 0', fontSize: 12 }}><a href={inner.manualUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>View in Intune →</a></p>}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
 
                       <div className="plan-actions-row">
                         <button className="btn btn-secondary" onClick={handlePlan} disabled={planning}>{planning ? 'Refreshing…' : 'Refresh plan'}</button>

@@ -8,6 +8,7 @@ const {
 const {
   planNativeRemediation,
   executeNativeRemediation,
+  executeImmediateWindowsUpdate,
   listTenantConfigurationPolicies,
   listTenantDeviceScripts
 } = require('../services/nativeRemediationExecutor');
@@ -227,6 +228,16 @@ router.post('/execute', async (req, res) => {
           }
         });
       }
+    }
+
+    // Immediate Windows Update (Update Now button)
+    if ((classification.type === 'windows-update' || options.updateMode === 'immediate') && options.updateMode === 'immediate') {
+      const updateType = options.updateType === 'feature' ? 'feature' : 'security';
+      const deviceIds = options.deviceIds || devices || [];
+      const affectedDeviceNames = options.affectedDeviceNames || enrichedFinding.affectedMachines || [];
+
+      const result = await executeImmediateWindowsUpdate(tenantId, updateType, deviceIds, affectedDeviceNames);
+      return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'native', result });
     }
 
     const result = await executeNativeRemediation({
