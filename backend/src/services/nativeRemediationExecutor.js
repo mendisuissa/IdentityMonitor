@@ -261,6 +261,37 @@ else { Write-Output "Office Click-to-Run not found."; exit 1 }`,
 
   'Refresh Defender signatures': `Update-MpSignature -ErrorAction SilentlyContinue
 Write-Output "Microsoft Defender signatures refresh triggered."`,
+
+  'windows-security-update-now': `$ErrorActionPreference = 'Stop'
+try {
+  wuauclt /resetauthorization /detectnow 2>$null
+  Start-Sleep -Seconds 5
+  $uso = 'C:\\Windows\\System32\\usoclient.exe'
+  if (Test-Path $uso) {
+    & $uso StartScan; Start-Sleep 20
+    & $uso StartDownload; Start-Sleep 20
+    & $uso StartInstall
+  }
+  $s = New-Object -ComObject Microsoft.Update.Session
+  $r = $s.CreateUpdateSearcher().Search("IsInstalled=0 and Type='Software' and BrowseOnly=0")
+  if ($r.Updates.Count -gt 0) {
+    $d = $s.CreateUpdateDownloader(); $d.Updates = $r.Updates; $d.Download()
+    $i = $s.CreateUpdateInstaller(); $i.Updates = $r.Updates; $i.Install()
+    Write-Output "Installed $($r.Updates.Count) security updates"
+  } else { Write-Output "No pending updates" }
+} catch { Write-Error $_; exit 1 }`,
+
+  'windows-feature-update-now': `$ErrorActionPreference = 'Stop'
+try {
+  wuauclt /resetauthorization /detectnow 2>$null
+  Start-Sleep -Seconds 5
+  $uso = 'C:\\Windows\\System32\\usoclient.exe'
+  if (Test-Path $uso) {
+    & $uso StartFeatureUpdate 2>$null
+    Start-Sleep 10; & $uso StartScan; Start-Sleep 30; & $uso StartDownload
+  }
+  Write-Output "Feature update scan and download initiated"
+} catch { Write-Error $_; exit 1 }`,
 };
 
 async function findExistingDeviceManagementScript(tenantId, displayName) {
@@ -375,6 +406,56 @@ async function listTenantConfigurationPolicies(tenantId) {
     platforms: item.platforms || null,
     technologies: item.technologies || null,
   }));
+}
+
+async function executeImmediateWindowsUpdate(tenantId, updateType, deviceIds, affectedDeviceNames) {
+  const type = String(updateType || 'security').toLowerCase() === 'feature' ? 'feature' : 'security';
+  const templateKey = type === 'feature' ? 'windows-feature-update-now' : 'windows-security-update-now';
+  const scriptContent = POWERSHELL_SCRIPT_TEMPLATES[templateKey];
+  const timestamp = Date.now();
+  const scriptName = type === 'feature'
+    ? `IM-UpdateNow-Feature-${timestamp}`
+    : `IM-UpdateNow-Security-${timestamp}`;
+
+  // Create and assign the device management script
+  const newScript = await createDeviceManagementScript(tenantId, scriptName, scriptContent);
+  const scriptId = newScript.id;
+  await assignDeviceManagementScriptAllDevices(tenantId, scriptId);
+
+  // Resolve managed device IDs for syncDevice calls
+  const inputDeviceIds = Array.isArray(deviceIds) ? deviceIds : toArray(deviceIds);
+  const inputNames = Array.isArray(affectedDeviceNames) ? affectedDeviceNames : toArray(affectedDeviceNames);
+
+  let managedTargets = [];
+  try {
+    const targets = await resolveManagedDeviceTargets(tenantId, { deviceIds: inputDeviceIds, affectedDeviceNames: inputNames }, {});
+    managedTargets = targets.managedTargets || [];
+  } catch (_resolveErr) {
+    // Non-fatal: script will still run at next check-in
+  }
+
+  // Trigger syncDevice on each resolved managed device
+  const syncedDevices = [];
+  for (const target of managedTargets) {
+    try {
+      await graphBetaRequest(tenantId, `/deviceManagement/managedDevices/${target.managedDeviceId}/syncDevice`, { method: 'POST' });
+      syncedDevices.push({ ok: true, managedDeviceId: target.managedDeviceId, deviceName: target.deviceName || null });
+    } catch (_syncErr) {
+      // Non-fatal: device not found or offline — script still runs at next check-in
+      syncedDevices.push({ ok: false, managedDeviceId: target.managedDeviceId, deviceName: target.deviceName || null, error: _syncErr?.message || 'syncDevice failed' });
+    }
+  }
+
+  return {
+    ok: true,
+    scriptId,
+    scriptName,
+    mode: 'immediate-update',
+    updateType: type,
+    syncedDevices,
+    message: `PowerShell script "${scriptName}" created in Intune and assigned to all managed devices. syncDevice triggered on ${syncedDevices.filter((d) => d.ok).length} device(s). Script will run at next check-in (~30 min).`,
+    manualUrl: 'https://intune.microsoft.com/#view/Microsoft_Intune_DeviceSettings/DevicesMenu/~/scripts',
+  };
 }
 
 async function executeWindowsUpdate({ tenantId, finding = {}, options = {} }) {
@@ -572,4 +653,4 @@ async function executeScriptRemediation({ tenantId, finding = {}, options = {} }
 async function executeNativeRemediation({ tenantId, finding = {}, classification, options = {} }) {
   switch (classification.type) { case 'windows-update': return executeWindowsUpdate({ tenantId, finding, options }); case 'intune-policy': return executeIntunePolicy({ tenantId, finding, options }); case 'script': return executeScriptRemediation({ tenantId, finding, options }); default: return { queued: false, supported: true, status: 'manual-review-required', executionMode: 'guided-manual', message: 'This finding requires guided manual remediation.' }; }
 }
-module.exports = { planNativeRemediation, executeNativeRemediation, resolveEntraDeviceIds, resolveManagedDeviceTargets, listTenantConfigurationPolicies, listTenantDeviceScripts };
+module.exports = { planNativeRemediation, executeNativeRemediation, executeImmediateWindowsUpdate, resolveEntraDeviceIds, resolveManagedDeviceTargets, listTenantConfigurationPolicies, listTenantDeviceScripts };
