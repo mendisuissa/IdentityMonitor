@@ -640,15 +640,16 @@ async function executeScriptRemediation({ tenantId, finding = {}, options = {} }
       notes: options.notes || ''
     };
   } catch (scriptErr) {
+    if (scriptErr?.needsConsent) throw scriptErr;
     return {
       queued: false,
       supported: false,
       status: 'manual-review-required',
       executionMode: 'guided-manual',
-      message: `Script deployment failed: ${scriptErr?.message || 'Unknown error'}. Ensure the app registration has DeviceManagementConfiguration.ReadWrite.All with admin consent.`,
+      message: `Script deployment failed: ${scriptErr?.message || 'Unknown error'}. Ensure the app registration has DeviceManagementScripts.ReadWrite.All with admin consent.`,
       statusCard: { code: 'script-deploy-failed', label: 'script deploy failed', tone: 'danger', message: scriptErr?.message || 'Script creation or assignment failed.' },
       manualSteps: [
-        'Verify the app registration has DeviceManagementConfiguration.ReadWrite.All Application permission with admin consent.',
+        'Verify the app registration has DeviceManagementScripts.ReadWrite.All Application permission with admin consent.',
         'Open Microsoft Intune admin center > Devices > Scripts and create the script manually.',
         'Assign it to the affected device group.',
       ],
