@@ -80,6 +80,27 @@ router.get('/health', async (_req, res) => {
   });
 });
 
+// Debug: resolve a finding against the Webapp — call from browser to diagnose
+// GET /api/remediation/debug-resolve?productName=microsoft_edge&publisher=microsoft
+router.get('/debug-resolve', async (req, res) => {
+  try {
+    const { resolveApplicationRemediation } = require('../services/webappExecutionClient');
+    const { enrichFinding } = require('../services/remediationCatalog');
+    const finding = enrichFinding({
+      productName: req.query.productName || null,
+      softwareName: req.query.softwareName || null,
+      publisher: req.query.publisher || null,
+      description: req.query.description || null,
+      category: req.query.category || 'application',
+      cveId: req.query.cveId || null,
+    });
+    const result = await resolveApplicationRemediation(finding);
+    return res.json({ ok: true, finding, result });
+  } catch (err) {
+    return res.json({ ok: false, error: err?.message, status: err?.status, details: err?.details });
+  }
+});
+
 router.post('/plan', async (req, res) => {
   try {
     const tenantId = getTenantIdFromRequest(req);
@@ -184,7 +205,11 @@ router.post('/execute', async (req, res) => {
         const result = await executeApplicationRemediation({ tenantId, approvalId, finding: enrichedFinding, devices, plan, options });
         return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'webapp', result });
       } catch (execError) {
-        console.error('[Remediation/execute] webapp call failed:', execError?.message, execError?.status, JSON.stringify(execError?.details || {}));
+        const webappDebug = execError?.details?.debug || null;
+        const webappResolution = execError?.details?.resolution || null;
+        console.error('[Remediation/execute] webapp call failed:', execError?.message, execError?.status,
+          'debug:', JSON.stringify(webappDebug || {}),
+          'resolution:', JSON.stringify(webappResolution || {}));
         const isNotSupported = execError?.status === 400;
         return res.json({
           ok: true,
@@ -198,6 +223,7 @@ router.post('/execute', async (req, res) => {
             message: isNotSupported
               ? 'No automated remediation path was found for this application. Use the bundle or manual steps below.'
               : (execError?.message || 'The external remediation service returned an unexpected error.'),
+            debug: webappDebug,
           }
         });
       }
