@@ -265,7 +265,7 @@ export default function Dashboard() {
               <thead><tr><th>Score</th><th>User</th><th>Role</th><th>Open</th></tr></thead>
               <tbody>
                 {riskUsers.slice(0, 6).map((user: any) => (
-                  <tr key={user.userId || user.id} style={{ cursor: 'pointer' }} onClick={() => navigate('/users')}>
+                  <tr key={user.userId || user.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/users?userId=${encodeURIComponent(user.userId || user.id)}`)}>
                     <td>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: scoreColor(user.score) }}>{user.score}</span>
                     </td>
