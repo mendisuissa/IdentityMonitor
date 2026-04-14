@@ -47,8 +47,14 @@ async function graphBetaRequest(tenantId, path, options = {}) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const err = new Error(payload?.error?.message || payload?.message || `Graph beta request failed: ${response.status}`);
-    err.status = response.status; err.details = payload; throw err;
+    const errMsg = payload?.error?.message || payload?.message || `Graph beta request failed: ${response.status}`;
+    const err = new Error(errMsg);
+    err.status = response.status;
+    err.details = payload;
+    if (response.status === 403 && errMsg.includes('DeviceManagementScripts')) {
+      err.needsConsent = true;
+    }
+    throw err;
   }
   return payload;
 }

@@ -252,7 +252,12 @@ router.post('/execute', async (req, res) => {
     });
     return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'native', result });
   } catch (error) {
-    return res.status(error.status || 500).json({ ok: false, error: error.message, details: error.details || null });
+    return res.status(error.status || 500).json({
+      ok: false,
+      error: error.message,
+      details: error.details || null,
+      ...(error.needsConsent ? { needsConsent: true } : {})
+    });
   }
 });
 
