@@ -20,16 +20,36 @@ export default function UsersPage() {
   const [posture, setPosture] = useState<RiskPosture | null>(null);
 
   useEffect(() => {
-    Promise.all([api.getUsers(), api.getRiskPosture().catch(() => null)]).then(([u, p]) => {
-      const sorted = (u as PrivilegedUser[]).sort((a, b) =>
+    Promise.all([
+      api.getUsers().catch(() => [] as PrivilegedUser[]),
+      api.getRiskPosture().catch(() => null)
+    ]).then(([u, p]) => {
+      let sorted = (u as PrivilegedUser[]).sort((a, b) =>
         RISK_ORDER.indexOf(a.riskLevel) - RISK_ORDER.indexOf(b.riskLevel)
       );
+
+      // Fallback: if Graph API returned empty, build users from risk posture alerts data
+      if (sorted.length === 0 && (p as any)?.mostRiskyAdmins?.length) {
+        const SCORE_TO_RISK = (s: number) =>
+          s >= 75 ? 'critical' : s >= 50 ? 'high' : s >= 25 ? 'medium' : s > 0 ? 'low' : 'clean';
+        sorted = ((p as any).mostRiskyAdmins as any[]).map(a => ({
+          id:               a.userId || a.id,
+          displayName:      a.displayName || '',
+          userPrincipalName: a.userPrincipalName || a.email || '',
+          roles:            a.roles || [],
+          riskLevel:        SCORE_TO_RISK(a.score || 0),
+          alertCount:       a.openAlerts ?? a.alertCount ?? 0,
+          accountEnabled:   true,
+          lastAlert:        undefined,
+        } as PrivilegedUser));
+      }
+
       setUsers(sorted);
+      setPosture(p as RiskPosture | null);
       // Prefer userId from URL query param (navigated from dashboard), else first user
       const urlUserId = searchParams.get('userId');
       const match = urlUserId ? sorted.find(u => u.id === urlUserId) : null;
       setSelectedUserId(match?.id ?? sorted[0]?.id ?? null);
-      setPosture(p as RiskPosture | null);
     }).finally(() => setLoading(false));
   }, []);
 
