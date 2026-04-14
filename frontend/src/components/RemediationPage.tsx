@@ -1523,15 +1523,21 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                             const ok = r?.ok !== false && r?.result?.ok !== false;
                             const inner = r?.result ?? r;
                             const msg = inner?.message || (ok ? 'Update pushed successfully.' : 'Update Now failed.');
+                            const isExpedite = inner?.mode === 'wufb-expedite';
+                            const isFallback = inner?.mode === 'script-fallback';
                             return (
                               <div className={`detail-summary-block compact ${ok ? 'success-block' : ''}`} style={{ marginTop: 12, borderLeft: `3px solid ${ok ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)'}` }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                                   <span style={{ fontSize: 18 }}>{ok ? '✅' : '❌'}</span>
-                                  <h4 style={{ margin: 0 }}>Update Now {ok ? 'dispatched' : 'failed'}</h4>
+                                  <h4 style={{ margin: 0 }}>
+                                    {isExpedite ? '🚀 Expedited update dispatched' : isFallback ? '⚠️ Script fallback deployed' : `Update Now ${ok ? 'dispatched' : 'failed'}`}
+                                  </h4>
                                 </div>
                                 <p style={{ margin: 0, fontSize: 13 }}>{msg}</p>
-                                {inner?.scriptId && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Script ID: <code>{inner.scriptId}</code></p>}
+                                {isExpedite && inner?.deploymentId && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Deployment ID: <code>{inner.deploymentId}</code></p>}
+                                {isFallback && inner?.wufbUnavailable && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>WUfB unavailable: {inner.wufbUnavailable}</p>}
                                 {inner?.scriptName && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Script: <code>{inner.scriptName}</code></p>}
+                                {inner?.syncedDevices?.length > 0 && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{inner.syncedDevices.filter((d: any) => d.ok).length}/{inner.syncedDevices.length} device(s) synced</p>}
                                 {inner?.manualUrl && <p style={{ margin: '4px 0 0', fontSize: 12 }}><a href={inner.manualUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>View in Intune →</a></p>}
                               </div>
                             );

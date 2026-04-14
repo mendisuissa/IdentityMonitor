@@ -418,52 +418,109 @@ async function listTenantConfigurationPolicies(tenantId) {
 
 async function executeImmediateWindowsUpdate(tenantId, updateType, deviceIds, affectedDeviceNames) {
   const type = String(updateType || 'security').toLowerCase() === 'feature' ? 'feature' : 'security';
-  const templateKey = type === 'feature' ? 'windows-feature-update-now' : 'windows-security-update-now';
-  const scriptContent = POWERSHELL_SCRIPT_TEMPLATES[templateKey];
-  const timestamp = Date.now();
-  const scriptName = type === 'feature'
-    ? `IM-UpdateNow-Feature-${timestamp}`
-    : `IM-UpdateNow-Security-${timestamp}`;
-
-  // Create and assign the device management script
-  const newScript = await createDeviceManagementScript(tenantId, scriptName, scriptContent);
-  const scriptId = newScript.id;
-  await assignDeviceManagementScriptAllDevices(tenantId, scriptId);
-
-  // Resolve managed device IDs for syncDevice calls
   const inputDeviceIds = Array.isArray(deviceIds) ? deviceIds : toArray(deviceIds);
   const inputNames = Array.isArray(affectedDeviceNames) ? affectedDeviceNames : toArray(affectedDeviceNames);
 
+  // Resolve managed device targets for syncDevice
   let managedTargets = [];
   try {
     const targets = await resolveManagedDeviceTargets(tenantId, { deviceIds: inputDeviceIds, affectedDeviceNames: inputNames }, {});
     managedTargets = targets.managedTargets || [];
-  } catch (_resolveErr) {
-    // Non-fatal: script will still run at next check-in
-  }
+  } catch (_) { /* non-fatal */ }
 
-  // Trigger syncDevice on each resolved managed device
-  const syncedDevices = [];
-  for (const target of managedTargets) {
-    try {
-      await graphBetaRequest(tenantId, `/deviceManagement/managedDevices/${target.managedDeviceId}/syncDevice`, { method: 'POST' });
-      syncedDevices.push({ ok: true, managedDeviceId: target.managedDeviceId, deviceName: target.deviceName || null });
-    } catch (_syncErr) {
-      // Non-fatal: device not found or offline — script still runs at next check-in
-      syncedDevices.push({ ok: false, managedDeviceId: target.managedDeviceId, deviceName: target.deviceName || null, error: _syncErr?.message || 'syncDevice failed' });
+  const uniqueEntraIds = [...new Set([
+    ...inputDeviceIds,
+    ...managedTargets.map((t) => t.azureADDeviceId).filter(Boolean)
+  ].filter(isGuid))];
+
+  // Helper: syncDevice on all resolved managed devices
+  async function syncAllDevices() {
+    const results = [];
+    for (const target of managedTargets) {
+      try {
+        await graphBetaRequest(tenantId, `/deviceManagement/managedDevices/${target.managedDeviceId}/syncDevice`, { method: 'POST' });
+        results.push({ ok: true, managedDeviceId: target.managedDeviceId, deviceName: target.deviceName || null });
+      } catch (_) {
+        results.push({ ok: false, managedDeviceId: target.managedDeviceId, deviceName: target.deviceName || null, error: _?.message });
+      }
     }
+    return results;
   }
 
-  return {
-    ok: true,
-    scriptId,
-    scriptName,
-    mode: 'immediate-update',
-    updateType: type,
-    syncedDevices,
-    message: `PowerShell script "${scriptName}" created in Intune and assigned to all managed devices. syncDevice triggered on ${syncedDevices.filter((d) => d.ok).length} device(s). Script will run at next check-in (~30 min).`,
-    manualUrl: 'https://intune.microsoft.com/#view/Microsoft_Intune_DeviceSettings/DevicesMenu/~/scripts',
-  };
+  // ── Primary path: WUfB Deployment Service with expedite (bypasses rings/deferral) ──
+  try {
+    const catalogEntry = type === 'feature'
+      ? await getLatestFeatureCatalogEntry(tenantId)
+      : await getLatestSecurityCatalogEntry(tenantId);
+
+    if (uniqueEntraIds.length > 0) {
+      await enrollAssetsForCategory(tenantId, type === 'feature' ? 'feature' : 'quality', uniqueEntraIds);
+    }
+
+    const deployment = await graphBetaRequest(tenantId, '/admin/windows/updates/deployments', {
+      method: 'POST',
+      body: {
+        '@odata.type': '#microsoft.graph.windowsUpdates.deployment',
+        content: {
+          '@odata.type': '#microsoft.graph.windowsUpdates.catalogContent',
+          catalogEntry: {
+            '@odata.type': type === 'feature'
+              ? '#microsoft.graph.windowsUpdates.featureUpdateCatalogEntry'
+              : '#microsoft.graph.windowsUpdates.qualityUpdateCatalogEntry',
+            id: catalogEntry.id
+          }
+        },
+        settings: {
+          '@odata.type': 'microsoft.graph.windowsUpdates.deploymentSettings',
+          expedite: { isExpedited: true, isUserNotificationSuppressed: false }
+        }
+      }
+    });
+
+    if (uniqueEntraIds.length > 0) {
+      await updateAudience(tenantId, deployment.id, uniqueEntraIds);
+    }
+
+    const syncedDevices = await syncAllDevices();
+
+    return {
+      ok: true,
+      mode: 'wufb-expedite',
+      deploymentId: deployment.id,
+      updateType: type,
+      catalogEntry: { id: catalogEntry.id, releaseDateTime: catalogEntry.releaseDateTime },
+      syncedDevices,
+      message: `Expedited ${type} update pushed via WUfB Deployment Service (deployment ${deployment.id}). Bypasses all WUfB rings and deferral policies. ${syncedDevices.filter((d) => d.ok).length} device(s) synced — update will install at next check-in (typically within minutes).`,
+      manualUrl: 'https://intune.microsoft.com/#view/Microsoft_Intune_DeviceSettings/DevicesMenu/~/windowsUpdates'
+    };
+
+  } catch (wufbErr) {
+    // Re-throw consent errors — no point falling back
+    if (wufbErr.needsConsent) throw wufbErr;
+
+    // ── Fallback: PowerShell script + syncDevice ──
+    // WUfB DS unavailable (Windows Server device, no license, or service error)
+    const templateKey = type === 'feature' ? 'windows-feature-update-now' : 'windows-security-update-now';
+    const scriptContent = POWERSHELL_SCRIPT_TEMPLATES[templateKey];
+    const scriptName = `IM-UpdateNow-${type === 'feature' ? 'Feature' : 'Security'}-${Date.now()}`;
+
+    const newScript = await createDeviceManagementScript(tenantId, scriptName, scriptContent);
+    await assignDeviceManagementScriptAllDevices(tenantId, newScript.id);
+
+    const syncedDevices = await syncAllDevices();
+
+    return {
+      ok: true,
+      mode: 'script-fallback',
+      scriptId: newScript.id,
+      scriptName,
+      updateType: type,
+      syncedDevices,
+      wufbUnavailable: wufbErr.message,
+      message: `WUfB Deployment Service not available for this device (${wufbErr.message}). Fallback: PowerShell script deployed via Intune + syncDevice triggered on ${syncedDevices.filter((d) => d.ok).length} device(s). Script will run at next check-in (~5–15 min after sync).`,
+      manualUrl: 'https://intune.microsoft.com/#view/Microsoft_Intune_DeviceSettings/DevicesMenu/~/scripts'
+    };
+  }
 }
 
 async function executeWindowsUpdate({ tenantId, finding = {}, options = {} }) {
