@@ -723,6 +723,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [needsAdminConsent, setNeedsAdminConsent] = useState(false);
   const [adminConsentUrl, setAdminConsentUrl] = useState('');
   const [consentBanner, setConsentBanner] = useState('');
+  const [needsReConsent, setNeedsReConsent] = useState(false);
   const [search, setSearch] = useState('');
   const [filterCve, setFilterCve] = useState('');
   const [filterProduct, setFilterProduct] = useState('');
@@ -1050,6 +1051,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     } catch (err: any) {
       setError(err?.message || 'Execution failed.');
       setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : '');
+      if (err?.needsConsent) setNeedsReConsent(true);
     } finally {
       setExecuting(false);
     }
@@ -1087,6 +1089,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     } catch (err: any) {
       setError(err?.message || 'Update Now failed.');
       setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : '');
+      if (err?.needsConsent) setNeedsReConsent(true);
     } finally {
       setExecutingUpdateNow(false);
     }
@@ -1141,6 +1144,19 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           </div>
           <div className="remediation-banner-actions">
             {adminConsentUrl ? <a className="btn btn-primary" href={adminConsentUrl}>Grant Defender admin consent</a> : null}
+          </div>
+        </section>
+      )}
+
+      {needsReConsent && (
+        <section className="remediation-banner warning">
+          <div>
+            <strong>Missing permission: DeviceManagementScripts.ReadWrite.All</strong>
+            <div>The app is missing a required permission in this tenant. A Global Admin must re-grant admin consent to continue using script-based remediation.</div>
+          </div>
+          <div className="remediation-banner-actions">
+            <a className="btn btn-primary" href="/api/auth/admin-consent">Re-grant Admin Consent</a>
+            <button className="btn btn-secondary" onClick={() => setNeedsReConsent(false)}>Dismiss</button>
           </div>
         </section>
       )}
