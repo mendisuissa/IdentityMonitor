@@ -157,6 +157,25 @@ function scoreSignIn(signIn, baseline, settings) {
     factors.push({ type: 'FAILED_MFA', score: 25, detail: 'MFA challenge failed' });
   }
 
+  // ── Factor 9: Failed Sign-in (non-MFA) ───────────────────────────────
+  // Any failed authentication attempt is suspicious regardless of baseline state.
+  // This covers foreign brute-force, password spray, credential stuffing, etc.
+  const errorCode = signIn.status?.errorCode;
+  const isMfaError = errorCode === 500121 || errorCode === 50074;
+  if (errorCode && errorCode !== 0 && !isMfaError &&
+      settingsService.isRuleEnabled(settings, 'FAILED_SIGN_IN')) {
+    let failScore = 20;
+    if (countryRisk === 'HIGH')   failScore += 15;
+    if (countryRisk === 'MEDIUM') failScore += 8;
+    if (country && !baseline.knownCountries?.includes(country)) failScore += 10; // foreign + new country
+    baseScore += failScore;
+    factors.push({
+      type:   'FAILED_SIGN_IN',
+      score:  failScore,
+      detail: `Authentication failed (error ${errorCode})${country ? ' from ' + country : ''}${country && !baseline.knownCountries?.includes(country) ? ' — unrecognised country' : ''}`
+    });
+  }
+
   // ── App Weight Multiplier ─────────────────────────────────────────────
   const APP_MULTIPLIER = { CRITICAL: 2.0, HIGH: 1.5, MEDIUM: 1.2, LOW: 1.0 };
   const multiplier = APP_MULTIPLIER[appTier];
@@ -222,6 +241,7 @@ const ANOMALY_LABELS = {
   UNKNOWN_DEVICE:    'Unrecognized Device',
   IMPOSSIBLE_TRAVEL: 'Impossible Travel',
   OFF_HOURS:         'Off-Hours Sign-in',
+  FAILED_SIGN_IN:    'Failed Authentication Attempt',
   FAILED_MFA:        'MFA Failure',
   HIGH_RISK:         'High Risk (Entra ID)',
   HIGH_VELOCITY:     'Unusual Sign-in Frequency'
