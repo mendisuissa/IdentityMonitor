@@ -5,6 +5,7 @@ const router  = express.Router();
 const CLIENT_ID     = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const { upsertTenantIntegration } = require('../services/tenantIntegrationStore');
+const { clearGraphTokenCache } = require('../services/nativeRemediationExecutor');
 const REDIRECT_URI  = process.env.REDIRECT_URI  || 'http://localhost:3001/api/auth/callback';
 const FRONTEND_URL  = process.env.FRONTEND_URL  || 'http://localhost:5173';
 const ADMIN_CONSENT_REDIRECT_URI = process.env.ADMIN_CONSENT_REDIRECT_URI || REDIRECT_URI;
@@ -291,6 +292,7 @@ router.get('/admin-consent/callback', async (req, res) => {
       grantedAt: new Date().toISOString()
     };
 
+    clearGraphTokenCache(effectiveTenantId);
     req.session.save(() => {
       res.redirect(FRONTEND_URL + '/remediation?consent=granted');
     });

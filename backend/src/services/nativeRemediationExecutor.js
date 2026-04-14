@@ -52,6 +52,8 @@ async function graphBetaRequest(tenantId, path, options = {}) {
     err.status = response.status;
     err.details = payload;
     if (response.status === 403 && errMsg.includes('DeviceManagementScripts')) {
+      // Clear stale cached token — after re-consent the next call will fetch a fresh one
+      graphTokenCache.delete(`${tenantId}:${process.env.CLIENT_ID}`);
       err.needsConsent = true;
     }
     throw err;
@@ -660,4 +662,7 @@ async function executeScriptRemediation({ tenantId, finding = {}, options = {} }
 async function executeNativeRemediation({ tenantId, finding = {}, classification, options = {} }) {
   switch (classification.type) { case 'windows-update': return executeWindowsUpdate({ tenantId, finding, options }); case 'intune-policy': return executeIntunePolicy({ tenantId, finding, options }); case 'script': return executeScriptRemediation({ tenantId, finding, options }); default: return { queued: false, supported: true, status: 'manual-review-required', executionMode: 'guided-manual', message: 'This finding requires guided manual remediation.' }; }
 }
-module.exports = { planNativeRemediation, executeNativeRemediation, executeImmediateWindowsUpdate, resolveEntraDeviceIds, resolveManagedDeviceTargets, listTenantConfigurationPolicies, listTenantDeviceScripts };
+function clearGraphTokenCache(tenantId) {
+  graphTokenCache.delete(`${tenantId}:${process.env.CLIENT_ID}`);
+}
+module.exports = { planNativeRemediation, executeNativeRemediation, executeImmediateWindowsUpdate, resolveEntraDeviceIds, resolveManagedDeviceTargets, listTenantConfigurationPolicies, listTenantDeviceScripts, clearGraphTokenCache };
