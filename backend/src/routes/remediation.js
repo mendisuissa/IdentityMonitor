@@ -80,6 +80,27 @@ router.get('/health', async (_req, res) => {
   });
 });
 
+// Debug: resolve a finding against the Webapp — call from browser to diagnose
+// GET /api/remediation/debug-resolve?productName=microsoft_edge&publisher=microsoft
+router.get('/debug-resolve', async (req, res) => {
+  try {
+    const { resolveApplicationRemediation } = require('../services/webappExecutionClient');
+    const { enrichFinding } = require('../services/remediationCatalog');
+    const finding = enrichFinding({
+      productName: req.query.productName || null,
+      softwareName: req.query.softwareName || null,
+      publisher: req.query.publisher || null,
+      description: req.query.description || null,
+      category: req.query.category || 'application',
+      cveId: req.query.cveId || null,
+    });
+    const result = await resolveApplicationRemediation(finding);
+    return res.json({ ok: true, finding, result });
+  } catch (err) {
+    return res.json({ ok: false, error: err?.message, status: err?.status, details: err?.details });
+  }
+});
+
 router.post('/plan', async (req, res) => {
   try {
     const tenantId = getTenantIdFromRequest(req);
