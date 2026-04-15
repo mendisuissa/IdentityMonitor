@@ -108,3 +108,14 @@ jobs:
         run: |
           echo "Staging deployment succeeded."
           echo "Run the 'Deploy to Production' workflow or use the /deploy-to-prod skill to promote."
+
+      # ── Clean up old artifacts ─────────────────────────────────────
+      - name: Delete old artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPO="${{ github.repository }}"
+          gh api "repos/$REPO/actions/artifacts?per_page=100" \
+            --jq '.artifacts | sort_by(.created_at) | reverse | .[1:] | .[].id' \
+            | xargs -I{} gh api --method DELETE "repos/$REPO/actions/artifacts/{}" \
+            && echo "✅ Old artifacts cleaned up" || echo "⚠️ Non-fatal"

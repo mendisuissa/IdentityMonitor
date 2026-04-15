@@ -49,3 +49,15 @@ jobs:
           app-name: ${{ secrets.AZURE_APP_NAME }}
           publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
           package: ./backend
+
+      # ── Clean up old artifacts to stay within 0.5 GB storage limit ─
+      - name: Delete old artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPO="${{ github.repository }}"
+          # Get all artifact IDs sorted by created_at descending, skip the newest 1
+          gh api "repos/$REPO/actions/artifacts?per_page=100" \
+            --jq '.artifacts | sort_by(.created_at) | reverse | .[1:] | .[].id' \
+            | xargs -I{} gh api --method DELETE "repos/$REPO/actions/artifacts/{}" \
+            && echo "✅ Old artifacts cleaned up" || echo "⚠️ Artifact cleanup had errors (non-fatal)"
