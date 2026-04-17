@@ -36,6 +36,7 @@ const deviceActionMonitor = require('./services/deviceActionMonitor');
 const tenantRegistry = require('./services/tenantRegistry');
 const defenderVulnerabilityRoutes = require('./routes/defenderVulnerabilities');
 const mspRoutes = require('./routes/msp');
+const identityRoutes = require('./routes/identity');
 
 const app    = express();
 const server = http.createServer(app);
@@ -85,6 +86,7 @@ app.use('/api/audit',     auditRoutes);
 app.use('/api/device-actions', deviceActionsRoutes);
 app.use('/api/defender',  defenderVulnerabilityRoutes);
 app.use('/api/msp',       mspRoutes);
+app.use('/api/identity',  identityRoutes);
 
 // Settings route
 try {

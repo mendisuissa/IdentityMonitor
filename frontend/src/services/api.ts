@@ -545,6 +545,46 @@ export const api = {
   enableUser: (userId: string) =>
     apiFetch<any>(`/users/${userId}/enable`, { method: 'POST' }),
 
+  // ── Conditional Access ───────────────────────────────────────────────────
+  getCaPolicies: () => apiFetch<any>('/identity/ca-policies'),
+
+  getCaPolicy: (id: string) => apiFetch<any>(`/identity/ca-policies/${id}`),
+
+  toggleCaPolicy: (id: string, state: string) =>
+    apiFetch<any>(`/identity/ca-policies/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ state }),
+    }),
+
+  deleteCaPolicy: (id: string) =>
+    apiFetch<any>(`/identity/ca-policies/${id}`, { method: 'DELETE' }),
+
+  getNamedLocations: () => apiFetch<any>('/identity/named-locations'),
+
+  blockIpAddress: (ipAddress: string, locationName?: string) =>
+    apiFetch<any>('/identity/block-ip', {
+      method: 'POST',
+      body: JSON.stringify({ ipAddress, locationName }),
+    }),
+
+  unblockIpAddress: (ipAddress: string, locationName?: string) =>
+    apiFetch<any>('/identity/block-ip', {
+      method: 'DELETE',
+      body: JSON.stringify({ ipAddress, locationName }),
+    }),
+
+  requireMfaForUser: (userId: string, policyName?: string) =>
+    apiFetch<any>('/identity/require-mfa', {
+      method: 'POST',
+      body: JSON.stringify({ userId, policyName }),
+    }),
+
+  blockUserSignIn: (userId: string, policyName?: string) =>
+    apiFetch<any>('/identity/block-user', {
+      method: 'POST',
+      body: JSON.stringify({ userId, policyName }),
+    }),
+
   getIntuneScripts: () =>
     apiFetch<any>('/remediation/catalog/intune-scripts'),
 

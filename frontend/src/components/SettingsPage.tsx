@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low';
-type Tab = 'trial' | 'detection' | 'actions' | 'admins' | 'notifications' | 'automation' | 'whitelist' | 'siem' | 'audit' | 'hours';
+type Tab = 'trial' | 'detection' | 'actions' | 'admins' | 'notifications' | 'automation' | 'whitelist' | 'siem' | 'audit' | 'hours' | 'playbooks';
 
 const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DEFAULT_HOURS = DAYS.map((day, i) => ({ day, enabled: i >= 1 && i <= 5, start: '08:00', end: '18:00' }));
@@ -47,6 +47,7 @@ export default function SettingsPage() {
   const [businessHours, setBusinessHours] = useState<Array<{ day: string; enabled: boolean; start: string; end: string }>>(DEFAULT_HOURS);
   const [userHours, setUserHours] = useState<Array<{ email: string; start: string; end: string }>>([]);
   const [newUserHour, setNewUserHour] = useState({ email: '', start: '08:00', end: '18:00' });
+  const [playbooks, setPlaybooks] = useState<any[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -56,6 +57,7 @@ export default function SettingsPage() {
         api.getSiemSettings().catch(() => ({ logAnalytics: { enabled: false }, webhooks: [] }))
       ]);
       setSettings(s);
+      setPlaybooks(s.playbooks || []);
       setSiem({ logAnalytics: { enabled: !!siemSettings?.logAnalytics?.enabled, workspaceId: siemSettings?.logAnalytics?.workspaceId || '', sharedKey: siemSettings?.logAnalytics?.sharedKey || '' }, webhooks: Array.isArray(siemSettings?.webhooks) ? siemSettings.webhooks : [] });
     } finally { setLoading(false); }
   };
@@ -78,6 +80,7 @@ export default function SettingsPage() {
 
   useEffect(() => { load(); }, []);
   const flash = (message: string) => { setSaved(message); window.setTimeout(() => setSaved(''), 1800); };
+  const savePlaybooks = () => api.patchSettings({ playbooks });
 
   const saveSettings = async (patch: Partial<SettingsShape>) => {
     setSaving(true);
@@ -135,7 +138,8 @@ export default function SettingsPage() {
     { id: 'whitelist', label: 'Whitelist', icon: '✅' },
     { id: 'hours', label: 'Business Hours', icon: '🕐' },
     { id: 'siem', label: 'SIEM & Log Analytics', icon: '📡' },
-    { id: 'audit', label: 'Audit Log', icon: '📋' }
+    { id: 'audit', label: 'Audit Log', icon: '📋' },
+    { id: 'playbooks', label: 'Playbooks', icon: '🤖' }
   ];
 
   if (loading) return <div className="loading-state"><div className="loading-spinner" /><div className="loading-text">Loading settings…</div></div>;
@@ -240,6 +244,398 @@ export default function SettingsPage() {
       {tab === 'siem' && <div className="grid-two-responsive"><div className="card"><div className="card-header"><div className="card-title">Azure Log Analytics</div></div><label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}><input type="checkbox" checked={!!siem.logAnalytics?.enabled} onChange={e => setSiem(prev => ({ ...prev, logAnalytics: { ...(prev.logAnalytics || {}), enabled: e.target.checked } }))} /> Enabled</label><input className="input" placeholder="Workspace ID" value={siem.logAnalytics?.workspaceId || ''} onChange={e => setSiem(prev => ({ ...prev, logAnalytics: { ...(prev.logAnalytics || {}), workspaceId: e.target.value } }))} style={{ marginBottom: 10 }} /><input className="input" placeholder="Shared key" value={siem.logAnalytics?.sharedKey || ''} onChange={e => setSiem(prev => ({ ...prev, logAnalytics: { ...(prev.logAnalytics || {}), sharedKey: e.target.value } }))} /><div className="text-muted" style={{ fontSize: 12, marginTop: 10 }}>Use this to forward alerts into Log Analytics / Sentinel.</div><div style={{ display: 'flex', gap: 8, marginTop: 14 }}><button className="btn btn-primary" disabled={saving} onClick={saveSiem}>Save SIEM settings</button><button className="btn btn-ghost" onClick={testLogAnalytics}>Send test event</button></div>{siemTest ? <div className="detail-card" style={{ marginTop: 12 }}>{siemTest}</div> : null}</div><div className="card"><div className="card-header"><div className="card-title">Outbound webhooks</div></div><div style={{ display: 'grid', gap: 10 }}>{(siem.webhooks || []).map((hook, index) => <div key={index} className="detail-card"><input className="input" placeholder="Name" value={hook.name || ''} onChange={e => updateWebhook(index, { name: e.target.value })} style={{ marginBottom: 8 }} /><input className="input" placeholder="Webhook URL" value={hook.url || ''} onChange={e => updateWebhook(index, { url: e.target.value })} style={{ marginBottom: 8 }} /><label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={hook.enabled !== false} onChange={e => updateWebhook(index, { enabled: e.target.checked })} /> Enabled</label><div style={{ marginTop: 10 }}><button className="btn btn-ghost btn-sm" onClick={() => removeWebhook(index)}>Remove webhook</button></div></div>)}</div><div style={{ display: 'flex', gap: 8, marginTop: 14 }}><button className="btn btn-ghost" onClick={addWebhook}>Add webhook</button><button className="btn btn-primary" disabled={saving} onClick={saveSiem}>Save webhooks</button></div></div></div>}
 
       {tab === 'audit' && <div className="card"><div className="card-header"><div className="card-title">Audit log</div></div><div className="stats-grid" style={{ marginBottom: 14 }}><div className="stat-card neutral"><div className="stat-value">{audit.stats?.total ?? 0}</div><div className="stat-label">Total</div></div><div className="stat-card amber"><div className="stat-value">{audit.stats?.today ?? 0}</div><div className="stat-label">Today</div></div></div><div style={{ display: 'grid', gap: 8 }}>{(audit.entries || []).map((entry: any, index: number) => <div key={index} className="detail-card"><div style={{ fontWeight: 700 }}>{entry.action || 'event'}</div><div className="text-muted" style={{ fontSize: 12 }}>{entry.actor || 'system'} · {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '-'}</div><pre className="json-box" style={{ marginTop: 10 }}>{JSON.stringify(entry.details || entry, null, 2)}</pre></div>)}</div></div>}
+
+      {tab === 'playbooks' && <PlaybooksPanel playbooks={playbooks} setPlaybooks={setPlaybooks} onSave={savePlaybooks} saving={saving} />}
+    </div>
+  );
+}
+
+// ─── Playbooks Panel ─────────────────────────────────────────────────────────
+
+type PlaybookConditionField = 'severity' | 'country' | 'hour' | 'anomalyType';
+type PlaybookActionType = 'revokeSessions' | 'disableUser' | 'sendTelegram' | 'createCase' | 'notifyAdmin';
+
+interface PlaybookCondition {
+  field: PlaybookConditionField;
+  operator: string;
+  value: string;
+}
+
+interface PlaybookAction {
+  type: PlaybookActionType;
+}
+
+interface Playbook {
+  id: string;
+  name: string;
+  enabled: boolean;
+  conditionOperator: 'AND' | 'OR';
+  conditions: PlaybookCondition[];
+  actions: PlaybookAction[];
+  cooldownMinutes: number;
+}
+
+const FIELD_OPERATORS: Record<PlaybookConditionField, string[]> = {
+  severity: ['gte', 'lte'],
+  hour: ['gte', 'lte'],
+  country: ['in', 'notIn'],
+  anomalyType: ['eq'],
+};
+
+const OPERATOR_LABELS: Record<string, string> = {
+  gte: '>=',
+  lte: '<=',
+  in: 'in',
+  notIn: 'not in',
+  eq: '=',
+};
+
+const ACTION_TYPE_LABELS: Record<PlaybookActionType, string> = {
+  revokeSessions: 'Revoke Sessions',
+  disableUser: 'Disable User',
+  sendTelegram: 'Send Telegram',
+  createCase: 'Create Case',
+  notifyAdmin: 'Notify Admin',
+};
+
+function makeId() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function emptyPlaybook(): Playbook {
+  return {
+    id: makeId(),
+    name: '',
+    enabled: true,
+    conditionOperator: 'AND',
+    conditions: [],
+    actions: [],
+    cooldownMinutes: 30,
+  };
+}
+
+function PlaybooksPanel({
+  playbooks,
+  setPlaybooks,
+  onSave,
+  saving,
+}: {
+  playbooks: any[];
+  setPlaybooks: (p: any[]) => void;
+  onSave: () => void;
+  saving: boolean;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Playbook>(emptyPlaybook());
+
+  const openAdd = () => {
+    setDraft(emptyPlaybook());
+    setEditingId(null);
+    setShowForm(true);
+  };
+
+  const openEdit = (pb: Playbook) => {
+    setDraft({ ...pb, conditions: [...pb.conditions], actions: [...pb.actions] });
+    setEditingId(pb.id);
+    setShowForm(true);
+  };
+
+  const cancelForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+  };
+
+  const commitForm = () => {
+    if (!draft.name.trim()) return;
+    if (editingId) {
+      setPlaybooks(playbooks.map(p => (p.id === editingId ? { ...draft } : p)));
+    } else {
+      setPlaybooks([...playbooks, { ...draft }]);
+    }
+    setShowForm(false);
+    setEditingId(null);
+  };
+
+  const deletePlaybook = (id: string) => {
+    setPlaybooks(playbooks.filter(p => p.id !== id));
+  };
+
+  const toggleEnabled = (id: string) => {
+    setPlaybooks(playbooks.map(p => p.id === id ? { ...p, enabled: !p.enabled } : p));
+  };
+
+  const addCondition = () => {
+    setDraft(prev => ({
+      ...prev,
+      conditions: [
+        ...prev.conditions,
+        { field: 'severity', operator: 'gte', value: '' } as PlaybookCondition,
+      ],
+    }));
+  };
+
+  const updateCondition = (index: number, patch: Partial<PlaybookCondition>) => {
+    setDraft(prev => {
+      const conditions = prev.conditions.map((c, i) => {
+        if (i !== index) return c;
+        const updated = { ...c, ...patch } as PlaybookCondition;
+        // reset operator when field changes
+        if (patch.field && patch.field !== c.field) {
+          updated.operator = FIELD_OPERATORS[patch.field as PlaybookConditionField][0];
+        }
+        return updated;
+      });
+      return { ...prev, conditions };
+    });
+  };
+
+  const removeCondition = (index: number) => {
+    setDraft(prev => ({ ...prev, conditions: prev.conditions.filter((_, i) => i !== index) }));
+  };
+
+  const addAction = () => {
+    setDraft(prev => ({
+      ...prev,
+      actions: [...prev.actions, { type: 'revokeSessions' } as PlaybookAction],
+    }));
+  };
+
+  const updateAction = (index: number, type: PlaybookActionType) => {
+    setDraft(prev => ({
+      ...prev,
+      actions: prev.actions.map((a, i) => (i === index ? { type } : a)),
+    }));
+  };
+
+  const removeAction = (index: number) => {
+    setDraft(prev => ({ ...prev, actions: prev.actions.filter((_, i) => i !== index) }));
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title">Playbooks</div>
+          <button className="btn btn-primary btn-sm" onClick={openAdd} disabled={showForm}>
+            + Add Playbook
+          </button>
+        </div>
+
+        {/* Inline add/edit form */}
+        {showForm && (
+          <div
+            style={{
+              border: '1px solid var(--navy-border)',
+              borderRadius: 8,
+              padding: 16,
+              marginBottom: 16,
+              background: 'rgba(0,0,0,0.15)',
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 12 }}>
+              {editingId ? 'Edit Playbook' : 'New Playbook'}
+            </div>
+
+            {/* Name + Enabled */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, marginBottom: 10, alignItems: 'center' }}>
+              <input
+                className="input"
+                placeholder="Playbook name *"
+                value={draft.name}
+                onChange={e => setDraft(prev => ({ ...prev, name: e.target.value }))}
+              />
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, whiteSpace: 'nowrap' }}>
+                <input
+                  type="checkbox"
+                  checked={draft.enabled}
+                  onChange={e => setDraft(prev => ({ ...prev, enabled: e.target.checked }))}
+                />
+                Enabled
+              </label>
+            </div>
+
+            {/* Condition operator */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Condition operator:</span>
+              <select
+                className="input"
+                style={{ width: 100 }}
+                value={draft.conditionOperator}
+                onChange={e =>
+                  setDraft(prev => ({
+                    ...prev,
+                    conditionOperator: e.target.value as 'AND' | 'OR',
+                  }))
+                }
+              >
+                <option value="AND">AND</option>
+                <option value="OR">OR</option>
+              </select>
+            </div>
+
+            {/* Conditions */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                Conditions
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {draft.conditions.map((cond, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '130px 90px 1fr auto', gap: 6, alignItems: 'center' }}>
+                    <select
+                      className="input"
+                      value={cond.field}
+                      onChange={e =>
+                        updateCondition(i, { field: e.target.value as PlaybookConditionField })
+                      }
+                    >
+                      <option value="severity">severity</option>
+                      <option value="country">country</option>
+                      <option value="hour">hour</option>
+                      <option value="anomalyType">anomalyType</option>
+                    </select>
+                    <select
+                      className="input"
+                      value={cond.operator}
+                      onChange={e => updateCondition(i, { operator: e.target.value })}
+                    >
+                      {FIELD_OPERATORS[cond.field].map(op => (
+                        <option key={op} value={op}>
+                          {OPERATOR_LABELS[op] || op}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="input"
+                      placeholder="value"
+                      value={cond.value}
+                      onChange={e => updateCondition(i, { value: e.target.value })}
+                    />
+                    <button className="btn btn-ghost btn-sm" onClick={() => removeCondition(i)}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={addCondition}>
+                + Add condition
+              </button>
+            </div>
+
+            {/* Actions */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+                Actions
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {draft.actions.map((action, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, alignItems: 'center' }}>
+                    <select
+                      className="input"
+                      value={action.type}
+                      onChange={e => updateAction(i, e.target.value as PlaybookActionType)}
+                    >
+                      {(Object.keys(ACTION_TYPE_LABELS) as PlaybookActionType[]).map(t => (
+                        <option key={t} value={t}>
+                          {ACTION_TYPE_LABELS[t]}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="btn btn-ghost btn-sm" onClick={() => removeAction(i)}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={addAction}>
+                + Add action
+              </button>
+            </div>
+
+            {/* Cooldown */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Cooldown (minutes):</span>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                style={{ width: 90 }}
+                value={draft.cooldownMinutes}
+                onChange={e =>
+                  setDraft(prev => ({
+                    ...prev,
+                    cooldownMinutes: parseInt(e.target.value, 10) || 0,
+                  }))
+                }
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary btn-sm" onClick={commitForm} disabled={!draft.name.trim()}>
+                {editingId ? 'Update' : 'Add'}
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={cancelForm}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Playbook list */}
+        {playbooks.length === 0 && !showForm && (
+          <div className="empty-state">
+            <div>No playbooks configured. Click "+ Add Playbook" to create one.</div>
+          </div>
+        )}
+
+        {playbooks.length > 0 && (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {playbooks.map((pb: Playbook) => (
+              <div
+                key={pb.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  gap: 12,
+                  alignItems: 'center',
+                  padding: '10px 0',
+                  borderBottom: '1px solid var(--navy-border)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={pb.enabled}
+                      onChange={() => toggleEnabled(pb.id)}
+                    />
+                  </label>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{pb.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {pb.conditions?.length ?? 0} condition(s) · {pb.actions?.length ?? 0} action(s) · {pb.conditionOperator} · cooldown {pb.cooldownMinutes ?? 30}m
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => openEdit(pb)}>
+                    Edit
+                  </button>
+                  <button className="btn btn-danger btn-sm" onClick={() => deletePlaybook(pb.id)}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: 16 }}>
+          <button className="btn btn-primary" disabled={saving} onClick={onSave}>
+            Save Playbooks
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

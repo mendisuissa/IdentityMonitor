@@ -217,6 +217,17 @@ async function scanUser(tenantId, user, signIns, settings) {
 
         if (!existsInAzure) {
           alertsStore.add(alert);
+
+          // Run automated playbooks
+          setImmediate(async () => {
+            try {
+              const { runPlaybooksForAlert } = require('./playbookEngine');
+              await runPlaybooksForAlert(tenantId, alert);
+            } catch (err) {
+              console.warn('[Playbooks] Error running playbooks:', err.message);
+            }
+          });
+
           const baselineProfile = incidentStore.getBaselineProfile(tenantId, user.id);
           incidentStore.recordIncident(tenantId, alert, {
             baseline: baselineProfile,
