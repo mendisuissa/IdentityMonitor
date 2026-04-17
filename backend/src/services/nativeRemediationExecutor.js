@@ -206,13 +206,13 @@ async function resolveManagedDeviceTargets(tenantId, options = {}, finding = {})
 
 const POWERSHELL_SCRIPT_TEMPLATES = {
   'Update Microsoft Edge': `$ErrorActionPreference = 'Continue'
-$paths = @("${env:ProgramFiles(x86)}\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe","${env:ProgramFiles}\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe")
+$paths = @("\${env:ProgramFiles(x86)}\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe","\${env:ProgramFiles}\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe")
 $updater = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($updater) { Start-Process -FilePath $updater -ArgumentList "/silent /update" -Wait; Write-Output "Microsoft Edge update triggered." }
 else { Write-Output "MicrosoftEdgeUpdate.exe not found."; exit 1 }`,
 
   'Update Google Chrome': `$ErrorActionPreference = 'Continue'
-$paths = @("${env:ProgramFiles(x86)}\\Google\\Update\\GoogleUpdate.exe","${env:ProgramFiles}\\Google\\Update\\GoogleUpdate.exe")
+$paths = @("\${env:ProgramFiles(x86)}\\Google\\Update\\GoogleUpdate.exe","\${env:ProgramFiles}\\Google\\Update\\GoogleUpdate.exe")
 $updater = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($updater) { Start-Process -FilePath $updater -ArgumentList "/ua /installsource scheduler" -Wait; Write-Output "Google Chrome update triggered." }
 else { Write-Output "GoogleUpdate.exe not found."; exit 1 }`,
@@ -262,7 +262,7 @@ foreach ($p in $paths) { if (Test-Path $p) { Remove-Item -Path "$p\\*" -Recurse 
 Write-Output "Teams cache cleared."`,
 
   'Repair Office Click-to-Run': `$ErrorActionPreference = 'Continue'
-$paths = @("${env:ProgramFiles}\\Common Files\\microsoft shared\\ClickToRun\\OfficeClickToRun.exe","${env:ProgramFiles(x86)}\\Common Files\\microsoft shared\\ClickToRun\\OfficeClickToRun.exe")
+$paths = @("\${env:ProgramFiles}\\Common Files\\microsoft shared\\ClickToRun\\OfficeClickToRun.exe","\${env:ProgramFiles(x86)}\\Common Files\\microsoft shared\\ClickToRun\\OfficeClickToRun.exe")
 $c2r = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($c2r) { Start-Process -FilePath $c2r -ArgumentList "scenario=Repair RepairType=FullRepair DisplayLevel=None AcceptEula=True" -Wait; Write-Output "Office Click-to-Run repair started." }
 else { Write-Output "Office Click-to-Run not found."; exit 1 }`,
