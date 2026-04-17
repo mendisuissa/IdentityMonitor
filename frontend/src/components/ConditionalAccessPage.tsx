@@ -298,7 +298,7 @@ export default function ConditionalAccessPage() {
           <strong>Missing permission:</strong> Policy.ReadWrite.ConditionalAccess — Re-grant
           admin consent to enable CA management.{' '}
           <a
-            href="/api/auth/admin-consent"
+            href="/api/auth/admin-consent?returnTo=/identity"
             style={{ color: 'var(--amber-400)', textDecoration: 'underline' }}
           >
             Re-grant admin consent

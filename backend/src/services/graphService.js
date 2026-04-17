@@ -61,6 +61,15 @@ async function getClientForTenant(tenantId) {
   return getClientFromToken(data.access_token);
 }
 
+// ─── Clear cached token so new permissions take effect after admin consent ───
+function clearTokenCache(tenantId) {
+  if (tenantId) {
+    tokenCache.delete(tenantId);
+  } else {
+    tokenCache.clear();
+  }
+}
+
 async function graphGetAll(client, apiPath, pageSize = 999) {
   const items = [];
   let req = client.api(apiPath).top(pageSize);
@@ -306,4 +315,5 @@ module.exports = {
   disableUser,
   enableUser,
   getDeviceActions,
+  clearTokenCache,
 };

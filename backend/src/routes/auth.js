@@ -6,6 +6,7 @@ const CLIENT_ID     = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const { upsertTenantIntegration } = require('../services/tenantIntegrationStore');
 const { clearGraphTokenCache } = require('../services/nativeRemediationExecutor');
+const graphService = require('../services/graphService');
 const tenantRegistry = require('../services/tenantRegistry');
 const REDIRECT_URI  = process.env.REDIRECT_URI  || 'http://localhost:3001/api/auth/callback';
 const FRONTEND_URL  = process.env.FRONTEND_URL  || 'http://localhost:5173';
@@ -210,11 +211,16 @@ router.get('/admin-consent', (req, res) => {
   if (!CLIENT_ID) return res.status(500).json({ ok: false, error: 'CLIENT_ID not configured' });
   if (!tenantId) return res.status(401).json({ ok: false, error: 'No authenticated tenant session was found.' });
 
+  // Allow callers to pass ?returnTo=/identity so we redirect back after consent
+  const ALLOWED_RETURN_PATHS = ['/remediation', '/identity', '/settings', '/'];
+  const rawReturnTo = String(req.query.returnTo || '/remediation');
+  const returnTo = ALLOWED_RETURN_PATHS.includes(rawReturnTo) ? rawReturnTo : '/remediation';
+
   const nonce = crypto.randomBytes(16).toString('hex');
   const statePayload = {
     nonce,
     tenantId,
-    returnTo: '/remediation',
+    returnTo,
     createdAt: new Date().toISOString()
   };
   const encodedState = encodeConsentState(statePayload);
@@ -297,13 +303,19 @@ router.get('/admin-consent/callback', async (req, res) => {
       grantedAt: new Date().toISOString()
     };
 
+    // Clear ALL Graph token caches so next request gets a fresh token
+    // with the newly granted permissions
     clearGraphTokenCache(effectiveTenantId);
+    graphService.clearTokenCache(effectiveTenantId);
+
+    const returnTo = statePayload?.returnTo || '/remediation';
     req.session.save(() => {
-      res.redirect(FRONTEND_URL + '/remediation?consent=granted');
+      res.redirect(FRONTEND_URL + returnTo + '?consent=granted');
     });
   } catch (err) {
     console.error('[Auth] Admin consent callback error:', err.message);
-    res.redirect(FRONTEND_URL + '/remediation?consent=error&message=' + encodeURIComponent(err.message));
+    const returnTo = statePayload?.returnTo || '/remediation';
+    res.redirect(FRONTEND_URL + returnTo + '?consent=error&message=' + encodeURIComponent(err.message));
   }
 });
 
