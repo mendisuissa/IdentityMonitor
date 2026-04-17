@@ -16,17 +16,12 @@ export default function SignInsPage() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/signins?hours=${hours}`, { credentials: 'include' })
-      .then(async r => {
-        const data = await r.json();
-        if (!r.ok) {
-          setError({ message: data.error || 'Failed to load sign-in logs', hint: data.hint });
-          setSignIns([]);
-        } else {
-          setSignIns(data as SignIn[]);
-        }
+    api.getSignIns(hours)
+      .then(data => setSignIns(data as SignIn[]))
+      .catch(err => {
+        setError({ message: err.message || 'Failed to load sign-in logs', hint: err.hint });
+        setSignIns([]);
       })
-      .catch(err => setError({ message: err.message }))
       .finally(() => setLoading(false));
   }, [hours]);
 

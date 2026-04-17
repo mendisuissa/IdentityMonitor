@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { api } from '../services/api';
 
 interface PimResult {
   score: number;
@@ -20,8 +21,7 @@ export default function PimPage() {
   const [error, setError]   = useState('');
 
   useEffect(() => {
-    fetch('/api/pim/analyze', { credentials: 'include' })
-      .then(r => r.json())
+    api.getPimAnalysis()
       .then(d => { if (d.error) setError(d.error); else setData(d); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));

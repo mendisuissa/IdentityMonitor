@@ -24,7 +24,7 @@ export default function PostureOverview() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/posture', { credentials: 'include' }).then(r => r.json()),
+      api.getPosture(),
       api.getAlertStats(),
       api.getAlerts({}),
       api.getUsers()

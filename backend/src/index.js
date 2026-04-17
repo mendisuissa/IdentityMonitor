@@ -35,6 +35,7 @@ const automationService = require('./services/automationService');
 const deviceActionMonitor = require('./services/deviceActionMonitor');
 const tenantRegistry = require('./services/tenantRegistry');
 const defenderVulnerabilityRoutes = require('./routes/defenderVulnerabilities');
+const mspRoutes = require('./routes/msp');
 
 const app    = express();
 const server = http.createServer(app);
@@ -83,6 +84,7 @@ app.use('/api/remediation', remediationRouter);
 app.use('/api/audit',     auditRoutes);
 app.use('/api/device-actions', deviceActionsRoutes);
 app.use('/api/defender',  defenderVulnerabilityRoutes);
+app.use('/api/msp',       mspRoutes);
 
 // Settings route
 try {
@@ -92,12 +94,59 @@ try {
 
 app.get('/api/health', (req, res) => {
   res.json({
-    status:    'ok',
-    timestamp: new Date().toISOString(),
-    mockMode:  MOCK,
-    version:   '2.0.0',
-    features:  { webhooks: !!process.env.WEBHOOK_NOTIFICATION_URL, telegram: !!process.env.TELEGRAM_BOT_TOKEN, tableStorage: !!process.env.AZURE_STORAGE_CONNECTION_STRING }
+    status:        'ok',
+    timestamp:     new Date().toISOString(),
+    mockMode:      MOCK,
+    version:       '2.0.0',
+    activeTenants: tenantRegistry.getActiveTenants().length,
+    features:      { webhooks: !!process.env.WEBHOOK_NOTIFICATION_URL, telegram: !!process.env.TELEGRAM_BOT_TOKEN, tableStorage: !!process.env.AZURE_STORAGE_CONNECTION_STRING }
   });
+});
+
+// GET /api/posture — Composite security posture score for the current tenant
+app.get('/api/posture', (req, res) => {
+  try {
+    const tenantId = req.session?.tenant?.tenantId;
+    if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+
+    const { calculatePostureScore } = require('./services/postureScore');
+    const tenantHealth = tenantRegistry.getTenantHealth(tenantId);
+    const onboarding   = tenantRegistry.getOnboarding(tenantId);
+    const settings     = require('./services/settingsService').getSettings(tenantId);
+
+    // Calculate posture score (pimData can be null — will default to 50)
+    const posture = calculatePostureScore(tenantId, tenantHealth, null);
+
+    res.json({
+      ...posture,
+      tenant: {
+        tenantId,
+        tenantName: req.session.tenant.tenantName,
+        onboarding: {
+          connected:          true,
+          permissionsGranted: onboarding.permissionsGranted || !!tenantHealth.graphPermissionsOk,
+          firstScanDone:      onboarding.firstScanDone      || !!tenantHealth.lastSuccessfulScan,
+          alertChannelTested: onboarding.alertChannelTested || !!tenantHealth.mailDeliveryOk,
+          webhookActive:      onboarding.webhookActive      || !!tenantHealth.webhookActive,
+          workHoursSet:       onboarding.workHoursSet       || !!(settings.businessHours?.some(h => h.enabled))
+        },
+        health: {
+          graphPermissionsOk:   tenantHealth.graphPermissionsOk  ?? null,
+          signInLogsAvailable:  tenantHealth.signInLogsAvailable ?? null,
+          webhookActive:        tenantHealth.webhookActive        ?? false,
+          webhookExpiresAt:     tenantHealth.webhookExpiresAt     || null,
+          lastSuccessfulScan:   tenantHealth.lastSuccessfulScan   || null,
+          lastScanAlertCount:   tenantHealth.lastScanAlertCount   || 0,
+          baselineBuilt:        tenantHealth.baselineBuilt        ?? false,
+          privilegedUserCount:  tenantHealth.privilegedUserCount  || 0,
+          mailDeliveryOk:       tenantHealth.mailDeliveryOk       ?? null,
+          telegramOk:           tenantHealth.telegramOk           ?? null,
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Serve React frontend

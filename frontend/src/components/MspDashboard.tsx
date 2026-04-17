@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { api } from '../services/api';
 
 // MSP Dashboard — shows ALL tenants at a glance
 // Each tenant card shows: risk level, open alerts, last activity
@@ -22,8 +23,7 @@ export default function MspDashboard() {
   const [sortBy, setSortBy]   = useState<'risk' | 'alerts' | 'name'>('risk');
 
   useEffect(() => {
-    fetch('/api/msp/tenants', { credentials: 'include' })
-      .then(r => r.json())
+    api.getMspTenants()
       .then(d => setTenants(Array.isArray(d) ? d : []))
       .catch(() => setTenants([]))
       .finally(() => setLoading(false));

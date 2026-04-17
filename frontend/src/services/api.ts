@@ -61,7 +61,39 @@ export async function apiFetch<T = any>(path: string, options: ApiOptions = {}):
 }
 
 export const api = {
+  getHealth: () => apiFetch<any>('/health'),
+
+  getPosture: () => apiFetch<any>('/posture'),
+
   getAccess: () => apiFetch<any>('/auth/access'),
+
+  getSignIns: (hours?: number) => {
+    const q = hours ? `?hours=${hours}` : '';
+    return apiFetch<any>(`/signins${q}`);
+  },
+
+  getPimAnalysis: () => apiFetch<any>('/pim/analyze'),
+
+  getMspTenants: () => apiFetch<any>('/msp/tenants'),
+
+  getSettings: () => apiFetch<any>('/settings'),
+
+  patchSettings: (patch: any) =>
+    apiFetch<any>('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  addToWhitelist: (type: string, value: string) =>
+    apiFetch<any>(`/settings/whitelist/${type}`, {
+      method: 'POST',
+      body: JSON.stringify({ value }),
+    }),
+
+  removeFromWhitelist: (type: string, value: string) =>
+    apiFetch<any>(`/settings/whitelist/${type}/${encodeURIComponent(value)}`, {
+      method: 'DELETE',
+    }),
 
   getUsers: () => apiFetch<any>('/users'),
 
