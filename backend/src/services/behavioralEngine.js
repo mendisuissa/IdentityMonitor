@@ -179,7 +179,40 @@ function scoreSignIn(signIn, baseline, settings) {
   // ── App Weight Multiplier ─────────────────────────────────────────────
   const APP_MULTIPLIER = { CRITICAL: 2.0, HIGH: 1.5, MEDIUM: 1.2, LOW: 1.0 };
   const multiplier = APP_MULTIPLIER[appTier];
-  const finalScore = Math.min(100, Math.round(baseScore * multiplier));
+
+  // ── Baseline Confidence Adjustment ────────────────────────────────────
+  // If the baseline has very few data points, we can't confidently flag
+  // "new IP / new country" — reduce score to avoid alert fatigue on
+  // fresh accounts. Impossible Travel and High Entra Risk are NOT reduced
+  // because they don't need a baseline to be meaningful.
+  const baselineDataPoints = (baseline.recentSignIns || []).length;
+  const hasStrongBaseline = baselineDataPoints >= 20;
+  const hasWeakBaseline   = baselineDataPoints < 5;
+
+  const baselineDependentTypes = new Set(['NEW_IP', 'NEW_COUNTRY', 'UNKNOWN_DEVICE']);
+  const baselineDependentScore = factors
+    .filter(f => baselineDependentTypes.has(f.type))
+    .reduce((sum, f) => sum + f.score, 0);
+  const independentScore = factors
+    .filter(f => !baselineDependentTypes.has(f.type))
+    .reduce((sum, f) => sum + f.score, 0);
+
+  let adjustedBase = independentScore;
+  if (hasWeakBaseline) {
+    // < 5 sign-ins — cut baseline-dependent score by 60% (new user, no data)
+    adjustedBase += Math.round(baselineDependentScore * 0.40);
+  } else if (!hasStrongBaseline) {
+    // 5-19 sign-ins — cut by 20%
+    adjustedBase += Math.round(baselineDependentScore * 0.80);
+  } else {
+    adjustedBase += baselineDependentScore;
+  }
+
+  const confidenceLabel = hasStrongBaseline ? 'high'
+                        : hasWeakBaseline   ? 'low'
+                        : 'medium';
+
+  const finalScore = Math.min(100, Math.round(adjustedBase * multiplier));
 
   // ── Map to Severity ───────────────────────────────────────────────────
   let severity;
@@ -202,13 +235,15 @@ function scoreSignIn(signIn, baseline, settings) {
   }
 
   return {
-    score:       finalScore,
+    score:           finalScore,
     severity,
     factors,
     appTier,
     countryRisk,
     multiplier,
-    isClean:     finalScore === 0 || factors.length === 0
+    baselineConfidence: confidenceLabel,
+    baselineDataPoints,
+    isClean:         finalScore === 0 || factors.length === 0
   };
 }
 

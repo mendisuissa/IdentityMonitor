@@ -16,6 +16,7 @@ import AuditCenterPage from './components/AuditCenterPage';
 import CaseBoardPage from './components/CaseBoardPage';
 import TenantOpsPage from './components/TenantOpsPage';
 import RemediationPage from './components/RemediationPage';
+import ConditionalAccessPage from './components/ConditionalAccessPage';
 import './styles.css';
 
 interface TenantUser {
@@ -158,6 +159,9 @@ function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, on
             </NavLink>
             <NavLink to="/msp" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
               <span>🌐</span> MSP Fleet
+            </NavLink>
+            <NavLink to="/identity" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+              <span>🔒</span> Cond. Access
             </NavLink>
             <NavLink to="/settings" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
               <span>⚙️</span> Settings
@@ -325,6 +329,7 @@ function AppShell() {
             <Route path="/login" element={<LoginPage onLogin={() => navigate('/')} />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/remediation" element={<RemediationPage />} />
+            <Route path="/identity" element={<ConditionalAccessPage />} />
           </Routes>
         </main>
       </div>
