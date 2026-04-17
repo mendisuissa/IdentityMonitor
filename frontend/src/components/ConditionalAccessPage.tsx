@@ -269,7 +269,7 @@ export default function ConditionalAccessPage() {
           <span style={{ fontSize: 16 }}>ℹ️</span>
           <div style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)' }}>
             Conditional Access policies require{' '}
-            <strong>ConditionalAccessPolicy.ReadWrite.All</strong> permission. If you see errors, go
+            <strong>Policy.ReadWrite.ConditionalAccess</strong> permission. If you see errors, go
             to Settings → re-grant admin consent.
           </div>
           <button
@@ -295,7 +295,7 @@ export default function ConditionalAccessPage() {
             color: 'var(--text-secondary)',
           }}
         >
-          <strong>Missing permission:</strong> ConditionalAccessPolicy.ReadWrite.All — Re-grant
+          <strong>Missing permission:</strong> Policy.ReadWrite.ConditionalAccess — Re-grant
           admin consent to enable CA management.{' '}
           <a
             href="/api/auth/admin-consent"

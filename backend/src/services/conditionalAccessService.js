@@ -1,5 +1,5 @@
 // conditionalAccessService.js — Microsoft Graph Conditional Access management
-// Requires ConditionalAccessPolicy.Read.All + ConditionalAccessPolicy.ReadWrite.All permissions
+// Requires Policy.Read.ConditionalAccess + Policy.ReadWrite.ConditionalAccess permissions
 
 const graphService = require('./graphService');
 
@@ -12,7 +12,7 @@ async function _client(tenantId) {
 function _wrapError(err) {
   if (err && (err.statusCode === 403 || (err.code && err.code === 'Authorization_RequestDenied'))) {
     const e = new Error(
-      'Access denied. Ensure the application has ConditionalAccessPolicy.ReadWrite.All ' +
+      'Access denied. Ensure the application has Policy.ReadWrite.ConditionalAccess ' +
       'permission granted via admin consent.'
     );
     e.statusCode = 403;
