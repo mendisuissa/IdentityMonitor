@@ -29,7 +29,7 @@ interface SettingsShape {
 }
 
 const SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low'];
-const RULE_LABELS: Record<string, string> = { NEW_IP: 'New IP', NEW_COUNTRY: 'New Country', UNKNOWN_DEVICE: 'Unknown Device', IMPOSSIBLE_TRAVEL: 'Impossible Travel', OFF_HOURS: 'Off-Hours', FAILED_MFA: 'Failed MFA', HIGH_RISK: 'High Risk' };
+const RULE_LABELS: Record<string, string> = { NEW_IP: 'New IP', NEW_COUNTRY: 'New Country', UNKNOWN_DEVICE: 'Unknown Device', IMPOSSIBLE_TRAVEL: 'Impossible Travel', OFF_HOURS: 'Off-Hours', FAILED_MFA: 'Failed MFA', HIGH_RISK: 'High Risk', FAILED_SIGN_IN: 'Failed Authentication' };
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<SettingsShape>({});
@@ -52,7 +52,7 @@ export default function SettingsPage() {
     setLoading(true);
     try {
       const [s, siemSettings] = await Promise.all([
-        fetch('/api/settings', { credentials: 'include' }).then(r => r.json()),
+        api.getSettings(),
         api.getSiemSettings().catch(() => ({ logAnalytics: { enabled: false }, webhooks: [] }))
       ]);
       setSettings(s);
@@ -82,8 +82,7 @@ export default function SettingsPage() {
   const saveSettings = async (patch: Partial<SettingsShape>) => {
     setSaving(true);
     try {
-      const res = await fetch('/api/settings', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
-      const updated = await res.json();
+      const updated = await api.patchSettings(patch);
       setSettings(updated);
       flash('Saved');
     } finally { setSaving(false); }
@@ -91,14 +90,14 @@ export default function SettingsPage() {
 
   const addAdmin = async () => {
     if (!newAdmin.email.trim()) return;
-    await fetch('/api/settings/admins', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newAdmin) });
+    await api.addAdmin(newAdmin);
     setNewAdmin({ email: '', name: '', role: 'admin', telegramChatId: '' });
     await load();
     flash('Admin added');
   };
-  const removeAdmin = async (email: string) => { await fetch('/api/settings/admins/' + encodeURIComponent(email), { method: 'DELETE', credentials: 'include' }); await load(); flash('Admin removed'); };
-  const addWhitelist = async () => { if (!whitelistValue.trim()) return; await fetch('/api/settings/whitelist/' + whitelistType, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: whitelistValue.trim() }) }); setWhitelistValue(''); await load(); flash('Whitelist updated'); };
-  const removeWhitelist = async (type: string, value: string) => { await fetch('/api/settings/whitelist/' + type + '/' + encodeURIComponent(value), { method: 'DELETE', credentials: 'include' }); await load(); flash('Whitelist updated'); };
+  const removeAdmin = async (email: string) => { await api.removeAdmin(encodeURIComponent(email)); await load(); flash('Admin removed'); };
+  const addWhitelist = async () => { if (!whitelistValue.trim()) return; await api.addToWhitelist(whitelistType, whitelistValue.trim()); setWhitelistValue(''); await load(); flash('Whitelist updated'); };
+  const removeWhitelist = async (type: string, value: string) => { await api.removeFromWhitelist(type, value); await load(); flash('Whitelist updated'); };
   const updateRule = (key: string, patch: Partial<{ enabled: boolean; severity: string }>) => { const rules = { ...(settings.detectionRules || {}) }; rules[key] = { ...rules[key], ...patch } as any; setSettings(prev => ({ ...prev, detectionRules: rules })); };
   const updateAction = (severity: Severity, field: 'revokeSession'|'disableUser'|'telegramPlaybook', value: boolean) => { const autoActions = { ...(settings.autoActions || {}) }; autoActions[severity] = { ...(autoActions[severity] || {}), [field]: value } as any; setSettings(prev => ({ ...prev, autoActions })); };
   const saveAutomation = async () => { setSaving(true); try { await Promise.all([api.saveAssignmentRules(settings.assignmentRules || {}), api.saveApprovalPolicies(settings.approvalPolicies || {}), api.saveRunbooks(settings.runbooks || {})]); await load(); flash('Automation & approvals saved'); } finally { setSaving(false); } };

@@ -6,6 +6,7 @@ const CLIENT_ID     = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const { upsertTenantIntegration } = require('../services/tenantIntegrationStore');
 const { clearGraphTokenCache } = require('../services/nativeRemediationExecutor');
+const tenantRegistry = require('../services/tenantRegistry');
 const REDIRECT_URI  = process.env.REDIRECT_URI  || 'http://localhost:3001/api/auth/callback';
 const FRONTEND_URL  = process.env.FRONTEND_URL  || 'http://localhost:5173';
 const ADMIN_CONSENT_REDIRECT_URI = process.env.ADMIN_CONSENT_REDIRECT_URI || REDIRECT_URI;
@@ -60,6 +61,7 @@ router.get('/mock-login', (req, res) => {
     userName:   'Demo Admin',
   };
   req.session.tokens = { accessToken: 'mock-token', expiresAt: Date.now() + 86400000 };
+  tenantRegistry.registerTenant(req.session.tenant);
   const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
   res.redirect(FRONTEND_URL + '/');
 });
@@ -123,6 +125,9 @@ router.get('/callback', async (req, res) => {
       userName:    claims.name || '',
       connectedAt: new Date().toISOString()
     };
+
+    // Register tenant in the in-memory registry so health/posture/MSP routes work
+    tenantRegistry.registerTenant(req.session.tenant);
 
     req.session.tokens = {
       accessToken:  tokens.access_token,

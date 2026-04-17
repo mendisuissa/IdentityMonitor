@@ -72,9 +72,7 @@ This will force MFA re-authentication on their next sign-in.`)) return;
     if (!window.confirm(`${action === 'disable' ? 'Disable' : 'Re-enable'} account for ${user.displayName}?`)) return;
     setDisabling(user.id);
     try {
-      const endpoint = user.accountEnabled ? 'disable' : 'enable';
-      const res = await fetch(`/api/users/${user.id}/${endpoint}`, { method: 'POST', credentials: 'include' });
-      const result = await res.json();
+      const result = await (user.accountEnabled ? api.disableUser(user.id) : api.enableUser(user.id));
       alert(result.message);
       setUsers(prev => prev.map(u => u.id === user.id ? { ...u, accountEnabled: !u.accountEnabled } : u));
     } catch (err: any) {

@@ -42,7 +42,7 @@ export default function Dashboard() {
       api.getAlertStats(),
       api.getAlerts({}),
       api.getUsers(),
-      fetch('/api/health', { credentials: 'include' }).then(r => r.json()).catch(() => null),
+      api.getHealth().catch(() => null),
       api.getRiskPosture().catch(() => null)
     ]);
     setStats(s as AlertStats);

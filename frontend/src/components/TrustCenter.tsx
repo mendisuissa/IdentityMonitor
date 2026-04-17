@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { api } from '../services/api';
 
 export default function TrustCenter() {
   const [health, setHealth]       = useState<any>(null);
@@ -11,8 +12,8 @@ export default function TrustCenter() {
   const load = useCallback(async () => {
     try {
       const [h, p] = await Promise.all([
-        fetch('/api/health',  { credentials: 'include' }).then(r => r.json()),
-        fetch('/api/posture', { credentials: 'include' }).then(r => r.json())
+        api.getHealth().catch(() => null),
+        api.getPosture().catch(() => null)
       ]);
       setHealth(h);
       setPosture(p);
@@ -29,8 +30,7 @@ export default function TrustCenter() {
   // Read telegram config from settings endpoint
   const [settings, setSettings] = useState<any>(null);
   useEffect(() => {
-    fetch('/api/settings', { credentials: 'include' })
-      .then(r => r.json()).then(s => setSettings(s)).catch(() => {});
+    api.getSettings().then(s => setSettings(s)).catch(() => {});
   }, []);
 
   const telegramConfigured = !!(
@@ -54,9 +54,7 @@ export default function TrustCenter() {
   };
 
   const runScan = () => runAction('scan', async () => {
-    const res = await fetch('/api/alerts/scan', { method: 'POST', credentials: 'include' });
-    const d   = await res.json();
-    if (!res.ok) throw new Error(d.error || 'Scan failed');
+    const d = await api.triggerScan();
     return { message: `Scan complete — ${d.newAlerts} new alert${d.newAlerts !== 1 ? 's' : ''} detected` };
   });
 
@@ -84,8 +82,7 @@ export default function TrustCenter() {
   const refreshHealth = async () => {
     setChecking(true);
     try {
-      // Trigger a health check
-      await fetch('/api/alerts/scan', { method: 'POST', credentials: 'include' });
+      await api.triggerScan().catch(() => {});
       await load();
     } finally {
       setChecking(false);
