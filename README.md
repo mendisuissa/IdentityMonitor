@@ -56,8 +56,13 @@ Azure App Service
 | `User.Read.All` | Application | Read user details |
 | `RoleManagement.Read.Directory` | Application | Read role assignments |
 | `UserAuthenticationMethod.ReadWrite.All` | Application | MFA enforcement (optional) |
+| `Policy.Read.All` | Application | Read Conditional Access policies |
+| `Policy.ReadWrite.ConditionalAccess` | Application | Create / modify / delete CA policies (Phase 3) |
+| `DeviceManagementManagedDevices.ReadWrite.All` | Application | Intune device actions (wipe, lock, reset) |
 
 > Click **Grant admin consent** for all permissions.
+
+> **Note — Conditional Access permissions:** In the Azure portal, search for `Policy.ReadWrite.ConditionalAccess` under *Microsoft Graph → Application permissions*. This is the correct permission name (sometimes referenced as `ConditionalAccessPolicy.ReadWrite.All` in older docs). After adding it, you must click **Grant admin consent** again.
 
 ### 3. Create Client Secret
 
