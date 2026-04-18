@@ -68,22 +68,30 @@ router.get('/mock-login', (req, res) => {
 });
 
 // GET /api/auth/login
+// Flow: admin consent first (grants all app permissions) → then OAuth login
+// Microsoft skips the consent UI on repeat visits when permissions are unchanged.
 router.get('/login', (req, res) => {
   if (!CLIENT_ID) return res.status(500).json({ error: 'CLIENT_ID not configured' });
 
-  const params = new URLSearchParams({
-    client_id:     CLIENT_ID,
-    response_type: 'code',
-    redirect_uri:  REDIRECT_URI,
-    scope:         'openid profile email offline_access ' + REQUIRED_SCOPES,
-    response_mode: 'query',
-    state:         'login'
-  });
-  // Do NOT set prompt=consent — Microsoft will only ask for consent the first
-  // time or when new permissions are added. Forcing it every login is the cause
-  // of the repeated consent UX.
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const statePayload = {
+    nonce,
+    step: 'consent_then_login',
+    createdAt: new Date().toISOString()
+  };
+  const encodedState = encodeConsentState(statePayload);
 
-  res.redirect('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?' + params.toString());
+  req.session.loginConsent = { nonce, startedAt: new Date().toISOString() };
+
+  req.session.save((err) => {
+    if (err) return res.status(500).json({ error: 'Session error' });
+    const params = new URLSearchParams({
+      client_id:    CLIENT_ID,
+      redirect_uri: ADMIN_CONSENT_REDIRECT_URI,
+      state:        encodedState
+    });
+    res.redirect('https://login.microsoftonline.com/common/adminconsent?' + params.toString());
+  });
 });
 
 // GET /api/auth/callback
@@ -304,17 +312,34 @@ router.get('/admin-consent/callback', async (req, res) => {
     };
 
     // Clear ALL Graph token caches so next request gets a fresh token
-    // with the newly granted permissions
     clearGraphTokenCache(effectiveTenantId);
     graphService.clearTokenCache(effectiveTenantId);
 
-    const returnTo = statePayload?.returnTo || '/remediation';
+    // If this came from the login flow, proceed to OAuth login for this tenant
+    if (statePayload?.step === 'consent_then_login') {
+      const loginParams = new URLSearchParams({
+        client_id:     CLIENT_ID,
+        response_type: 'code',
+        redirect_uri:  REDIRECT_URI,
+        scope:         'openid profile email offline_access ' + REQUIRED_SCOPES,
+        response_mode: 'query',
+        state:         'login'
+      });
+      return req.session.save(() => {
+        res.redirect(
+          'https://login.microsoftonline.com/' + effectiveTenantId +
+          '/oauth2/v2.0/authorize?' + loginParams.toString()
+        );
+      });
+    }
+
+    const returnTo = statePayload?.returnTo || '/identity';
     req.session.save(() => {
       res.redirect(FRONTEND_URL + returnTo + '?consent=granted');
     });
   } catch (err) {
     console.error('[Auth] Admin consent callback error:', err.message);
-    const returnTo = statePayload?.returnTo || '/remediation';
+    const returnTo = statePayload?.returnTo || '/identity';
     res.redirect(FRONTEND_URL + returnTo + '?consent=error&message=' + encodeURIComponent(err.message));
   }
 });

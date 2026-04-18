@@ -43,8 +43,12 @@ Azure App Service
 
 1. Go to **Entra Admin Center** → App registrations → New registration
 2. Name: `Privileged Identity Monitor`
-3. Supported account type: Single tenant
-4. No redirect URI needed (service principal)
+3. Supported account type: **Multitenant** (`Accounts in any organizational directory`)
+4. Under **Authentication → Redirect URIs**, add both:
+   - `https://your-domain/api/auth/callback`
+   - `https://your-domain/api/auth/admin-consent/callback`
+
+> The login flow redirects customers through admin consent first (granting all app permissions), then immediately to OAuth login — so all permissions are granted on first sign-in.
 
 ### 2. API Permissions (Application, not Delegated)
 
