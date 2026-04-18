@@ -156,4 +156,61 @@ router.post('/block-user', requirePermission('settings.manage'), async (req, res
   }
 });
 
+// GET /api/identity/debug-token
+// Shows exactly which permissions are in the service-principal token for this tenant.
+// Use this to verify that Application permissions are granted (not just Delegated).
+router.get('/debug-token', async (req, res) => {
+  const tenantId = getTenantId(req);
+  if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+
+  try {
+    const graphService = require('../services/graphService');
+    graphService.clearTokenCache(tenantId); // always fetch fresh
+
+    const CLIENT_ID     = process.env.CLIENT_ID;
+    const CLIENT_SECRET = process.env.CLIENT_SECRET;
+
+    const tokenRes = await fetch(
+      `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id:     CLIENT_ID,
+          client_secret: CLIENT_SECRET,
+          scope:         'https://graph.microsoft.com/.default',
+          grant_type:    'client_credentials'
+        }).toString()
+      }
+    );
+
+    const data = await tokenRes.json();
+    if (data.error) return res.status(400).json({ error: data.error_description || data.error });
+
+    // Decode the JWT payload (middle segment)
+    const parts   = data.access_token.split('.');
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+
+    const roles = payload.roles || [];
+    const hasCaRead  = roles.includes('Policy.Read.ConditionalAccess')  || roles.includes('Policy.Read.All');
+    const hasCaWrite = roles.includes('Policy.ReadWrite.ConditionalAccess');
+
+    res.json({
+      tenantId,
+      clientId:    CLIENT_ID?.substring(0, 8) + '...',
+      tokenExpiry: new Date(payload.exp * 1000).toISOString(),
+      roles,
+      caPermissions: {
+        read:  hasCaRead,
+        write: hasCaWrite,
+        verdict: hasCaRead && hasCaWrite ? '✅ All CA permissions present' :
+                 hasCaRead               ? '⚠️ Read-only — missing Policy.ReadWrite.ConditionalAccess' :
+                                           '❌ Missing CA permissions — check Application (not Delegated) consent'
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
