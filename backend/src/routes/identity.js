@@ -195,6 +195,18 @@ router.get('/debug-token', async (req, res) => {
     const hasCaRead  = roles.includes('Policy.Read.ConditionalAccess')  || roles.includes('Policy.Read.All');
     const hasCaWrite = roles.includes('Policy.ReadWrite.ConditionalAccess');
 
+    // Actually call the CA policies endpoint to see the real error
+    let caCallResult;
+    try {
+      const caRes = await fetch('https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies', {
+        headers: { Authorization: 'Bearer ' + data.access_token }
+      });
+      const caBody = await caRes.json();
+      caCallResult = { httpStatus: caRes.status, body: caBody };
+    } catch (caErr) {
+      caCallResult = { error: caErr.message };
+    }
+
     res.json({
       tenantId,
       clientId:    CLIENT_ID?.substring(0, 8) + '...',
@@ -206,7 +218,8 @@ router.get('/debug-token', async (req, res) => {
         verdict: hasCaRead && hasCaWrite ? '✅ All CA permissions present' :
                  hasCaRead               ? '⚠️ Read-only — missing Policy.ReadWrite.ConditionalAccess' :
                                            '❌ Missing CA permissions — check Application (not Delegated) consent'
-      }
+      },
+      caApiCall: caCallResult
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
