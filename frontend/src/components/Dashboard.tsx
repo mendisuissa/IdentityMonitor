@@ -108,7 +108,7 @@ export default function Dashboard() {
   }, [telemetryIncomplete, posture, stats, users.length, health]);
 
   const checklist = useMemo(() => [
-    { key: 'tenant',  label: 'Connect tenant',            done: users.length > 0 || health?.mockMode === true,  actionLabel: 'Open settings',   action: () => navigate('/settings') },
+    { key: 'tenant',  label: 'Connect tenant',            done: health?.status === 'ok',                        actionLabel: 'Open settings',   action: () => navigate('/settings') },
     { key: 'scan',    label: 'Run first privileged scan', done: (stats?.total ?? 0) > 0,                        actionLabel: 'Open sign-ins',   action: () => navigate('/signins') },
     { key: 'channel', label: 'Enable an alert channel',   done: !!health?.features?.telegram,                   actionLabel: 'Configure alerts', action: () => navigate('/settings') },
     { key: 'storage', label: 'Persistent storage',        done: !!health?.features?.tableStorage,               actionLabel: 'Review storage',  action: () => navigate('/settings') },

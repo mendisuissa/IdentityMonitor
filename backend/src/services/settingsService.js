@@ -13,7 +13,7 @@ function _cacheGet(tenantId) {
 function _cacheSet(tenantId, data) { _cache.set(tenantId, { data, expiresAt: Date.now() + CACHE_TTL }); }
 
 function defaultSettings(tenantId) {
-  const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  const trialEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
   return {
     tenantId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     billing: { plan: 'trial', trialStarted: new Date().toISOString(), trialEndsAt: trialEnd, pricePerMonth: 10, currency: 'USD', tenantCount: 1 },
@@ -93,6 +93,9 @@ async function saveSettingsAsync(tenantId, updates) {
 }
 
 function getTrialStatus(tenantId) {
+  // BILLING_DISABLED=true → always treat as active (useful for self-hosted / dev environments)
+  if (process.env.BILLING_DISABLED === 'true') return { status: 'active', daysLeft: null };
+
   const s = getSettings(tenantId);
   const billing = s.billing || {};
   const now = Date.now();
