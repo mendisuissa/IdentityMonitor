@@ -7,9 +7,19 @@ const router  = express.Router();
 const caService        = require('../services/conditionalAccessService');
 const { requirePermission } = require('../services/accessControl');
 
-// ─── Helper: extract tenantId from session ────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────
 function getTenantId(req) {
-  return req.session && req.session.tenant ? req.session.tenant.tenantId : null;
+  return req.session?.tenant?.tenantId || null;
+}
+
+// CA Policy API requires a delegated (user) token — not a service-principal token.
+// Microsoft Graph returns "required scopes are missing" for app-only tokens on this endpoint.
+function getDelegatedToken(req) {
+  const tokens = req.session?.tokens;
+  if (!tokens?.accessToken) return null;
+  // Reject expired tokens (with 2-min buffer)
+  if (tokens.expiresAt && tokens.expiresAt < Date.now() + 120000) return null;
+  return tokens.accessToken;
 }
 
 // ─── Helper: send error response, detecting 403 permission errors ─────────
@@ -26,12 +36,27 @@ function sendError(res, err, defaultStatus) {
 // CA POLICIES
 // ─────────────────────────────────────────────────────────────────────────
 
+// ─── Helper: return 401 with re-login hint when delegated token is missing/expired ──
+function requireDelegatedToken(req, res) {
+  const token = getDelegatedToken(req);
+  if (!token) {
+    res.status(401).json({
+      error: 'Session token expired. Please log out and log in again to use Conditional Access features.',
+      reloginRequired: true
+    });
+    return null;
+  }
+  return token;
+}
+
 // GET /api/identity/ca-policies
 router.get('/ca-policies', async (req, res) => {
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+  const token = requireDelegatedToken(req, res);
+  if (!token) return;
   try {
-    const policies = await caService.listCaPolicies(tenantId);
+    const policies = await caService.listCaPolicies(tenantId, token);
     res.json(policies);
   } catch (err) {
     sendError(res, err);
@@ -42,8 +67,10 @@ router.get('/ca-policies', async (req, res) => {
 router.get('/ca-policies/:id', async (req, res) => {
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+  const token = requireDelegatedToken(req, res);
+  if (!token) return;
   try {
-    const policy = await caService.getCaPolicy(tenantId, req.params.id);
+    const policy = await caService.getCaPolicy(tenantId, req.params.id, token);
     res.json(policy);
   } catch (err) {
     sendError(res, err);
@@ -54,10 +81,12 @@ router.get('/ca-policies/:id', async (req, res) => {
 router.patch('/ca-policies/:id', requirePermission('settings.manage'), async (req, res) => {
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+  const token = requireDelegatedToken(req, res);
+  if (!token) return;
   const { state } = req.body || {};
   if (!state) return res.status(400).json({ error: 'state is required' });
   try {
-    const result = await caService.toggleCaPolicy(tenantId, req.params.id, state);
+    const result = await caService.toggleCaPolicy(tenantId, req.params.id, state, token);
     res.json(result || { ok: true });
   } catch (err) {
     sendError(res, err);
@@ -68,8 +97,10 @@ router.patch('/ca-policies/:id', requirePermission('settings.manage'), async (re
 router.delete('/ca-policies/:id', requirePermission('settings.manage'), async (req, res) => {
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+  const token = requireDelegatedToken(req, res);
+  if (!token) return;
   try {
-    await caService.deleteCaPolicy(tenantId, req.params.id);
+    await caService.deleteCaPolicy(tenantId, req.params.id, token);
     res.json({ ok: true });
   } catch (err) {
     sendError(res, err);
@@ -84,8 +115,10 @@ router.delete('/ca-policies/:id', requirePermission('settings.manage'), async (r
 router.get('/named-locations', async (req, res) => {
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+  const token = requireDelegatedToken(req, res);
+  if (!token) return;
   try {
-    const locations = await caService.listNamedLocations(tenantId);
+    const locations = await caService.listNamedLocations(tenantId, token);
     res.json(locations);
   } catch (err) {
     sendError(res, err);
@@ -100,10 +133,12 @@ router.get('/named-locations', async (req, res) => {
 router.post('/block-ip', requirePermission('settings.manage'), async (req, res) => {
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+  const token = requireDelegatedToken(req, res);
+  if (!token) return;
   const { ipAddress, locationName } = req.body || {};
   if (!ipAddress) return res.status(400).json({ error: 'ipAddress is required' });
   try {
-    const result = await caService.blockIpAddress(tenantId, ipAddress, locationName);
+    const result = await caService.blockIpAddress(tenantId, ipAddress, locationName, token);
     res.json(result);
   } catch (err) {
     sendError(res, err);
@@ -114,10 +149,12 @@ router.post('/block-ip', requirePermission('settings.manage'), async (req, res) 
 router.delete('/block-ip', requirePermission('settings.manage'), async (req, res) => {
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+  const token = requireDelegatedToken(req, res);
+  if (!token) return;
   const { ipAddress, locationName } = req.body || {};
   if (!ipAddress) return res.status(400).json({ error: 'ipAddress is required' });
   try {
-    const result = await caService.removeIpBlock(tenantId, ipAddress, locationName);
+    const result = await caService.removeIpBlock(tenantId, ipAddress, locationName, token);
     res.json(result || { ok: true });
   } catch (err) {
     sendError(res, err);
@@ -132,10 +169,12 @@ router.delete('/block-ip', requirePermission('settings.manage'), async (req, res
 router.post('/require-mfa', requirePermission('settings.manage'), async (req, res) => {
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+  const token = requireDelegatedToken(req, res);
+  if (!token) return;
   const { userId, policyName } = req.body || {};
   if (!userId) return res.status(400).json({ error: 'userId is required' });
   try {
-    const result = await caService.requireMfaForUser(tenantId, userId, policyName);
+    const result = await caService.requireMfaForUser(tenantId, userId, policyName, token);
     res.json(result);
   } catch (err) {
     sendError(res, err);
@@ -146,10 +185,12 @@ router.post('/require-mfa', requirePermission('settings.manage'), async (req, re
 router.post('/block-user', requirePermission('settings.manage'), async (req, res) => {
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+  const token = requireDelegatedToken(req, res);
+  if (!token) return;
   const { userId, policyName } = req.body || {};
   if (!userId) return res.status(400).json({ error: 'userId is required' });
   try {
-    const result = await caService.blockUserSignIn(tenantId, userId, policyName);
+    const result = await caService.blockUserSignIn(tenantId, userId, policyName, token);
     res.json(result);
   } catch (err) {
     sendError(res, err);

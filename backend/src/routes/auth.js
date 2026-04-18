@@ -17,7 +17,9 @@ const REQUIRED_SCOPES = [
   'https://graph.microsoft.com/Directory.Read.All',
   'https://graph.microsoft.com/User.Read.All',
   'https://graph.microsoft.com/RoleManagement.Read.Directory',
-  'https://graph.microsoft.com/Mail.Send'
+  'https://graph.microsoft.com/Mail.Send',
+  'https://graph.microsoft.com/Policy.Read.ConditionalAccess',
+  'https://graph.microsoft.com/Policy.ReadWrite.ConditionalAccess'
 ].join(' ');
 
 function encodeConsentState(payload) {
