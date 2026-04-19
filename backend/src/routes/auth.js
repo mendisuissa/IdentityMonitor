@@ -98,7 +98,31 @@ router.get('/login', (req, res) => {
 
 // GET /api/auth/callback
 router.get('/callback', async (req, res) => {
-  const { code, error, error_description } = req.query;
+  const { code, error, error_description, admin_consent, tenant, state } = req.query;
+
+  // Handle admin consent that landed here because ADMIN_CONSENT_REDIRECT_URI = REDIRECT_URI
+  if (!code && String(admin_consent).toLowerCase() === 'true' && tenant) {
+    const statePayload = decodeConsentState(String(state || ''));
+    const effectiveTenantId = String(tenant).trim();
+    graphService.clearTokenCache(effectiveTenantId);
+    clearGraphTokenCache(effectiveTenantId);
+    const returnTo = statePayload?.returnTo || '/';
+    const oauthState = statePayload?.step === 'consent_then_login'
+      ? 'login'
+      : 'post_consent__' + encodeURIComponent(returnTo);
+    const loginParams = new URLSearchParams({
+      client_id:     CLIENT_ID,
+      response_type: 'code',
+      redirect_uri:  REDIRECT_URI,
+      scope:         'openid profile email offline_access ' + REQUIRED_SCOPES,
+      response_mode: 'query',
+      state:         oauthState
+    });
+    return res.redirect(
+      'https://login.microsoftonline.com/' + effectiveTenantId +
+      '/oauth2/v2.0/authorize?' + loginParams.toString()
+    );
+  }
 
   if (error) {
     return res.redirect(FRONTEND_URL + '/login?error=' + encodeURIComponent(String(error_description || error)));
@@ -206,6 +230,11 @@ router.get('/callback', async (req, res) => {
       if (err) {
         console.error('[Auth] Session save error:', err.message);
         return res.redirect(FRONTEND_URL + '/login?error=session_save_failed');
+      }
+      const stateStr = String(req.query.state || '');
+      if (stateStr.startsWith('post_consent__')) {
+        const returnTo = decodeURIComponent(stateStr.replace('post_consent__', ''));
+        return res.redirect(FRONTEND_URL + returnTo + '?consent=granted');
       }
       res.redirect(FRONTEND_URL);
     });
@@ -317,27 +346,26 @@ router.get('/admin-consent/callback', async (req, res) => {
     clearGraphTokenCache(effectiveTenantId);
     graphService.clearTokenCache(effectiveTenantId);
 
-    // If this came from the login flow, proceed to OAuth login for this tenant
-    if (statePayload?.step === 'consent_then_login') {
-      const loginParams = new URLSearchParams({
-        client_id:     CLIENT_ID,
-        response_type: 'code',
-        redirect_uri:  REDIRECT_URI,
-        scope:         'openid profile email offline_access ' + REQUIRED_SCOPES,
-        response_mode: 'query',
-        state:         'login'
-      });
-      return req.session.save(() => {
-        res.redirect(
-          'https://login.microsoftonline.com/' + effectiveTenantId +
-          '/oauth2/v2.0/authorize?' + loginParams.toString()
-        );
-      });
-    }
-
+    // Always redirect to OAuth login to issue a fresh token with all consented scopes.
+    // For the initial consent_then_login flow, state='login' → redirects to home.
+    // For re-grant flows, state carries the returnTo path so we land back on the right page.
     const returnTo = statePayload?.returnTo || '/identity';
-    req.session.save(() => {
-      res.redirect(FRONTEND_URL + returnTo + '?consent=granted');
+    const oauthState = statePayload?.step === 'consent_then_login'
+      ? 'login'
+      : 'post_consent__' + encodeURIComponent(returnTo);
+    const loginParams = new URLSearchParams({
+      client_id:     CLIENT_ID,
+      response_type: 'code',
+      redirect_uri:  REDIRECT_URI,
+      scope:         'openid profile email offline_access ' + REQUIRED_SCOPES,
+      response_mode: 'query',
+      state:         oauthState
+    });
+    return req.session.save(() => {
+      res.redirect(
+        'https://login.microsoftonline.com/' + effectiveTenantId +
+        '/oauth2/v2.0/authorize?' + loginParams.toString()
+      );
     });
   } catch (err) {
     console.error('[Auth] Admin consent callback error:', err.message);
