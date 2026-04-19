@@ -267,4 +267,60 @@ router.get('/debug-token', async (req, res) => {
   }
 });
 
+// GET /api/identity/debug-session-token
+// Decodes the delegated (user) access token stored in the session.
+// Use this to verify Policy.Read/ReadWrite.ConditionalAccess are in the scp claim.
+router.get('/debug-session-token', async (req, res) => {
+  const tenantId = getTenantId(req);
+  if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+
+  const tokens = req.session?.tokens;
+  if (!tokens?.accessToken) {
+    return res.status(401).json({ error: 'No session access token found. Please log in again.' });
+  }
+
+  try {
+    const parts = tokens.accessToken.split('.');
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+
+    const scp   = (payload.scp || '').split(' ').filter(Boolean);
+    const hasCaRead  = scp.includes('Policy.Read.ConditionalAccess');
+    const hasCaWrite = scp.includes('Policy.ReadWrite.ConditionalAccess');
+
+    // Make the actual CA call with this token
+    let caCallResult;
+    try {
+      const caRes = await fetch('https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies', {
+        headers: { Authorization: 'Bearer ' + tokens.accessToken }
+      });
+      const caBody = await caRes.json();
+      caCallResult = { httpStatus: caRes.status, body: caBody };
+    } catch (caErr) {
+      caCallResult = { error: caErr.message };
+    }
+
+    res.json({
+      tenantId,
+      userEmail:   payload.upn || payload.preferred_username || payload.email || '?',
+      tokenExpiry: new Date(payload.exp * 1000).toISOString(),
+      tokenType:   payload.idtyp || (payload.appid && !payload.scp ? 'app-only' : 'delegated'),
+      scp,
+      caPermissions: {
+        read:  hasCaRead,
+        write: hasCaWrite,
+        verdict: hasCaRead && hasCaWrite
+          ? '✅ CA scopes present in delegated token'
+          : hasCaRead
+          ? '⚠️ Read-only — Policy.ReadWrite.ConditionalAccess missing from scp'
+          : '❌ CA scopes missing from session token — re-consent and re-login required'
+      },
+      caApiCall: caCallResult,
+      sessionTokenExpiresAt: tokens.expiresAt ? new Date(tokens.expiresAt).toISOString() : null,
+      isExpired: tokens.expiresAt ? tokens.expiresAt < Date.now() : false
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
