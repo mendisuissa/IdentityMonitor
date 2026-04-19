@@ -23,12 +23,16 @@ function _is403(err) {
 // ─── Helper: wrap 403 errors with a helpful message ───────────────────────
 function _wrapError(err) {
   if (_is403(err)) {
+    const graphCode = err.code || err.body?.error?.code || '';
+    const graphMsg  = err.message || err.body?.error?.message || '';
+    const detail    = [graphCode, graphMsg].filter(Boolean).join(': ');
     const e = new Error(
-      'Access denied. Ensure the application has Policy.ReadWrite.ConditionalAccess ' +
-      'permission granted via admin consent.'
+      'Access denied — CA management requires Policy.ReadWrite.ConditionalAccess + admin consent.' +
+      (detail ? ' Graph: ' + detail : '')
     );
     e.statusCode = 403;
     e.isPermissionError = true;
+    e.graphErrorCode = graphCode;
     throw e;
   }
   throw err;
