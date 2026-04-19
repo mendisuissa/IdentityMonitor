@@ -583,9 +583,15 @@ body {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid transparent;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: var(--text-primary);
   transition: all var(--transition);
   font-family: var(--font-sans);
+}
+.btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.13);
+  border-color: rgba(255,255,255,0.28);
 }
 
 .btn-primary {
@@ -609,15 +615,15 @@ body {
 .btn-danger:hover { background: rgba(239,68,68,0.18); }
 
 .btn-ghost {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.14);
   color: var(--text-secondary);
   border-radius: 8px;
 }
 .btn-ghost:hover {
-  border-color: rgba(255,255,255,0.13);
+  border-color: rgba(255,255,255,0.24);
   color: var(--text-primary);
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.10);
 }
 
 .btn-sm { padding: 4px 10px; font-size: 11px; }
