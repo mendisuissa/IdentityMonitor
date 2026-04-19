@@ -311,30 +311,33 @@ router.get('/debug-token', async (req, res) => {
 });
 
 // GET /api/identity/debug-session-token
-// Decodes the delegated (user) access token stored in the session.
-// Use this to verify Policy.Read/ReadWrite.ConditionalAccess are in the scp claim.
+// Decodes the delegated session token (with auto-refresh) and makes a live CA call.
+// Shows aud, ver, scp so you can see exactly what Graph receives.
 router.get('/debug-session-token', async (req, res) => {
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
 
-  const tokens = req.session?.tokens;
-  if (!tokens?.accessToken) {
-    return res.status(401).json({ error: 'No session access token found. Please log in again.' });
+  // Use the same refresh logic the CA routes use — so we see the actual token Graph gets
+  const rawTokens = req.session?.tokens;
+  const accessToken = await getOrRefreshToken(req);
+  if (!accessToken) {
+    return res.status(401).json({ error: 'No valid session token. Please log in again.' });
   }
 
   try {
-    const parts = tokens.accessToken.split('.');
+    const parts = accessToken.split('.');
     const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
 
-    const scp   = (payload.scp || '').split(' ').filter(Boolean);
+    const scp        = (payload.scp || '').split(' ').filter(Boolean);
     const hasCaRead  = scp.includes('Policy.Read.ConditionalAccess');
     const hasCaWrite = scp.includes('Policy.ReadWrite.ConditionalAccess');
+    const wasRefreshed = rawTokens?.accessToken !== accessToken;
 
-    // Make the actual CA call with this token
+    // Make the actual CA call directly with fetch (no SDK) so there's no SDK interference
     let caCallResult;
     try {
       const caRes = await fetch('https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies', {
-        headers: { Authorization: 'Bearer ' + tokens.accessToken }
+        headers: { Authorization: 'Bearer ' + accessToken }
       });
       const caBody = await caRes.json();
       caCallResult = { httpStatus: caRes.status, body: caBody };
@@ -344,22 +347,24 @@ router.get('/debug-session-token', async (req, res) => {
 
     res.json({
       tenantId,
-      userEmail:   payload.upn || payload.preferred_username || payload.email || '?',
-      tokenExpiry: new Date(payload.exp * 1000).toISOString(),
-      tokenType:   payload.idtyp || (payload.appid && !payload.scp ? 'app-only' : 'delegated'),
+      userEmail:    payload.upn || payload.preferred_username || payload.unique_name || '?',
+      tokenVersion: payload.ver || '?',
+      audience:     payload.aud || '?',
+      issuedAt:     payload.iat ? new Date(payload.iat * 1000).toISOString() : null,
+      tokenExpiry:  new Date(payload.exp * 1000).toISOString(),
+      tokenType:    payload.idtyp || (payload.scp ? 'delegated' : 'app-only'),
+      wasAutoRefreshed: wasRefreshed,
       scp,
       caPermissions: {
         read:  hasCaRead,
         write: hasCaWrite,
         verdict: hasCaRead && hasCaWrite
-          ? '✅ CA scopes present in delegated token'
+          ? '✅ CA scopes present'
           : hasCaRead
           ? '⚠️ Read-only — Policy.ReadWrite.ConditionalAccess missing from scp'
-          : '❌ CA scopes missing from session token — re-consent and re-login required'
+          : '❌ CA scopes missing — need fresh login with CA scopes consented'
       },
-      caApiCall: caCallResult,
-      sessionTokenExpiresAt: tokens.expiresAt ? new Date(tokens.expiresAt).toISOString() : null,
-      isExpired: tokens.expiresAt ? tokens.expiresAt < Date.now() : false
+      caApiCall: caCallResult
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
