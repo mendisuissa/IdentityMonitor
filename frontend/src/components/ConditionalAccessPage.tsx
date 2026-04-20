@@ -77,26 +77,133 @@ function ConditionsSummary({ conditions }: { conditions?: any }) {
   );
 }
 
-function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+// ─── Lookup tables ────────────────────────────────────────────────────────────
+const KNOWN_APPS: Record<string, string> = {
+  All: 'All Cloud Apps', None: 'No Applications', Office365: 'Microsoft 365',
+  '00000003-0000-0000-c000-000000000000': 'Microsoft Graph',
+  '00000002-0000-0ff1-ce00-000000000000': 'Exchange Online',
+  '00000003-0000-0ff1-ce00-000000000000': 'SharePoint Online',
+  '00000004-0000-0ff1-ce00-000000000000': 'Skype for Business',
+  '0000000a-0000-0000-c000-000000000000': 'Microsoft Intune',
+  'c44b4083-3bb0-49c1-b47d-974e53cbdf3c': 'Azure Portal',
+  '1fec8e78-bce4-4aaf-ab1b-5451cc387264': 'Microsoft Teams',
+  'd3590ed6-52b3-4102-aeff-aad2292ab01c': 'Microsoft Office',
+  '4345a7b9-9a63-4910-a426-35363201d503': 'Office (Web)',
+  '57fb890c-0dab-4253-a5e0-7188c88b2bb4': 'SharePoint (Web)',
+};
+const KNOWN_ROLES: Record<string, string> = {
+  '62e90394-69f5-4237-9190-012177145e10': 'Global Administrator',
+  '194ae4cb-b126-40b2-bd5b-6091b380977d': 'Security Administrator',
+  'b1be1c3e-b65d-4f19-8427-f6fa0d97feb9': 'Conditional Access Administrator',
+  '88d8e3e3-8f55-4a1e-953a-9b9898b8876b': 'Global Reader',
+  'e8611ab8-c189-46e8-94e1-60213ab1f814': 'Privileged Role Administrator',
+  '3a2c62db-5318-420d-8d74-23affee5d9d5': 'Intune Administrator',
+  '9f06204d-73c1-4d4c-880a-6edb90606fd8': 'Device Administrator',
+};
+const PLATFORM_META: Record<string, { icon: string; label: string }> = {
+  windows: { icon: '🪟', label: 'Windows' },
+  iOS: { icon: '📱', label: 'iOS' },
+  android: { icon: '🤖', label: 'Android' },
+  macOS: { icon: '🍎', label: 'macOS' },
+  linux: { icon: '🐧', label: 'Linux' },
+  windowsPhone: { icon: '📵', label: 'Windows Phone' },
+  all: { icon: '🌐', label: 'All Platforms' },
+};
+const CLIENT_APP_LABELS: Record<string, string> = {
+  browser: '🌐 Browser',
+  mobileAppsAndDesktopClients: '📱 Mobile & Desktop',
+  exchangeActiveSync: '📧 Exchange ActiveSync',
+  other: '⚡ Other Clients',
+};
+const CONTROL_META: Record<string, { icon: string; label: string; color: string }> = {
+  mfa:                 { icon: '🔐', label: 'Require MFA',              color: 'var(--indigo)' },
+  compliantDevice:     { icon: '✅', label: 'Compliant Device',          color: 'var(--green-clean)' },
+  domainJoinedDevice:  { icon: '🏢', label: 'Hybrid Azure AD Join',      color: 'var(--blue-low)' },
+  approvedApplication: { icon: '📋', label: 'Approved App',              color: 'var(--blue-low)' },
+  compliantApplication:{ icon: '📋', label: 'Compliant App',             color: 'var(--green-clean)' },
+  block:               { icon: '🚫', label: 'Block Access',              color: 'var(--red-critical)' },
+  passwordChange:      { icon: '🔑', label: 'Password Change Required',  color: 'var(--yellow-medium)' },
+};
+const RISK_COLOR: Record<string, string> = {
+  none: 'var(--text-muted)', low: 'var(--blue-low)', medium: 'var(--yellow-medium)', high: 'var(--orange-high)',
+};
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+function DrawerSection({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
-        {label}
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+        <span style={{ fontSize: 14 }}>{icon}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.7px' }}>{title}</span>
       </div>
+      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: '14px 16px', border: '1px solid var(--navy-border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function DrawerField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>{label}</div>
       {children}
     </div>
   );
 }
 
-function TagList({ items }: { items: any[] }) {
-  if (!items?.length) return null;
+function UserTag({ id }: { id: string }) {
+  if (id === 'All') return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 999, background: 'rgba(232,120,74,0.12)', border: '1px solid rgba(232,120,74,0.3)', color: 'var(--indigo)', fontSize: 12, fontWeight: 700 }}>👥 All Users</span>;
+  if (id === 'GuestsOrExternalUsers') return <span className="role-tag" style={{ fontSize: 12 }}>🌍 Guests & External</span>;
+  if (id.match(/^[0-9a-f-]{36}$/i)) return <span className="role-tag" style={{ fontSize: 11, fontFamily: 'var(--font-mono)', opacity: 0.8 }} title={id}>{id.substring(0, 8)}…</span>;
+  return <span className="role-tag" style={{ fontSize: 12 }}>{id}</span>;
+}
+
+function RoleTag({ id }: { id: string }) {
+  const name = KNOWN_ROLES[id];
+  if (name) return <span className="role-tag" style={{ fontSize: 12 }}>🎭 {name}</span>;
+  return <span className="role-tag" style={{ fontSize: 11, fontFamily: 'var(--font-mono)', opacity: 0.8 }} title={id}>{id.substring(0, 8)}…</span>;
+}
+
+function AppTag({ id }: { id: string }) {
+  const name = KNOWN_APPS[id];
+  if (name) return <span className="role-tag" style={{ fontSize: 12 }}>🔷 {name}</span>;
+  if (id.match(/^[0-9a-f-]{36}$/i)) return <span className="role-tag" style={{ fontSize: 11, fontFamily: 'var(--font-mono)', opacity: 0.8 }} title={id}>{id.substring(0, 8)}…</span>;
+  return <span className="role-tag" style={{ fontSize: 12 }}>{id}</span>;
+}
+
+function PlatformChip({ p }: { p: string }) {
+  const meta = PLATFORM_META[p] || PLATFORM_META[p.toLowerCase()] || { icon: '💻', label: p };
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-      {items.map((item, i) => (
-        <span key={i} className="role-tag" style={{ fontSize: 12 }}>{String(item)}</span>
-      ))}
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--navy-border)', fontSize: 13 }}>
+      {meta.icon} <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{meta.label}</span>
+    </span>
+  );
+}
+
+function ControlChip({ ctrl }: { ctrl: string }) {
+  const meta = CONTROL_META[ctrl] || { icon: '⚡', label: ctrl, color: 'var(--text-secondary)' };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--navy-border)' }}>
+      <span style={{ fontSize: 20 }}>{meta.icon}</span>
+      <span style={{ fontSize: 14, fontWeight: 600, color: meta.color }}>{meta.label}</span>
     </div>
   );
+}
+
+function RiskBadge({ level }: { level: string }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: `1px solid ${RISK_COLOR[level] || 'var(--navy-border)'}`, color: RISK_COLOR[level] || 'var(--text-secondary)', fontSize: 12, fontWeight: 700, textTransform: 'capitalize' }}>
+      {level}
+    </span>
+  );
+}
+
+function formatSignInFreq(sif: any): string {
+  if (!sif?.isEnabled) return 'Disabled';
+  if (sif.frequencyInterval === 'everyTime') return 'Every sign-in';
+  if (sif.value && sif.type) return `Every ${sif.value} ${sif.type}`;
+  return 'Enabled';
 }
 
 function PolicyDetailDrawer({
@@ -110,7 +217,7 @@ function PolicyDetailDrawer({
 }) {
   const c = policy.conditions || {};
   const gc = policy.grantControls || {};
-  const sc = policy.sessionControls;
+  const sc = policy.sessionControls || {};
 
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -118,15 +225,28 @@ function PolicyDetailDrawer({
     return () => document.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  const hasGrantControls = gc.builtInControls?.length || gc.customAuthenticationFactors?.length || gc.termsOfUse?.length;
-  const hasSessionControls = sc && Object.values(sc).some(v => v !== null);
+  const stateColor = policy.state === 'enabled' ? 'var(--green-clean)'
+    : policy.state === 'enabledForReportingButNotEnforced' ? 'var(--yellow-medium)'
+    : 'var(--red-critical)';
+
+  const sif = sc.signInFrequency;
+  const pb  = sc.persistentBrowser;
+  const cas = sc.cloudAppSecurity;
+  const aer = sc.applicationEnforcedRestrictions;
+
+  const hasUsers = c.users?.includeUsers?.length || c.users?.excludeUsers?.length || c.users?.includeGroups?.length || c.users?.excludeGroups?.length || c.users?.includeRoles?.length || c.users?.excludeRoles?.length;
+  const hasApps  = c.applications?.includeApplications?.length || c.applications?.excludeApplications?.length;
+  const hasDeviceNet = c.platforms?.includePlatforms?.length || c.platforms?.excludePlatforms?.length || c.clientAppTypes?.length || c.locations?.includeLocations?.length || c.locations?.excludeLocations?.length;
+  const hasRisk  = c.signInRiskLevels?.length || c.userRiskLevels?.length;
+  const hasGrant = gc.builtInControls?.length || gc.customAuthenticationFactors?.length || gc.termsOfUse?.length;
+  const hasSession = (sif?.isEnabled) || (pb?.isEnabled) || (cas?.isEnabled) || (aer?.isEnabled);
 
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 199, backdropFilter: 'blur(2px)' }} />
       <div style={{
-        position: 'fixed', top: 0, right: 0, height: '100vh', width: 'min(580px, 100vw)',
-        background: 'var(--navy-900)', borderLeft: '1px solid var(--navy-border)',
+        position: 'fixed', top: 0, right: 0, height: '100vh', width: 'min(600px, 100vw)',
+        background: 'var(--navy-900)', borderLeft: `3px solid ${stateColor}`,
         boxShadow: '-20px 0 60px rgba(0,0,0,0.5)', zIndex: 200,
         overflowY: 'auto', display: 'flex', flexDirection: 'column',
       }}>
@@ -134,8 +254,8 @@ function PolicyDetailDrawer({
         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--navy-border)', position: 'sticky', top: 0, background: 'var(--navy-900)', zIndex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.3, wordBreak: 'break-word' }}>{policy.displayName}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>{policy.id}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.3, wordBreak: 'break-word' }}>{policy.displayName}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>{policy.id}</div>
             </div>
             <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ flexShrink: 0, fontSize: 16 }}>✕</button>
           </div>
@@ -159,71 +279,220 @@ function PolicyDetailDrawer({
         <div style={{ padding: '20px 24px', flex: 1 }}>
           {/* Dates */}
           <div style={{ display: 'flex', gap: 28, marginBottom: 20, fontSize: 13, color: 'var(--text-secondary)' }}>
-            {policy.createdDateTime && (
-              <div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Created</div>{new Date(policy.createdDateTime).toLocaleString()}</div>
-            )}
-            {policy.modifiedDateTime && (
-              <div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Modified</div>{new Date(policy.modifiedDateTime).toLocaleString()}</div>
-            )}
+            {policy.createdDateTime && <div><div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Created</div>{new Date(policy.createdDateTime).toLocaleString()}</div>}
+            {policy.modifiedDateTime && <div><div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>Last modified</div>{new Date(policy.modifiedDateTime).toLocaleString()}</div>}
           </div>
 
-          {/* Conditions */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--indigo)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 8 }}>Conditions</div>
-            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--navy-border)' }}>
-              {c.users?.includeUsers?.length > 0 && <DetailRow label="Include Users"><TagList items={c.users.includeUsers} /></DetailRow>}
-              {c.users?.excludeUsers?.length > 0 && <DetailRow label="Exclude Users"><TagList items={c.users.excludeUsers} /></DetailRow>}
-              {c.users?.includeGroups?.length > 0 && <DetailRow label="Include Groups"><TagList items={c.users.includeGroups} /></DetailRow>}
-              {c.users?.excludeGroups?.length > 0 && <DetailRow label="Exclude Groups"><TagList items={c.users.excludeGroups} /></DetailRow>}
-              {c.users?.includeRoles?.length > 0 && <DetailRow label="Include Roles"><TagList items={c.users.includeRoles} /></DetailRow>}
-              {c.users?.excludeRoles?.length > 0 && <DetailRow label="Exclude Roles"><TagList items={c.users.excludeRoles} /></DetailRow>}
-              {c.applications?.includeApplications?.length > 0 && <DetailRow label="Include Applications"><TagList items={c.applications.includeApplications} /></DetailRow>}
-              {c.applications?.excludeApplications?.length > 0 && <DetailRow label="Exclude Applications"><TagList items={c.applications.excludeApplications} /></DetailRow>}
-              {c.locations?.includeLocations?.length > 0 && <DetailRow label="Include Locations"><TagList items={c.locations.includeLocations} /></DetailRow>}
-              {c.locations?.excludeLocations?.length > 0 && <DetailRow label="Exclude Locations"><TagList items={c.locations.excludeLocations} /></DetailRow>}
-              {c.platforms?.includePlatforms?.length > 0 && <DetailRow label="Include Platforms"><TagList items={c.platforms.includePlatforms} /></DetailRow>}
-              {c.platforms?.excludePlatforms?.length > 0 && <DetailRow label="Exclude Platforms"><TagList items={c.platforms.excludePlatforms} /></DetailRow>}
-              {c.clientAppTypes?.length > 0 && <DetailRow label="Client App Types"><TagList items={c.clientAppTypes} /></DetailRow>}
-              {c.signInRiskLevels?.length > 0 && <DetailRow label="Sign-in Risk Levels"><TagList items={c.signInRiskLevels} /></DetailRow>}
-              {c.userRiskLevels?.length > 0 && <DetailRow label="User Risk Levels"><TagList items={c.userRiskLevels} /></DetailRow>}
-              {!c.users && !c.applications && !c.locations && !c.platforms && !c.clientAppTypes && (
-                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No conditions defined</div>
+          {/* Users & Groups */}
+          {hasUsers ? (
+            <DrawerSection icon="👥" title="Users & Groups">
+              {c.users?.includeUsers?.length > 0 && (
+                <DrawerField label="Include Users">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.users.includeUsers.map((id: string, i: number) => <UserTag key={i} id={id} />)}
+                  </div>
+                </DrawerField>
               )}
-            </div>
-          </div>
+              {c.users?.excludeUsers?.length > 0 && (
+                <DrawerField label="Exclude Users">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.users.excludeUsers.map((id: string, i: number) => <UserTag key={i} id={id} />)}
+                  </div>
+                </DrawerField>
+              )}
+              {c.users?.includeGroups?.length > 0 && (
+                <DrawerField label="Include Groups">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.users.includeGroups.map((id: string, i: number) => <UserTag key={i} id={id} />)}
+                  </div>
+                </DrawerField>
+              )}
+              {c.users?.excludeGroups?.length > 0 && (
+                <DrawerField label="Exclude Groups">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.users.excludeGroups.map((id: string, i: number) => <UserTag key={i} id={id} />)}
+                  </div>
+                </DrawerField>
+              )}
+              {c.users?.includeRoles?.length > 0 && (
+                <DrawerField label="Include Roles">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.users.includeRoles.map((id: string, i: number) => <RoleTag key={i} id={id} />)}
+                  </div>
+                </DrawerField>
+              )}
+              {c.users?.excludeRoles?.length > 0 && (
+                <DrawerField label="Exclude Roles">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.users.excludeRoles.map((id: string, i: number) => <RoleTag key={i} id={id} />)}
+                  </div>
+                </DrawerField>
+              )}
+            </DrawerSection>
+          ) : null}
+
+          {/* Applications */}
+          {hasApps ? (
+            <DrawerSection icon="📱" title="Applications">
+              {c.applications?.includeApplications?.length > 0 && (
+                <DrawerField label="Include">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.applications.includeApplications.map((id: string, i: number) => <AppTag key={i} id={id} />)}
+                  </div>
+                </DrawerField>
+              )}
+              {c.applications?.excludeApplications?.length > 0 && (
+                <DrawerField label="Exclude">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.applications.excludeApplications.map((id: string, i: number) => <AppTag key={i} id={id} />)}
+                  </div>
+                </DrawerField>
+              )}
+            </DrawerSection>
+          ) : null}
+
+          {/* Device & Network */}
+          {hasDeviceNet ? (
+            <DrawerSection icon="🖥️" title="Device & Network">
+              {c.platforms?.includePlatforms?.length > 0 && (
+                <DrawerField label="Include Platforms">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.platforms.includePlatforms.map((p: string, i: number) => <PlatformChip key={i} p={p} />)}
+                  </div>
+                </DrawerField>
+              )}
+              {c.platforms?.excludePlatforms?.length > 0 && (
+                <DrawerField label="Exclude Platforms">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.platforms.excludePlatforms.map((p: string, i: number) => <PlatformChip key={i} p={p} />)}
+                  </div>
+                </DrawerField>
+              )}
+              {c.clientAppTypes?.length > 0 && (
+                <DrawerField label="Client App Types">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.clientAppTypes.map((t: string, i: number) => (
+                      <span key={i} className="role-tag" style={{ fontSize: 12 }}>{CLIENT_APP_LABELS[t] || t}</span>
+                    ))}
+                  </div>
+                </DrawerField>
+              )}
+              {(c.locations?.includeLocations?.length > 0 || c.locations?.excludeLocations?.length > 0) && (
+                <DrawerField label="Locations">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {c.locations?.includeLocations?.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Include:</span>
+                        {c.locations.includeLocations.map((l: string, i: number) => <span key={i} className="role-tag" style={{ fontSize: 12 }}>📍 {l}</span>)}
+                      </div>
+                    )}
+                    {c.locations?.excludeLocations?.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Exclude:</span>
+                        {c.locations.excludeLocations.map((l: string, i: number) => <span key={i} className="role-tag" style={{ fontSize: 12 }}>📍 {l}</span>)}
+                      </div>
+                    )}
+                  </div>
+                </DrawerField>
+              )}
+            </DrawerSection>
+          ) : null}
+
+          {/* Risk Levels */}
+          {hasRisk ? (
+            <DrawerSection icon="⚠️" title="Risk Levels">
+              {c.signInRiskLevels?.length > 0 && (
+                <DrawerField label="Sign-in Risk">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.signInRiskLevels.map((r: string, i: number) => <RiskBadge key={i} level={r} />)}
+                  </div>
+                </DrawerField>
+              )}
+              {c.userRiskLevels?.length > 0 && (
+                <DrawerField label="User Risk">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {c.userRiskLevels.map((r: string, i: number) => <RiskBadge key={i} level={r} />)}
+                  </div>
+                </DrawerField>
+              )}
+            </DrawerSection>
+          ) : null}
 
           {/* Grant Controls */}
-          {hasGrantControls && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--indigo)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 8 }}>Grant Controls</div>
-              <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--navy-border)' }}>
-                {gc.operator && (
-                  <DetailRow label="Operator">
-                    <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{gc.operator}</span>
-                  </DetailRow>
-                )}
-                {gc.builtInControls?.length > 0 && <DetailRow label="Built-in Controls"><TagList items={gc.builtInControls} /></DetailRow>}
-                {gc.customAuthenticationFactors?.length > 0 && <DetailRow label="Custom Auth Factors"><TagList items={gc.customAuthenticationFactors} /></DetailRow>}
-                {gc.termsOfUse?.length > 0 && <DetailRow label="Terms of Use"><TagList items={gc.termsOfUse} /></DetailRow>}
-              </div>
-            </div>
-          )}
+          {hasGrant ? (
+            <DrawerSection icon="🔐" title="Access Controls — Grant">
+              {gc.operator && (
+                <DrawerField label="Require controls">
+                  <span style={{ display: 'inline-flex', padding: '3px 10px', borderRadius: 6, background: 'rgba(155,138,251,0.15)', border: '1px solid rgba(155,138,251,0.3)', color: '#C4BBFF', fontSize: 12, fontWeight: 700 }}>
+                    {gc.operator === 'AND' ? 'ALL of the following' : 'ONE of the following'}
+                  </span>
+                </DrawerField>
+              )}
+              {gc.builtInControls?.length > 0 && (
+                <DrawerField label="Controls">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {gc.builtInControls.map((ctrl: string, i: number) => <ControlChip key={i} ctrl={ctrl} />)}
+                  </div>
+                </DrawerField>
+              )}
+              {gc.termsOfUse?.length > 0 && (
+                <DrawerField label="Terms of Use">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {gc.termsOfUse.map((t: string, i: number) => <span key={i} className="role-tag" style={{ fontSize: 12 }}>📜 {t}</span>)}
+                  </div>
+                </DrawerField>
+              )}
+            </DrawerSection>
+          ) : null}
 
           {/* Session Controls */}
-          {hasSessionControls && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--indigo)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 8 }}>Session Controls</div>
-              <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--navy-border)' }}>
-                <pre style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-mono)' }}>
-                  {JSON.stringify(sc, null, 2)}
-                </pre>
-              </div>
-            </div>
-          )}
+          {hasSession ? (
+            <DrawerSection icon="⏱️" title="Session Controls">
+              {sif?.isEnabled && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--navy-border)' }}>
+                  <span style={{ fontSize: 20 }}>🔄</span>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sign-in Frequency</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{formatSignInFreq(sif)}</div>
+                    {sif.authenticationType && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{sif.authenticationType}</div>}
+                  </div>
+                </div>
+              )}
+              {pb?.isEnabled && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--navy-border)' }}>
+                  <span style={{ fontSize: 20 }}>🖥️</span>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Persistent Browser Session</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: pb.mode === 'always' ? 'var(--green-clean)' : 'var(--red-critical)' }}>
+                      {pb.mode === 'always' ? 'Always persist' : 'Never persist'}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {cas?.isEnabled && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--navy-border)' }}>
+                  <span style={{ fontSize: 20 }}>☁️</span>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cloud App Security</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{cas.cloudAppSecuritySessionControlType || 'Enabled'}</div>
+                  </div>
+                </div>
+              )}
+              {aer?.isEnabled && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--navy-border)' }}>
+                  <span style={{ fontSize: 20 }}>📋</span>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>App-Enforced Restrictions</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Enabled</div>
+                  </div>
+                </div>
+              )}
+            </DrawerSection>
+          ) : null}
 
           {/* Raw JSON */}
           <details>
-            <summary style={{ cursor: 'pointer', color: '#F5A462', fontSize: 13, userSelect: 'none', outline: 'none' }}>Raw JSON</summary>
+            <summary style={{ cursor: 'pointer', color: '#F5A462', fontSize: 13, userSelect: 'none', outline: 'none', padding: '4px 0' }}>Raw JSON</summary>
             <pre style={{ marginTop: 10, background: 'rgba(7,9,15,0.95)', border: '1px solid var(--navy-border)', borderRadius: 10, padding: '12px 14px', fontSize: 11, color: 'var(--text-secondary)', overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-mono)', lineHeight: 1.6 }}>
               {JSON.stringify(policy, null, 2)}
             </pre>
