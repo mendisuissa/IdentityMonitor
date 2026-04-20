@@ -5,6 +5,12 @@ import { generateAlertPDF } from '../services/pdfReport';
 import { api } from '../services/api';
 import { Alert, AlertWorkflow, AccessProfile } from '../types';
 
+const CRITICAL_ROLES = [
+  'Global Administrator', 'Privileged Role Administrator',
+  'Security Administrator', 'Exchange Administrator', 'SharePoint Administrator',
+  'Conditional Access Administrator', 'Intune Administrator',
+];
+
 function inferConfidence(alert: Alert): 'high' | 'medium' | 'low' {
   if (alert.severity === 'critical') return 'high';
   if (alert.severity === 'high') return 'high';
@@ -147,7 +153,19 @@ export default function AlertsPage() {
             return <div key={alert.id} className="card" style={{ padding: 0, overflow: expanded === alert.id ? 'visible' : 'hidden', borderLeft: `3px solid ${({ critical: '#ff3b3b', high: '#ff6b35', medium: '#f5a623', low: '#4a90d9' } as any)[alert.severity]}` }}>
               <div style={{ padding: '14px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }} onClick={() => setExpanded(expanded === alert.id ? null : alert.id)}>
                 <span className={`severity-badge ${alert.severity}`}>{alert.severity}</span>
-                <div style={{ minWidth: 180 }}><div style={{ fontWeight: 700, fontSize: 13 }}>{alert.userDisplayName}</div><div className="text-muted" style={{ fontSize: 11 }}>{alert.userPrincipalName}</div></div>
+                <div style={{ minWidth: 180 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>{alert.userDisplayName}</div>
+                  <div className="text-muted" style={{ fontSize: 11 }}>{alert.userPrincipalName}</div>
+                  {(alert.roles || []).some(r => CRITICAL_ROLES.includes(r)) && (
+                    <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {(alert.roles || []).filter(r => CRITICAL_ROLES.includes(r)).map(r => (
+                        <span key={r} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 5, background: 'rgba(255,59,59,0.12)', border: '1px solid rgba(255,59,59,0.3)', color: '#ff6b6b', fontSize: 10, fontWeight: 700 }}>
+                          👑 {r}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div style={{ flex: 1, minWidth: 180 }}><div style={{ fontWeight: 700, fontSize: 13 }}>{alert.anomalyLabel}</div><div className="text-muted" style={{ fontSize: 11 }}>{alert.detail}</div></div>
                 <div style={{ minWidth: 160, textAlign: 'right' }}>
                   <div className="mono text-muted" style={{ fontSize: 11 }}>{formatDistanceToNow(new Date(alert.detectedAt), { addSuffix: true })}</div>
@@ -156,6 +174,17 @@ export default function AlertsPage() {
                 </div>
               </div>
               {expanded === alert.id && <div style={{ borderTop: '1px solid var(--navy-border)', padding: '16px 20px', background: 'rgba(0,0,0,0.16)' }}>
+                {(alert.roles || []).some(r => CRITICAL_ROLES.includes(r)) && (
+                  <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 8, background: 'rgba(255,59,59,0.08)', border: '1px solid rgba(255,59,59,0.3)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 18 }}>👑</span>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#ff6b6b' }}>Critical Privilege Exposure</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        This user holds <strong>{(alert.roles || []).filter(r => CRITICAL_ROLES.includes(r)).join(', ')}</strong> — a compromised account here has tenant-wide blast radius.
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr 1.1fr', gap: 16 }}>
                   <div>
                     <div className="card-title" style={{ marginBottom: 8 }}>Incident timeline</div>

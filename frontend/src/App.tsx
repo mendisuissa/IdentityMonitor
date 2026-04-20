@@ -147,9 +147,6 @@ function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, on
             <NavLink to="/audit" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
               <span>📜</span> Audit Center
             </NavLink>
-            <NavLink to="/pim" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>🔑</span> PIM Analysis
-            </NavLink>
           </div>
 
           <div className="nav-section">
