@@ -33,8 +33,12 @@ async function getOrRefreshToken(req) {
   }
   // Expired — try refresh_token
   if (!tokens.refreshToken) return null;
+  const tenantId = getTenantId(req);
+  const tokenEndpoint = tenantId
+    ? `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`
+    : 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
   try {
-    const resp = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+    const resp = await fetch(tokenEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
