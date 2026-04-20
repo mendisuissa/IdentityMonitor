@@ -10,6 +10,8 @@ interface CaPolicy {
   createdDateTime?: string;
   modifiedDateTime?: string;
   conditions?: any;
+  grantControls?: any;
+  sessionControls?: any;
 }
 
 interface NamedLocation {
@@ -75,6 +77,163 @@ function ConditionsSummary({ conditions }: { conditions?: any }) {
   );
 }
 
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TagList({ items }: { items: any[] }) {
+  if (!items?.length) return null;
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+      {items.map((item, i) => (
+        <span key={i} className="role-tag" style={{ fontSize: 12 }}>{String(item)}</span>
+      ))}
+    </div>
+  );
+}
+
+function PolicyDetailDrawer({
+  policy, onClose, onToggle, toggling,
+  onDeleteClick, onDeleteConfirm, onDeleteCancel, deleteConfirm, deleting,
+}: {
+  policy: CaPolicy; onClose: () => void;
+  onToggle: (p: CaPolicy) => void; toggling: boolean;
+  onDeleteClick: () => void; onDeleteConfirm: () => void; onDeleteCancel: () => void;
+  deleteConfirm: boolean; deleting: boolean;
+}) {
+  const c = policy.conditions || {};
+  const gc = policy.grantControls || {};
+  const sc = policy.sessionControls;
+
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const hasGrantControls = gc.builtInControls?.length || gc.customAuthenticationFactors?.length || gc.termsOfUse?.length;
+  const hasSessionControls = sc && Object.values(sc).some(v => v !== null);
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 199, backdropFilter: 'blur(2px)' }} />
+      <div style={{
+        position: 'fixed', top: 0, right: 0, height: '100vh', width: 'min(580px, 100vw)',
+        background: 'var(--navy-900)', borderLeft: '1px solid var(--navy-border)',
+        boxShadow: '-20px 0 60px rgba(0,0,0,0.5)', zIndex: 200,
+        overflowY: 'auto', display: 'flex', flexDirection: 'column',
+      }}>
+        {/* Sticky header */}
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--navy-border)', position: 'sticky', top: 0, background: 'var(--navy-900)', zIndex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.3, wordBreak: 'break-word' }}>{policy.displayName}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>{policy.id}</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ flexShrink: 0, fontSize: 16 }}>✕</button>
+          </div>
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <StateBadge state={policy.state} />
+            <button className="btn btn-ghost btn-sm" disabled={toggling} onClick={() => onToggle(policy)}>
+              {toggling ? '…' : policy.state === 'enabled' ? 'Disable' : 'Enable'}
+            </button>
+            {deleteConfirm ? (
+              <>
+                <button className="btn btn-danger btn-sm" disabled={deleting} onClick={onDeleteConfirm}>{deleting ? '…' : 'Confirm delete'}</button>
+                <button className="btn btn-ghost btn-sm" onClick={onDeleteCancel}>Cancel</button>
+              </>
+            ) : (
+              <button className="btn btn-danger btn-sm" onClick={onDeleteClick}>Delete</button>
+            )}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '20px 24px', flex: 1 }}>
+          {/* Dates */}
+          <div style={{ display: 'flex', gap: 28, marginBottom: 20, fontSize: 13, color: 'var(--text-secondary)' }}>
+            {policy.createdDateTime && (
+              <div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Created</div>{new Date(policy.createdDateTime).toLocaleString()}</div>
+            )}
+            {policy.modifiedDateTime && (
+              <div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Modified</div>{new Date(policy.modifiedDateTime).toLocaleString()}</div>
+            )}
+          </div>
+
+          {/* Conditions */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--indigo)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 8 }}>Conditions</div>
+            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--navy-border)' }}>
+              {c.users?.includeUsers?.length > 0 && <DetailRow label="Include Users"><TagList items={c.users.includeUsers} /></DetailRow>}
+              {c.users?.excludeUsers?.length > 0 && <DetailRow label="Exclude Users"><TagList items={c.users.excludeUsers} /></DetailRow>}
+              {c.users?.includeGroups?.length > 0 && <DetailRow label="Include Groups"><TagList items={c.users.includeGroups} /></DetailRow>}
+              {c.users?.excludeGroups?.length > 0 && <DetailRow label="Exclude Groups"><TagList items={c.users.excludeGroups} /></DetailRow>}
+              {c.users?.includeRoles?.length > 0 && <DetailRow label="Include Roles"><TagList items={c.users.includeRoles} /></DetailRow>}
+              {c.users?.excludeRoles?.length > 0 && <DetailRow label="Exclude Roles"><TagList items={c.users.excludeRoles} /></DetailRow>}
+              {c.applications?.includeApplications?.length > 0 && <DetailRow label="Include Applications"><TagList items={c.applications.includeApplications} /></DetailRow>}
+              {c.applications?.excludeApplications?.length > 0 && <DetailRow label="Exclude Applications"><TagList items={c.applications.excludeApplications} /></DetailRow>}
+              {c.locations?.includeLocations?.length > 0 && <DetailRow label="Include Locations"><TagList items={c.locations.includeLocations} /></DetailRow>}
+              {c.locations?.excludeLocations?.length > 0 && <DetailRow label="Exclude Locations"><TagList items={c.locations.excludeLocations} /></DetailRow>}
+              {c.platforms?.includePlatforms?.length > 0 && <DetailRow label="Include Platforms"><TagList items={c.platforms.includePlatforms} /></DetailRow>}
+              {c.platforms?.excludePlatforms?.length > 0 && <DetailRow label="Exclude Platforms"><TagList items={c.platforms.excludePlatforms} /></DetailRow>}
+              {c.clientAppTypes?.length > 0 && <DetailRow label="Client App Types"><TagList items={c.clientAppTypes} /></DetailRow>}
+              {c.signInRiskLevels?.length > 0 && <DetailRow label="Sign-in Risk Levels"><TagList items={c.signInRiskLevels} /></DetailRow>}
+              {c.userRiskLevels?.length > 0 && <DetailRow label="User Risk Levels"><TagList items={c.userRiskLevels} /></DetailRow>}
+              {!c.users && !c.applications && !c.locations && !c.platforms && !c.clientAppTypes && (
+                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No conditions defined</div>
+              )}
+            </div>
+          </div>
+
+          {/* Grant Controls */}
+          {hasGrantControls && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--indigo)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 8 }}>Grant Controls</div>
+              <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--navy-border)' }}>
+                {gc.operator && (
+                  <DetailRow label="Operator">
+                    <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{gc.operator}</span>
+                  </DetailRow>
+                )}
+                {gc.builtInControls?.length > 0 && <DetailRow label="Built-in Controls"><TagList items={gc.builtInControls} /></DetailRow>}
+                {gc.customAuthenticationFactors?.length > 0 && <DetailRow label="Custom Auth Factors"><TagList items={gc.customAuthenticationFactors} /></DetailRow>}
+                {gc.termsOfUse?.length > 0 && <DetailRow label="Terms of Use"><TagList items={gc.termsOfUse} /></DetailRow>}
+              </div>
+            </div>
+          )}
+
+          {/* Session Controls */}
+          {hasSessionControls && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--indigo)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 8 }}>Session Controls</div>
+              <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--navy-border)' }}>
+                <pre style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-mono)' }}>
+                  {JSON.stringify(sc, null, 2)}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          {/* Raw JSON */}
+          <details>
+            <summary style={{ cursor: 'pointer', color: '#F5A462', fontSize: 13, userSelect: 'none', outline: 'none' }}>Raw JSON</summary>
+            <pre style={{ marginTop: 10, background: 'rgba(7,9,15,0.95)', border: '1px solid var(--navy-border)', borderRadius: 10, padding: '12px 14px', fontSize: 11, color: 'var(--text-secondary)', overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-mono)', lineHeight: 1.6 }}>
+              {JSON.stringify(policy, null, 2)}
+            </pre>
+          </details>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function ConditionalAccessPage() {
   const [tab, setTab] = useState<CaTab>('policies');
   const [dismissedBanner, setDismissedBanner] = useState(false);
@@ -87,6 +246,7 @@ export default function ConditionalAccessPage() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [selectedPolicy, setSelectedPolicy] = useState<CaPolicy | null>(null);
 
   // Locations tab
   const [locations, setLocations] = useState<NamedLocation[]>([]);
@@ -371,7 +531,11 @@ export default function ConditionalAccessPage() {
                 </thead>
                 <tbody>
                   {policies.map(policy => (
-                    <tr key={policy.id}>
+                    <tr
+                      key={policy.id}
+                      onClick={() => { setSelectedPolicy(policy); setDeleteConfirmId(null); }}
+                      style={{ cursor: 'pointer' }}
+                    >
                       <td>
                         <span style={{ fontWeight: 600 }}>{policy.displayName}</span>
                         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
@@ -394,7 +558,7 @@ export default function ConditionalAccessPage() {
                           </div>
                         )}
                       </td>
-                      <td>
+                      <td onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button
                             className="btn btn-ghost btn-sm"
@@ -621,6 +785,21 @@ export default function ConditionalAccessPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Policy detail drawer */}
+      {selectedPolicy && (
+        <PolicyDetailDrawer
+          policy={selectedPolicy}
+          onClose={() => { setSelectedPolicy(null); setDeleteConfirmId(null); }}
+          onToggle={p => { togglePolicy(p); setSelectedPolicy(prev => prev ? { ...prev, state: prev.state === 'enabled' ? 'disabled' : 'enabled' } : null); }}
+          toggling={togglingId === selectedPolicy.id}
+          onDeleteClick={() => setDeleteConfirmId(selectedPolicy.id)}
+          onDeleteConfirm={() => { deletePolicy(selectedPolicy.id); setSelectedPolicy(null); }}
+          onDeleteCancel={() => setDeleteConfirmId(null)}
+          deleteConfirm={deleteConfirmId === selectedPolicy.id}
+          deleting={deletingId === selectedPolicy.id}
+        />
       )}
 
       {/* ── Named Locations tab ── */}
