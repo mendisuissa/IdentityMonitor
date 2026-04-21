@@ -28,6 +28,7 @@ const alertsStore   = require('./services/alertsStore');
 
 const anomalyService  = require('./services/anomalyService');
 const wsService       = require('./services/wsService');
+const jobRunner       = require('./services/jobRunner');
 const tableStorage    = require('./services/tableStorage');
 const webhookService  = require('./services/webhookService');
 const telegramService = require('./services/telegramService');
@@ -196,13 +197,15 @@ async function startup() {
   } catch (err) {
     console.warn('[Startup] warmCache error:', err.message);
   }
+
+  // Start background job runner (anomaly scans, webhook renewal, weekly digests)
+  if (!MOCK) jobRunner.init();
 }
 
 // ─── Scheduled Jobs ───────────────────────────────────────────────────────
 if (!MOCK) {
-  // Scan every 15 min (fallback for tenants without webhooks)
+  // Workflow/SLA automation sweep — every 15 min
   cron.schedule('*/15 * * * *', async () => {
-    console.log('[CRON] Running scheduled automation sweep...');
     try {
       const results = automationService.runAutomationSweep();
       console.log('[CRON] Automation summary:', JSON.stringify(results));
@@ -220,28 +223,8 @@ if (!MOCK) {
     }
   });
 
-  // Weekly digest — every Sunday at 8am
-  cron.schedule('0 8 * * 0', async () => {
-    console.log('[CRON] Sending weekly security digests...');
-    try {
-      const tenantIds = tenantRegistry.getAllTenantIds();
-      for (const tenantId of tenantIds) {
-        await weeklyDigest.generateAndSend(tenantId);
-      }
-    } catch (err) {
-      console.error('[CRON] Weekly digest failed:', err.message);
-    }
-  });
-
-  // Renew webhook subscriptions daily at 3am
-  cron.schedule('0 3 * * *', async () => {
-    console.log('[CRON] Renewing webhook subscriptions...');
-    try {
-      await webhookService.renewAllExpiring(tenantRegistry.getAllTenantIds());
-    } catch (err) {
-      console.error('[CRON] Webhook renewal failed:', err.message);
-    }
-  });
+  // Anomaly detection + alert notifications + webhooks + weekly digests
+  // are all owned by jobRunner (initialized in startup)
 }
 
 server.listen(PORT, async () => {

@@ -54,23 +54,31 @@ router.get('/trial', (req, res) => {
 });
 
 // POST /api/settings/admins — add admin
-router.post('/admins', requirePermission('settings.manage'), (req, res) => {
+router.post('/admins', requirePermission('settings.manage'), async (req, res) => {
   const tenantId = requireAuth(req, res);
   if (!tenantId) return;
   const { email, name, role = 'admin', telegramChatId } = req.body;
   if (!email) return res.status(400).json({ error: 'email required' });
-  const updated = settingsService.addAdmin(tenantId, { email, name, role, telegramChatId });
-  auditLog.log(tenantId, auditLog.ACTIONS.ADMIN_ADDED, { email, role }, getActor(req));
-  res.json(updated.admins);
+  try {
+    const updated = await settingsService.addAdmin(tenantId, { email, name, role, telegramChatId });
+    auditLog.log(tenantId, auditLog.ACTIONS.ADMIN_ADDED, { email, role }, getActor(req));
+    res.json(updated.admins);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // DELETE /api/settings/admins/:email — remove admin
-router.delete('/admins/:email', requirePermission('settings.manage'), (req, res) => {
+router.delete('/admins/:email', requirePermission('settings.manage'), async (req, res) => {
   const tenantId = requireAuth(req, res);
   if (!tenantId) return;
-  const updated = settingsService.removeAdmin(tenantId, req.params.email);
-  auditLog.log(tenantId, auditLog.ACTIONS.ADMIN_REMOVED, { email: req.params.email }, getActor(req));
-  res.json(updated.admins);
+  try {
+    const updated = await settingsService.removeAdmin(tenantId, req.params.email);
+    auditLog.log(tenantId, auditLog.ACTIONS.ADMIN_REMOVED, { email: req.params.email }, getActor(req));
+    res.json(updated.admins);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/settings/whitelist/:type — add to whitelist
