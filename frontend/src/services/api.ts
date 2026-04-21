@@ -394,21 +394,6 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  getTelegramSettings: () =>
-    apiFetch<any>('/settings/telegram'),
-
-  saveTelegramSettings: (body: any) =>
-    apiFetch<any>('/settings/telegram', {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-
-  testTelegramDelivery: (body: any) =>
-    apiFetch<any>('/settings/telegram/test', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
   getSiemSettings: () =>
     apiFetch<any>('/settings/siem'),
 
