@@ -40,6 +40,11 @@ export default function SettingsPage() {
   const [audit, setAudit] = useState<any>({ entries: [], stats: {} });
   const [inbox, setInbox] = useState<any>({ items: [], stats: {} });
   const [newAdmin, setNewAdmin] = useState({ email: '', name: '', role: 'admin', telegramChatId: '' });
+  const [editingAdmin, setEditingAdmin] = useState<string | null>(null);
+  const [editAdminData, setEditAdminData] = useState({ email: '', name: '', role: 'admin', telegramChatId: '' });
+  const [telegram, setTelegram] = useState({ telegramBotToken: '', telegramChatId: '', telegramOnSeverity: ['critical', 'high'] });
+  const [telegramSaving, setTelegramSaving] = useState(false);
+  const [telegramTest, setTelegramTest] = useState('');
   const [whitelistType, setWhitelistType] = useState<'ips'|'countries'|'devices'|'users'>('ips');
   const [whitelistValue, setWhitelistValue] = useState('');
   const [siem, setSiem] = useState<SiemSettings>({ logAnalytics: { enabled: false, workspaceId: '', sharedKey: '' }, webhooks: [] });
@@ -52,13 +57,15 @@ export default function SettingsPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [s, siemSettings] = await Promise.all([
+      const [s, siemSettings, tg] = await Promise.all([
         api.getSettings(),
-        api.getSiemSettings().catch(() => ({ logAnalytics: { enabled: false }, webhooks: [] }))
+        api.getSiemSettings().catch(() => ({ logAnalytics: { enabled: false }, webhooks: [] })),
+        api.getTelegramSettings().catch(() => ({ telegramBotToken: '', telegramChatId: '', telegramOnSeverity: ['critical', 'high'] }))
       ]);
       setSettings(s);
       setPlaybooks(s.playbooks || []);
       setSiem({ logAnalytics: { enabled: !!siemSettings?.logAnalytics?.enabled, workspaceId: siemSettings?.logAnalytics?.workspaceId || '', sharedKey: siemSettings?.logAnalytics?.sharedKey || '' }, webhooks: Array.isArray(siemSettings?.webhooks) ? siemSettings.webhooks : [] });
+      setTelegram({ telegramBotToken: tg.telegramBotToken || '', telegramChatId: tg.telegramChatId || '', telegramOnSeverity: tg.telegramOnSeverity || ['critical', 'high'] });
     } finally { setLoading(false); }
   };
 
@@ -99,6 +106,33 @@ export default function SettingsPage() {
     flash('Admin added');
   };
   const removeAdmin = async (email: string) => { await api.removeAdmin(encodeURIComponent(email)); await load(); flash('Admin removed'); };
+  const startEditAdmin = (admin: any) => { setEditingAdmin(admin.email); setEditAdminData({ email: admin.email, name: admin.name || '', role: admin.role || 'admin', telegramChatId: admin.telegramChatId || '' }); };
+  const saveTelegramSettings = async () => {
+    setTelegramSaving(true);
+    try {
+      const updated = await api.saveTelegramSettings(telegram);
+      setTelegram(updated);
+      flash('Telegram settings saved');
+    } finally { setTelegramSaving(false); }
+  };
+  const testTelegramNow = async () => {
+    setTelegramTest('Sending…');
+    try {
+      await api.testTelegram();
+      setTelegramTest('✅ Sent — check your Telegram');
+    } catch (err: any) {
+      setTelegramTest('❌ ' + (err.message || 'Failed'));
+    }
+    setTimeout(() => setTelegramTest(''), 4000);
+  };
+  const saveEditAdmin = async () => {
+    if (!editAdminData.email.trim()) return;
+    await api.removeAdmin(encodeURIComponent(editingAdmin!));
+    await api.addAdmin(editAdminData);
+    setEditingAdmin(null);
+    await load();
+    flash('Admin updated');
+  };
   const addWhitelist = async () => { if (!whitelistValue.trim()) return; await api.addToWhitelist(whitelistType, whitelistValue.trim()); setWhitelistValue(''); await load(); flash('Whitelist updated'); };
   const removeWhitelist = async (type: string, value: string) => { await api.removeFromWhitelist(type, value); await load(); flash('Whitelist updated'); };
   const updateRule = (key: string, patch: Partial<{ enabled: boolean; severity: string }>) => { const rules = { ...(settings.detectionRules || {}) }; rules[key] = { ...rules[key], ...patch } as any; setSettings(prev => ({ ...prev, detectionRules: rules })); };
@@ -159,9 +193,82 @@ export default function SettingsPage() {
 
       {tab === 'actions' && <div className="card"><div className="card-header"><div className="card-title">Automated actions by severity</div></div><div style={{ display: 'grid', gap: 12 }}>{SEVERITIES.map(sev => <div key={sev} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 1fr', gap: 12, alignItems: 'center' }}><div style={{ fontWeight: 700, textTransform: 'capitalize' }}>{sev}</div><label><input type="checkbox" checked={!!settings.autoActions?.[sev]?.revokeSession} onChange={e => updateAction(sev, 'revokeSession', e.target.checked)} /> Revoke session</label><label><input type="checkbox" checked={!!settings.autoActions?.[sev]?.disableUser} onChange={e => updateAction(sev, 'disableUser', e.target.checked)} /> Disable user</label><label><input type="checkbox" checked={!!settings.autoActions?.[sev]?.telegramPlaybook} onChange={e => updateAction(sev, 'telegramPlaybook', e.target.checked)} /> Telegram playbook</label></div>)}</div><div style={{ marginTop: 14 }}><button className="btn btn-primary" disabled={saving} onClick={() => saveSettings({ autoActions: settings.autoActions })}>Save auto-actions</button></div></div>}
 
-      {tab === 'admins' && <div className="card"><div className="card-header"><div className="card-title">Tenant admins</div></div><div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>{(settings.admins || []).map(admin => <div key={admin.email} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, borderBottom: '1px solid var(--navy-border)', paddingBottom: 10 }}><div><div style={{ fontWeight: 700 }}>{admin.name || admin.email}</div><div className="text-muted" style={{ fontSize: 12 }}>{admin.email} · {admin.role}</div></div><button className="btn btn-ghost btn-sm" onClick={() => removeAdmin(admin.email)}>Remove</button></div>)}</div><div className="grid-two-responsive"><input className="input" placeholder="Email" value={newAdmin.email} onChange={e => setNewAdmin(prev => ({ ...prev, email: e.target.value }))} /><input className="input" placeholder="Name" value={newAdmin.name} onChange={e => setNewAdmin(prev => ({ ...prev, name: e.target.value }))} /><input className="input" placeholder="Role" value={newAdmin.role} onChange={e => setNewAdmin(prev => ({ ...prev, role: e.target.value }))} /><input className="input" placeholder="Telegram Chat ID (optional)" value={newAdmin.telegramChatId} onChange={e => setNewAdmin(prev => ({ ...prev, telegramChatId: e.target.value }))} /></div><div style={{ marginTop: 14 }}><button className="btn btn-primary" onClick={addAdmin}>Add admin</button></div></div>}
+      {tab === 'admins' && <div className="card">
+        <div className="card-header"><div className="card-title">Tenant admins</div></div>
+        <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
+          {(settings.admins || []).map((admin: any) => editingAdmin === admin.email ? (
+            <div key={admin.email} style={{ borderBottom: '1px solid var(--navy-border)', paddingBottom: 14 }}>
+              <div className="grid-two-responsive" style={{ marginBottom: 8 }}>
+                <input className="input" placeholder="Email" value={editAdminData.email} onChange={e => setEditAdminData(p => ({ ...p, email: e.target.value }))} />
+                <input className="input" placeholder="Name" value={editAdminData.name} onChange={e => setEditAdminData(p => ({ ...p, name: e.target.value }))} />
+                <input className="input" placeholder="Role" value={editAdminData.role} onChange={e => setEditAdminData(p => ({ ...p, role: e.target.value }))} />
+                <input className="input" placeholder="Telegram Chat ID (optional)" value={editAdminData.telegramChatId} onChange={e => setEditAdminData(p => ({ ...p, telegramChatId: e.target.value }))} />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-primary btn-sm" onClick={saveEditAdmin}>Save</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setEditingAdmin(null)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div key={admin.email} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, borderBottom: '1px solid var(--navy-border)', paddingBottom: 10 }}>
+              <div>
+                <div style={{ fontWeight: 700 }}>{admin.name || admin.email}</div>
+                <div className="text-muted" style={{ fontSize: 12 }}>{admin.email} · {admin.role}{admin.telegramChatId ? ` · TG: ${admin.telegramChatId}` : ''}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => startEditAdmin(admin)}>Edit</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => removeAdmin(admin.email)}>Remove</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="grid-two-responsive">
+          <input className="input" placeholder="Email" value={newAdmin.email} onChange={e => setNewAdmin(prev => ({ ...prev, email: e.target.value }))} />
+          <input className="input" placeholder="Name" value={newAdmin.name} onChange={e => setNewAdmin(prev => ({ ...prev, name: e.target.value }))} />
+          <input className="input" placeholder="Role" value={newAdmin.role} onChange={e => setNewAdmin(prev => ({ ...prev, role: e.target.value }))} />
+          <input className="input" placeholder="Telegram Chat ID (optional)" value={newAdmin.telegramChatId} onChange={e => setNewAdmin(prev => ({ ...prev, telegramChatId: e.target.value }))} />
+        </div>
+        <div style={{ marginTop: 14 }}><button className="btn btn-primary" onClick={addAdmin}>Add admin</button></div>
+      </div>}
 
-      {tab === 'notifications' && <div className="card"><div className="card-header"><div className="card-title">Notification inbox</div></div><div style={{ display: 'grid', gap: 10 }}>{(inbox.items || []).map((item: any) => <div key={item.id} className="detail-card"><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><div><div style={{ fontWeight: 700 }}>{item.displayTitle || item.title}</div><div className="text-muted" style={{ fontSize: 12 }}>{item.displaySubtitle || item.kindLabel || item.type}</div></div><button className="btn btn-ghost btn-sm" onClick={() => ackNotification(item.id)}>Acknowledge</button></div>{item.displayDetail ? <div style={{ marginTop: 8 }}>{item.displayDetail}</div> : null}</div>)}</div></div>}
+      {tab === 'notifications' && <div style={{ display: 'grid', gap: 16 }}>
+        <div className="card">
+          <div className="card-header"><div className="card-title">📱 Telegram alerts</div></div>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div>
+              <div className="text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Bot Token</div>
+              <input className="input" type="password" placeholder="e.g. 123456789:AAF..." value={telegram.telegramBotToken} onChange={e => setTelegram(p => ({ ...p, telegramBotToken: e.target.value }))} style={{ fontFamily: 'monospace' }} />
+            </div>
+            <div>
+              <div className="text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Chat ID</div>
+              <input className="input" placeholder="e.g. -100123456789" value={telegram.telegramChatId} onChange={e => setTelegram(p => ({ ...p, telegramChatId: e.target.value }))} style={{ fontFamily: 'monospace' }} />
+            </div>
+            <div>
+              <div className="text-muted" style={{ fontSize: 12, marginBottom: 6 }}>Notify on severity</div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                {['critical','high','medium','low'].map(s => (
+                  <label key={s} style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={(telegram.telegramOnSeverity || []).includes(s)}
+                      onChange={e => setTelegram(p => ({ ...p, telegramOnSeverity: e.target.checked ? [...(p.telegramOnSeverity || []), s] : (p.telegramOnSeverity || []).filter(x => x !== s) }))} />
+                    <span style={{ textTransform: 'capitalize' }}>{s}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button className="btn btn-primary" disabled={telegramSaving} onClick={saveTelegramSettings}>Save</button>
+              <button className="btn btn-ghost" onClick={testTelegramNow} disabled={!telegram.telegramBotToken || !telegram.telegramChatId}>Send test message</button>
+              {telegramTest && <span style={{ fontSize: 13, color: telegramTest.startsWith('✅') ? '#4ade80' : '#f87171' }}>{telegramTest}</span>}
+            </div>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-header"><div className="card-title">Notification inbox</div></div>
+          <div style={{ display: 'grid', gap: 10 }}>{(inbox.items || []).map((item: any) => <div key={item.id} className="detail-card"><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><div><div style={{ fontWeight: 700 }}>{item.displayTitle || item.title}</div><div className="text-muted" style={{ fontSize: 12 }}>{item.displaySubtitle || item.kindLabel || item.type}</div></div><button className="btn btn-ghost btn-sm" onClick={() => ackNotification(item.id)}>Acknowledge</button></div>{item.displayDetail ? <div style={{ marginTop: 8 }}>{item.displayDetail}</div> : null}</div>)}
+          {!(inbox.items || []).length && <div className="empty-state"><div className="empty-icon">🔔</div><div className="empty-text">No notifications</div></div>}
+          </div>
+        </div>
+      </div>}
 
       {tab === 'automation' && <div className="card"><div className="card-header"><div className="card-title">Automation & approvals</div></div><div className="text-muted" style={{ marginBottom: 12 }}>Save assignment rules, approval policies, and runbooks for this tenant.</div><button className="btn btn-primary" disabled={saving} onClick={saveAutomation}>Save automation & approvals</button></div>}
 

@@ -7,12 +7,14 @@ export default function AuditCenterPage() {
   const [actor, setActor] = useState('');
   const [since, setSince] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const load = () => {
     setLoading(true);
+    setError('');
     api.getAudit({ limit: 200, action: action || undefined, actor: actor || undefined, since: since || undefined })
-      .then(setData)
-      .finally(() => setLoading(false));
+      .then(d => { setData(d); setLoading(false); })
+      .catch(err => { setError(err.message || 'Failed to load audit log'); setLoading(false); });
   };
 
   useEffect(() => { load(); }, [action, actor, since]);
@@ -48,7 +50,7 @@ export default function AuditCenterPage() {
 
       <div className="card">
         <div className="card-header"><div className="card-title">Evidence stream</div></div>
-        {loading ? <div className="loading-state"><div className="loading-spinner" /><div className="loading-text">Loading evidence...</div></div> : (
+        {loading ? <div className="loading-state"><div className="loading-spinner" /><div className="loading-text">Loading evidence...</div></div> : error ? <div className="empty-state"><div className="empty-icon">⚠️</div><div className="empty-text">{error}</div></div> : (
           <div style={{ display: 'grid', gap: 10 }}>
             {(data.entries || []).map((e: any, idx: number) => (
               <div key={idx} className="timeline-item" style={{ marginBottom: 0 }}>
