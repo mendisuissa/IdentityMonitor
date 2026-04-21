@@ -24,6 +24,12 @@ function severityColor(s: string) {
   );
 }
 
+// Eligible roles come from backend as "RoleName (Eligible)"
+function parseRole(raw: string): { name: string; isEligible: boolean } {
+  const eligible = raw.endsWith(' (Eligible)');
+  return { name: eligible ? raw.slice(0, -11) : raw, isEligible: eligible };
+}
+
 function blastRadius(roles: string[]): { label: string; color: string; detail: string } {
   const critical = roles.filter(r => CRITICAL_ROLES.includes(r));
   if (critical.length >= 2)
@@ -249,7 +255,7 @@ export default function UsersPage() {
   }), [users]);
 
   const selectedPosture = posture?.mostRiskyAdmins?.find(p => p.userId === selectedUser?.id);
-  const selectedBlast   = selectedUser ? blastRadius(selectedUser.roles) : null;
+  const selectedBlast   = selectedUser ? blastRadius(selectedUser.roles.map(r => parseRole(r).name)) : null;
 
   if (loading) return (
     <div className="loading-state">
@@ -320,7 +326,8 @@ export default function UsersPage() {
             </thead>
             <tbody>
               {filtered.map(user => {
-                const isCritical = user.roles.some(r => CRITICAL_ROLES.includes(r));
+                const parsedRoles = user.roles.map(parseRole);
+                const isCritical = parsedRoles.some(r => CRITICAL_ROLES.includes(r.name));
                 return (
                   <tr
                     key={user.id}
@@ -355,14 +362,19 @@ export default function UsersPage() {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {user.roles.slice(0, 2).map(r => (
-                          <span key={r} className="role-tag" style={
-                            CRITICAL_ROLES.includes(r)
+                        {parsedRoles.slice(0, 2).map(r => (
+                          <span key={r.name + r.isEligible} className="role-tag" style={
+                            CRITICAL_ROLES.includes(r.name)
                               ? { background: 'rgba(239,68,68,0.12)', color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)' }
+                              : r.isEligible
+                              ? { background: 'rgba(155,138,251,0.1)', color: '#9B8AFB', borderColor: 'rgba(155,138,251,0.3)' }
                               : {}
-                          }>{r.replace(' Administrator', ' Admin')}</span>
+                          }>
+                            {r.name.replace(' Administrator', ' Admin')}
+                            {r.isEligible && <span style={{ fontSize: 9, marginLeft: 3, opacity: 0.8 }}>JIT</span>}
+                          </span>
                         ))}
-                        {user.roles.length > 2 && <span className="text-muted" style={{ fontSize: 11 }}>+{user.roles.length - 2}</span>}
+                        {parsedRoles.length > 2 && <span className="text-muted" style={{ fontSize: 11 }}>+{parsedRoles.length - 2}</span>}
                       </div>
                     </td>
                     <td>
@@ -418,7 +430,7 @@ export default function UsersPage() {
                     boxShadow: `0 0 8px ${severityColor(selectedUser.riskLevel)}`,
                   }} />
                   <span style={{ fontWeight: 700, fontSize: 16 }}>{selectedUser.displayName}</span>
-                  {selectedUser.roles.some(r => CRITICAL_ROLES.includes(r)) && (
+                  {selectedUser.roles.map(parseRole).some(r => CRITICAL_ROLES.includes(r.name)) && (
                     <span style={{ fontSize: 13 }}>👑</span>
                   )}
                 </div>
@@ -426,13 +438,19 @@ export default function UsersPage() {
                   {selectedUser.userPrincipalName}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  {selectedUser.roles.map(r => (
-                    <span key={r} className="role-tag" style={
-                      CRITICAL_ROLES.includes(r)
+                  {selectedUser.roles.map(parseRole).map(r => (
+                    <span key={r.name + r.isEligible} className="role-tag" style={
+                      CRITICAL_ROLES.includes(r.name)
                         ? { background: 'rgba(239,68,68,0.12)', color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)' }
+                        : r.isEligible
+                        ? { background: 'rgba(155,138,251,0.1)', color: '#9B8AFB', borderColor: 'rgba(155,138,251,0.3)' }
                         : {}
                     }>
-                      {r.replace(' Administrator', ' Admin')}
+                      {r.name.replace(' Administrator', ' Admin')}
+                      {r.isEligible
+                        ? <span style={{ marginLeft: 4, fontSize: 9, opacity: 0.8, fontWeight: 700 }}>JIT</span>
+                        : <span style={{ marginLeft: 4, fontSize: 9, opacity: 0.5 }}>PERM</span>
+                      }
                     </span>
                   ))}
                   {selectedUser.roles.length === 0 && <span className="text-muted" style={{ fontSize: 11 }}>No roles</span>}
