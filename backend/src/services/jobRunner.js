@@ -9,14 +9,12 @@ const weeklyDigest   = require('./weeklyDigest');
 const wsService      = require('./wsService');
 
 let initialized = false;
+let _scanRunning = false; // prevent overlapping scans
 
-function init() {
-  if (initialized) return;
-  initialized = true;
-
-  // ── Scan all known tenants every 15 minutes ───────────────────────────
-  // Merges in-memory (recently logged in) + filesystem (survives restarts)
-  cron.schedule('*/15 * * * *', async () => {
+async function _runScanCycle() {
+  if (_scanRunning) return; // skip if previous cycle still in progress
+  _scanRunning = true;
+  try {
     const tenantIds = Array.from(new Set([
       ...tenantRegistry.getActiveTenants().map(t => t.tenantId),
       ...tenantRegistry.getAllTenantIds()
@@ -50,7 +48,23 @@ function init() {
         });
       }
     }
-  });
+  } finally {
+    _scanRunning = false;
+  }
+}
+
+function init() {
+  if (initialized) return;
+  initialized = true;
+
+  // ── Scan all known tenants every 60 seconds ───────────────────────────
+  // setInterval instead of cron so we can go sub-minute.
+  // _scanRunning flag prevents overlap if a scan takes > 60s.
+  // Real-time first alerts come from Graph webhooks (webhook.js);
+  // this loop is a reliable fallback that catches anything missed.
+  setInterval(_runScanCycle, 60 * 1000);
+  // Also run immediately on startup (after a short delay so sessions load)
+  setTimeout(_runScanCycle, 15 * 1000);
 
   // ── Renew webhook subscriptions — daily at 3am ────────────────────────
   cron.schedule('0 3 * * *', async () => {
