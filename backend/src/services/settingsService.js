@@ -13,10 +13,9 @@ function _cacheGet(tenantId) {
 function _cacheSet(tenantId, data) { _cache.set(tenantId, { data, expiresAt: Date.now() + CACHE_TTL }); }
 
 function defaultSettings(tenantId) {
-  const trialEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
   return {
     tenantId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-    billing: { plan: 'trial', trialStarted: new Date().toISOString(), trialEndsAt: trialEnd, pricePerMonth: 10, currency: 'USD', tenantCount: 1 },
+    billing: { plan: 'free', pricePerMonth: 15, currency: 'USD', tenantCount: 1 },
     admins: [],
     notifications: { adminEmails: [], userNotify: true, emailOnSeverity: ['critical', 'high', 'medium'], telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '', telegramChatId: process.env.TELEGRAM_CHAT_ID || '', telegramOnSeverity: ['critical', 'high'] },
     detectionRules: { NEW_IP: { enabled: true, severity: 'medium' }, NEW_COUNTRY: { enabled: true, severity: 'high' }, UNKNOWN_DEVICE: { enabled: true, severity: 'medium' }, IMPOSSIBLE_TRAVEL: { enabled: true, severity: 'critical' }, OFF_HOURS: { enabled: false, severity: 'low' }, FAILED_MFA: { enabled: true, severity: 'high' }, HIGH_RISK: { enabled: true, severity: 'critical' }, FAILED_SIGN_IN: { enabled: true, severity: 'medium' } },
@@ -107,16 +106,19 @@ function getTrialStatus(tenantId) {
 
   const s = getSettings(tenantId);
   const billing = s.billing || {};
-  const now = Date.now();
-  if (billing.plan === 'active')    return { status: 'active',    daysLeft: null };
-  if (billing.plan === 'cancelled') return { status: 'cancelled', daysLeft: 0 };
-  const trialEnd = new Date(billing.trialEndsAt || 0).getTime();
-  const daysLeft = Math.max(0, Math.ceil((trialEnd - now) / (24 * 60 * 60 * 1000)));
-  if (billing.plan === 'trial' && daysLeft > 0) return { status: 'trial', daysLeft };
-  return { status: 'expired', daysLeft: 0 };
+  // Freemium model: 'active' = paid subscription, everything else = free tier
+  if (billing.plan === 'active') return { status: 'active', daysLeft: null };
+  return { status: 'free', daysLeft: null };
 }
 
-function isTrialOrActive(tenantId) { const { status } = getTrialStatus(tenantId); return status === 'trial' || status === 'active'; }
+/** Returns true only when the tenant has an active paid Gumroad subscription. */
+function isPremium(tenantId) {
+  if (process.env.BILLING_DISABLED === 'true') return true;
+  return getTrialStatus(tenantId).status === 'active';
+}
+
+/** In freemium model every tenant can access the app — returns true always. */
+function isTrialOrActive(/* tenantId */) { return true; }
 async function addAdmin(tenantId, admin) {
   const s = await getSettingsAsync(tenantId);
   if (!s.admins) s.admins = [];
@@ -172,4 +174,4 @@ function deepMerge(target, source) {
   return result;
 }
 
-module.exports = { getSettings, getSettingsAsync, saveSettings, saveSettingsAsync, getTrialStatus, isTrialOrActive, addAdmin, removeAdmin, getAdmins, isWhitelisted, isRuleEnabled, getEffectiveSeverity, getAdminEmails, isOffHours, defaultSettings };
+module.exports = { getSettings, getSettingsAsync, saveSettings, saveSettingsAsync, getTrialStatus, isPremium, isTrialOrActive, addAdmin, removeAdmin, getAdmins, isWhitelisted, isRuleEnabled, getEffectiveSeverity, getAdminEmails, isOffHours, defaultSettings };

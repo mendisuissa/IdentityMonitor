@@ -5,12 +5,17 @@ import { apiFetch } from '../services/api';
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 interface BillingStatus {
-  plan: 'trial' | 'pro' | 'msp' | 'expired' | string;
-  status: 'trial' | 'active' | 'canceled' | 'expired' | string;
+  plan: 'free' | 'active' | 'cancelled' | string;
   daysLeft?: number | null;
   renewalDate?: string | null;
   trialEndsAt?: string | null;
+  activatedAt?: string | null;
+  cancelledAt?: string | null;
+  gumroadUrl?: string | null;
+  gumroadSubscriptionId?: string | null;
 }
+
+const GUMROAD_URL = 'https://moderne.gumroad.com/l/azxxv';
 
 interface AlertStats {
   total?: number;
@@ -30,53 +35,44 @@ interface PlanFeature {
   msp: boolean;
 }
 
+// pro = included in Free tier, msp = included in Pro (paid) tier
 const PLAN_FEATURES: PlanFeature[] = [
-  { text: '1 Microsoft 365 tenant', pro: true, msp: false },
-  { text: 'Up to 10 Microsoft 365 tenants', pro: false, msp: true },
-  { text: 'Real-time anomaly detection', pro: true, msp: true },
-  { text: 'Telegram alerts with action buttons', pro: true, msp: true },
-  { text: 'Email notifications', pro: true, msp: true },
-  { text: 'Conditional Access management', pro: true, msp: true },
-  { text: '180-day alert retention', pro: true, msp: true },
-  { text: 'Audit Center', pro: true, msp: true },
-  { text: 'MSP Fleet Dashboard', pro: false, msp: true },
-  { text: 'Cross-tenant security sweep', pro: false, msp: true },
-  { text: 'Bulk notifications', pro: false, msp: true },
-  { text: 'Priority support', pro: false, msp: true },
-  { text: 'Super Admin view', pro: false, msp: true },
+  { text: 'Sign-in anomaly detection (60s cycle)', pro: true,  msp: true  },
+  { text: 'Alert dashboard & history',             pro: true,  msp: true  },
+  { text: 'User risk overview',                    pro: true,  msp: true  },
+  { text: 'Manual investigation tools',            pro: true,  msp: true  },
+  { text: 'Telegram alerts with action buttons',   pro: false, msp: true  },
+  { text: 'Email notifications (multi-admin)',      pro: false, msp: true  },
+  { text: 'Automated session revoke',              pro: false, msp: true  },
+  { text: 'Automated user disable',                pro: false, msp: true  },
+  { text: 'Conditional Access management',         pro: false, msp: true  },
+  { text: 'PIM privilege monitoring',              pro: false, msp: true  },
+  { text: 'Audit Center (365-day retention)',      pro: false, msp: true  },
+  { text: 'Reports & exports',                     pro: false, msp: true  },
 ];
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 function planLabel(status: BillingStatus): string {
-  const p = status.plan?.toLowerCase();
-  if (p === 'msp') return 'MSP';
-  if (p === 'pro') return 'Pro';
-  if (status.status === 'trial') return 'Trial';
-  return 'Trial';
+  if (status.plan === 'active') return 'Pro';
+  if (status.plan === 'cancelled') return 'Cancelled';
+  return 'Free';
 }
 
 function planColor(status: BillingStatus): string {
-  const p = status.plan?.toLowerCase();
-  if (p === 'msp') return '#9B8AFB';
-  if (p === 'pro') return '#E8784A';
-  return '#F5A623';
+  if (status.plan === 'active') return '#E8784A';
+  if (status.plan === 'cancelled') return '#FF4455';
+  return '#888';
 }
 
-function isTrial(status: BillingStatus): boolean {
-  return status.status === 'trial' || (!status.plan || status.plan === 'trial');
-}
-
-function isActive(status: BillingStatus): boolean {
-  return status.status === 'active';
+function isPremium(status: BillingStatus): boolean {
+  return status.plan === 'active';
 }
 
 function featureIncluded(feature: PlanFeature, status: BillingStatus): boolean {
-  const p = status.plan?.toLowerCase();
-  if (p === 'msp') return feature.msp;
-  if (p === 'pro') return feature.pro;
-  // trial gets pro features
-  return feature.pro;
+  if (isPremium(status)) return feature.pro || feature.msp;
+  // Free tier: only free features (pro=true means it was a pro-only feature → show as locked for free)
+  return false; // we'll override per-feature below
 }
 
 function formatDate(dateStr: string | null | undefined): string {
@@ -125,7 +121,6 @@ export default function BillingPage() {
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [alertStats, setAlertStats] = useState<AlertStats | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
-  const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -156,20 +151,16 @@ export default function BillingPage() {
     return () => { mounted = false; };
   }, []);
 
-  const handleManageSubscription = async () => {
-    setPortalLoading(true);
-    setError('');
+  const handleManageSubscription = () => {
+    window.open(billingStatus?.gumroadUrl || 'https://moderne.gumroad.com/l/azxxv', '_blank');
+  };
+
+  const handleUpgrade = async () => {
     try {
-      const res = await apiFetch<PortalResponse>('/billing/portal');
-      if (res?.url) {
-        window.location.href = res.url;
-      } else {
-        setError('Could not open billing portal. Please try again.');
-      }
-    } catch (err: any) {
-      setError(err?.message || 'Failed to open billing portal.');
-    } finally {
-      setPortalLoading(false);
+      const res = await apiFetch<{ url: string }>('/billing/checkout').catch(() => null);
+      window.location.href = res?.url || 'https://moderne.gumroad.com/l/azxxv';
+    } catch {
+      window.location.href = 'https://moderne.gumroad.com/l/azxxv';
     }
   };
 
@@ -186,8 +177,7 @@ export default function BillingPage() {
     );
   }
 
-  // ── Fallback: treat as trial if nothing returned ──
-  const status: BillingStatus = billingStatus ?? { plan: 'trial', status: 'trial' };
+  const status: BillingStatus = billingStatus ?? { plan: 'free' };
 
   return (
     <div>
@@ -261,95 +251,52 @@ export default function BillingPage() {
                   {planLabel(status)}
                 </div>
 
-                {isTrial(status) && (
+                {!isPremium(status) && (
                   <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                    {typeof status.daysLeft === 'number' ? (
-                      <>
-                        <span
-                          style={{
-                            fontWeight: 600,
-                            color:
-                              status.daysLeft <= 7
-                                ? 'var(--red-critical)'
-                                : 'var(--amber-500)',
-                          }}
-                        >
-                          {status.daysLeft} day{status.daysLeft !== 1 ? 's' : ''} left
-                        </span>{' '}
-                        in your free trial
-                      </>
-                    ) : (
-                      'Free trial active'
-                    )}
-                    {status.trialEndsAt && (
-                      <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 12 }}>
-                        Ends {formatDate(status.trialEndsAt)}
-                      </div>
-                    )}
+                    Free tier — detection active, notifications locked
                   </div>
                 )}
 
-                {isActive(status) && (
+                {isPremium(status) && (
                   <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                     Active subscription
-                    {status.renewalDate && (
+                    {status.activatedAt && (
                       <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 12 }}>
-                        Renews {formatDate(status.renewalDate)}
+                        Active since {formatDate(status.activatedAt)}
                       </div>
                     )}
                   </div>
                 )}
 
-                {!isTrial(status) && !isActive(status) && (
+                {status.plan === 'cancelled' && (
                   <div
-                    style={{
-                      fontSize: 13,
-                      color: 'var(--red-critical)',
-                      fontWeight: 600,
-                    }}
+                    style={{ fontSize: 13, color: 'var(--red-critical)', fontWeight: 600 }}
                   >
-                    Subscription inactive
+                    Subscription cancelled — premium features frozen
                   </div>
                 )}
               </div>
 
               {/* CTA */}
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 10,
-                  justifyContent: 'flex-start',
-                  paddingTop: 4,
-                }}
-              >
-                {isTrial(status) ? (
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => navigate('/pricing')}
-                  >
-                    Upgrade now
-                  </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, justifyContent: 'flex-start', paddingTop: 4 }}>
+                {isPremium(status) ? (
+                  <>
+                    <button className="btn btn-primary" onClick={handleManageSubscription}>
+                      Manage on Gumroad ↗
+                    </button>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
+                      Cancel anytime from your Gumroad dashboard
+                    </div>
+                  </>
                 ) : (
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleManageSubscription}
-                    disabled={portalLoading}
-                  >
-                    {portalLoading ? (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="spin">⟳</span> Opening…
-                      </span>
-                    ) : (
-                      'Manage subscription'
-                    )}
-                  </button>
-                )}
-
-                {isTrial(status) && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
-                    No credit card required
-                  </div>
+                  <>
+                    <button className="btn btn-primary" onClick={handleUpgrade}>
+                      Upgrade to Pro — $15/mo →
+                    </button>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
+                      Unlock Telegram alerts, email &amp; auto-remediation
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -385,10 +332,16 @@ export default function BillingPage() {
               </thead>
               <tbody>
                 {PLAN_FEATURES.map((feature) => {
-                  const included = featureIncluded(feature, status);
+                  // pro=true → included in free tier; msp=true → included in premium
+                  const freeIncluded    = feature.pro;
+                  const premiumIncluded = feature.msp;
+                  const included = isPremium(status) ? premiumIncluded : freeIncluded;
                   return (
                     <tr key={feature.text} style={{ opacity: included ? 1 : 0.38 }}>
                       <td style={{ color: included ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                        {!freeIncluded && !isPremium(status) && (
+                          <span style={{ fontSize: 10, color: '#E8784A', fontWeight: 700, marginRight: 6 }}>PRO</span>
+                        )}
                         {feature.text}
                       </td>
                       <td style={{ textAlign: 'center' }}>
@@ -435,25 +388,21 @@ export default function BillingPage() {
               </tbody>
             </table>
 
-            {isTrial(status) && (
+            {!isPremium(status) && (
               <div
                 style={{
-                  marginTop: 14,
-                  padding: '10px 14px',
-                  background: 'rgba(232,120,74,0.06)',
-                  border: '1px solid rgba(232,120,74,0.18)',
-                  borderRadius: 8,
-                  fontSize: 12,
-                  color: 'var(--text-secondary)',
+                  marginTop: 14, padding: '10px 14px',
+                  background: 'rgba(232,120,74,0.06)', border: '1px solid rgba(232,120,74,0.18)',
+                  borderRadius: 8, fontSize: 12, color: 'var(--text-secondary)',
                 }}
               >
-                All features are available during your trial.{' '}
+                🔒 <strong style={{ color: '#E8784A' }}>Pro</strong> features are locked on the Free tier.{' '}
                 <button
                   className="btn btn-ghost btn-sm"
                   onClick={() => navigate('/pricing')}
                   style={{ fontSize: 12, padding: '2px 10px' }}
                 >
-                  View plans →
+                  Upgrade for $15/mo →
                 </button>
               </div>
             )}

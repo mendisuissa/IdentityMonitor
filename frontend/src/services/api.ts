@@ -591,21 +591,16 @@ export const api = {
   acknowledgeDeviceAction: (id: string) =>
     apiFetch<any>(`/device-actions/${id}/acknowledge`, { method: 'POST' }),
 
-  // ── Billing ──────────────────────────────────────────────────────────────
+  // ── Billing (Gumroad) ─────────────────────────────────────────────────────
   getBillingPlans: () =>
     apiFetch<any>('/billing/plans'),
 
   getBillingStatus: () =>
     apiFetch<any>('/billing/status'),
 
-  createCheckout: (plan: string) =>
-    apiFetch<{ url: string }>('/billing/checkout', {
-      method: 'POST',
-      body: JSON.stringify({ plan }),
-    }),
-
-  getBillingPortal: () =>
-    apiFetch<{ url: string }>('/billing/portal'),
+  /** Returns a Gumroad URL pre-filled with the user's email. Falls back to plain Gumroad link. */
+  getCheckoutUrl: () =>
+    apiFetch<{ url: string }>('/billing/checkout'),
 };
 
 export default api;

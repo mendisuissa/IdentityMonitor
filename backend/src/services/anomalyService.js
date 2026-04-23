@@ -281,6 +281,9 @@ async function runFullScan(tenantId) {
 }
 
 async function triggerActions(tenantId, alerts, user, settings) {
+  // Freemium gate: notifications and auto-actions require an active paid subscription
+  const premium = settingsService.isPremium(tenantId);
+
   const adminEmails = settingsService.getAdminEmails(settings);
   const notifyCfg   = settings.notifications || {};
   const telegramCfg = settings.notifications || {};
@@ -302,12 +305,10 @@ async function triggerActions(tenantId, alerts, user, settings) {
     const shouldTelegram = telegramSeverities.includes(alert.severity) && telegramToken && telegramChatId;
 
     // ── Immediate Telegram (critical/high) — rich playbook with action buttons ──
-    if (shouldTelegram) {
+    // PREMIUM ONLY: Telegram notifications require an active subscription
+    if (shouldTelegram && premium) {
       try {
         const telegramService = require('./telegramService');
-        // sendAlertWithPlaybook sends the rich interactive message with
-        // Revoke / Disable / Dismiss / Investigate buttons.
-        // Pass settings-based credentials so UI-configured bots work.
         await telegramService.sendAlertWithPlaybook(alert, telegramToken, telegramChatId);
         alertsStore.addAction(alert.id, 'telegram_sent');
       } catch (err) {
@@ -316,7 +317,8 @@ async function triggerActions(tenantId, alerts, user, settings) {
     }
 
     // ── Email (critical/high/medium) ──────────────────────────────────
-    if (shouldEmail) {
+    // PREMIUM ONLY: Email notifications require an active subscription
+    if (shouldEmail && premium) {
       for (const email of adminEmails) {
         try {
           await emailService.sendAdminAlert(alert, tenantId, email);
@@ -328,7 +330,8 @@ async function triggerActions(tenantId, alerts, user, settings) {
     }
 
     // ── Revoke sessions ───────────────────────────────────────────────
-    if (actions.revokeSession) {
+    // PREMIUM ONLY: Auto-remediation requires an active subscription
+    if (actions.revokeSession && premium) {
       try {
         await graphService.revokeUserSessions(tenantId, user.id);
         alertsStore.addAction(alert.id, 'sessions_revoked');
@@ -342,7 +345,8 @@ async function triggerActions(tenantId, alerts, user, settings) {
     }
 
     // ── Disable user ──────────────────────────────────────────────────
-    if (actions.disableUser) {
+    // PREMIUM ONLY: Auto-remediation requires an active subscription
+    if (actions.disableUser && premium) {
       try {
         await graphService.disableUser(tenantId, user.id);
         alertsStore.addAction(alert.id, 'user_disabled');
