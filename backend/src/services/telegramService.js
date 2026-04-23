@@ -9,8 +9,11 @@ const TELEGRAM_CHAT_ID   = process.env.TELEGRAM_CHAT_ID;
 const pendingActions = new Map();
 
 // ─── Send alert with inline keyboard ────────────────────────────────────
-async function sendAlertWithPlaybook(alert) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+// Accepts optional token/chatId overrides so settings-based credentials work
+async function sendAlertWithPlaybook(alert, tokenOverride, chatIdOverride) {
+  const token  = tokenOverride  || TELEGRAM_BOT_TOKEN;
+  const chatId = chatIdOverride || TELEGRAM_CHAT_ID;
+  if (!token || !chatId) {
     console.warn('[Telegram] Bot not configured — skipping Telegram notification');
     return null;
   }
@@ -55,12 +58,12 @@ async function sendAlertWithPlaybook(alert) {
 
   try {
     const res = await fetch(
-      'https://api.telegram.org/bot' + TELEGRAM_BOT_TOKEN + '/sendMessage',
+      'https://api.telegram.org/bot' + token + '/sendMessage',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id:    TELEGRAM_CHAT_ID,
+          chat_id:    chatId,
           text,
           parse_mode: 'MarkdownV2',
           reply_markup: keyboard

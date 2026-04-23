@@ -531,7 +531,14 @@ router.post('/telegram/test', async (req, res) => {
   if (!tenantId) return;
   try {
     const telegramService = require('../services/telegramService');
-    await telegramService.sendMessage('🔔 *Test message* from Privileged Identity Monitor');
+    // Use settings-based credentials so we test the exact same path as real alerts
+    const s = await settingsService.getSettingsAsync(tenantId);
+    const token  = s.notifications?.telegramBotToken  || process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = s.notifications?.telegramChatId    || process.env.TELEGRAM_CHAT_ID;
+    if (!token || !chatId) return res.status(400).json({ ok: false, error: 'Telegram not configured. Add Bot Token and Chat ID in Settings → Notifications.' });
+    await telegramService.sendMessageWithToken(token, chatId,
+      '🔔 *Test message* from Privileged Identity Monitor\n\n✅ Telegram alerts are working correctly\\!'
+    );
     auditLog.log(tenantId, auditLog.ACTIONS.TEST_SENT || 'test.sent', { type: 'telegram' }, getActor(req));
     res.json({ ok: true, message: 'Test message sent' });
   } catch (err) {
