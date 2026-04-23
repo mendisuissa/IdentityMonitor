@@ -6,6 +6,7 @@ const CLIENT_ID     = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const { upsertTenantIntegration } = require('../services/tenantIntegrationStore');
 const { clearGraphTokenCache } = require('../services/nativeRemediationExecutor');
+const graphService = require('../services/graphService');
 const tenantRegistry = require('../services/tenantRegistry');
 const REDIRECT_URI  = process.env.REDIRECT_URI  || 'http://localhost:3001/api/auth/callback';
 const FRONTEND_URL  = process.env.FRONTEND_URL  || 'http://localhost:5173';
@@ -16,7 +17,10 @@ const REQUIRED_SCOPES = [
   'https://graph.microsoft.com/Directory.Read.All',
   'https://graph.microsoft.com/User.Read.All',
   'https://graph.microsoft.com/RoleManagement.Read.Directory',
-  'https://graph.microsoft.com/Mail.Send'
+  'https://graph.microsoft.com/Mail.Send',
+  'https://graph.microsoft.com/Policy.Read.All',
+  'https://graph.microsoft.com/Policy.Read.ConditionalAccess',
+  'https://graph.microsoft.com/Policy.ReadWrite.ConditionalAccess'
 ].join(' ');
 
 function encodeConsentState(payload) {
@@ -67,27 +71,59 @@ router.get('/mock-login', (req, res) => {
 });
 
 // GET /api/auth/login
+// Flow: admin consent first (grants all app permissions) → then OAuth login
+// Microsoft skips the consent UI on repeat visits when permissions are unchanged.
 router.get('/login', (req, res) => {
   if (!CLIENT_ID) return res.status(500).json({ error: 'CLIENT_ID not configured' });
 
-  const params = new URLSearchParams({
-    client_id:     CLIENT_ID,
-    response_type: 'code',
-    redirect_uri:  REDIRECT_URI,
-    scope:         'openid profile email offline_access ' + REQUIRED_SCOPES,
-    response_mode: 'query',
-    state:         'login'
-  });
-  // Do NOT set prompt=consent — Microsoft will only ask for consent the first
-  // time or when new permissions are added. Forcing it every login is the cause
-  // of the repeated consent UX.
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const statePayload = {
+    nonce,
+    step: 'consent_then_login',
+    createdAt: new Date().toISOString()
+  };
+  const encodedState = encodeConsentState(statePayload);
 
-  res.redirect('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?' + params.toString());
+  req.session.loginConsent = { nonce, startedAt: new Date().toISOString() };
+
+  req.session.save((err) => {
+    if (err) return res.status(500).json({ error: 'Session error' });
+    const params = new URLSearchParams({
+      client_id:    CLIENT_ID,
+      redirect_uri: ADMIN_CONSENT_REDIRECT_URI,
+      state:        encodedState
+    });
+    res.redirect('https://login.microsoftonline.com/common/adminconsent?' + params.toString());
+  });
 });
 
 // GET /api/auth/callback
 router.get('/callback', async (req, res) => {
-  const { code, error, error_description } = req.query;
+  const { code, error, error_description, admin_consent, tenant, state } = req.query;
+
+  // Handle admin consent that landed here because ADMIN_CONSENT_REDIRECT_URI = REDIRECT_URI
+  if (!code && String(admin_consent).toLowerCase() === 'true' && tenant) {
+    const statePayload = decodeConsentState(String(state || ''));
+    const effectiveTenantId = String(tenant).trim();
+    graphService.clearTokenCache(effectiveTenantId);
+    clearGraphTokenCache(effectiveTenantId);
+    const returnTo = statePayload?.returnTo || '/';
+    const oauthState = statePayload?.step === 'consent_then_login'
+      ? 'login'
+      : 'post_consent__' + encodeURIComponent(returnTo);
+    const loginParams = new URLSearchParams({
+      client_id:     CLIENT_ID,
+      response_type: 'code',
+      redirect_uri:  REDIRECT_URI,
+      scope:         'openid profile email offline_access ' + REQUIRED_SCOPES,
+      response_mode: 'query',
+      state:         oauthState
+    });
+    return res.redirect(
+      'https://login.microsoftonline.com/' + effectiveTenantId +
+      '/oauth2/v2.0/authorize?' + loginParams.toString()
+    );
+  }
 
   if (error) {
     return res.redirect(FRONTEND_URL + '/login?error=' + encodeURIComponent(String(error_description || error)));
@@ -209,6 +245,11 @@ router.get('/callback', async (req, res) => {
         console.error('[Auth] Session save error:', err.message);
         return res.redirect(FRONTEND_URL + '/login?error=session_save_failed');
       }
+      const stateStr = String(req.query.state || '');
+      if (stateStr.startsWith('post_consent__')) {
+        const returnTo = decodeURIComponent(stateStr.replace('post_consent__', ''));
+        return res.redirect(FRONTEND_URL + returnTo + '?consent=granted');
+      }
       res.redirect(FRONTEND_URL);
     });
 
@@ -223,11 +264,16 @@ router.get('/admin-consent', (req, res) => {
   if (!CLIENT_ID) return res.status(500).json({ ok: false, error: 'CLIENT_ID not configured' });
   if (!tenantId) return res.status(401).json({ ok: false, error: 'No authenticated tenant session was found.' });
 
+  // Allow callers to pass ?returnTo=/identity so we redirect back after consent
+  const ALLOWED_RETURN_PATHS = ['/remediation', '/identity', '/settings', '/'];
+  const rawReturnTo = String(req.query.returnTo || '/remediation');
+  const returnTo = ALLOWED_RETURN_PATHS.includes(rawReturnTo) ? rawReturnTo : '/remediation';
+
   const nonce = crypto.randomBytes(16).toString('hex');
   const statePayload = {
     nonce,
     tenantId,
-    returnTo: '/remediation',
+    returnTo,
     createdAt: new Date().toISOString()
   };
   const encodedState = encodeConsentState(statePayload);
@@ -310,13 +356,35 @@ router.get('/admin-consent/callback', async (req, res) => {
       grantedAt: new Date().toISOString()
     };
 
+    // Clear ALL Graph token caches so next request gets a fresh token
     clearGraphTokenCache(effectiveTenantId);
-    req.session.save(() => {
-      res.redirect(FRONTEND_URL + '/remediation?consent=granted');
+    graphService.clearTokenCache(effectiveTenantId);
+
+    // Always redirect to OAuth login to issue a fresh token with all consented scopes.
+    // For the initial consent_then_login flow, state='login' → redirects to home.
+    // For re-grant flows, state carries the returnTo path so we land back on the right page.
+    const returnTo = statePayload?.returnTo || '/identity';
+    const oauthState = statePayload?.step === 'consent_then_login'
+      ? 'login'
+      : 'post_consent__' + encodeURIComponent(returnTo);
+    const loginParams = new URLSearchParams({
+      client_id:     CLIENT_ID,
+      response_type: 'code',
+      redirect_uri:  REDIRECT_URI,
+      scope:         'openid profile email offline_access ' + REQUIRED_SCOPES,
+      response_mode: 'query',
+      state:         oauthState
+    });
+    return req.session.save(() => {
+      res.redirect(
+        'https://login.microsoftonline.com/' + effectiveTenantId +
+        '/oauth2/v2.0/authorize?' + loginParams.toString()
+      );
     });
   } catch (err) {
     console.error('[Auth] Admin consent callback error:', err.message);
-    res.redirect(FRONTEND_URL + '/remediation?consent=error&message=' + encodeURIComponent(err.message));
+    const returnTo = statePayload?.returnTo || '/identity';
+    res.redirect(FRONTEND_URL + returnTo + '?consent=error&message=' + encodeURIComponent(err.message));
   }
 });
 

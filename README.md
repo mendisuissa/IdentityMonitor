@@ -43,8 +43,12 @@ Azure App Service
 
 1. Go to **Entra Admin Center** → App registrations → New registration
 2. Name: `Privileged Identity Monitor`
-3. Supported account type: Single tenant
-4. No redirect URI needed (service principal)
+3. Supported account type: **Multitenant** (`Accounts in any organizational directory`)
+4. Under **Authentication → Redirect URIs**, add both:
+   - `https://your-domain/api/auth/callback`
+   - `https://your-domain/api/auth/admin-consent/callback`
+
+> The login flow redirects customers through admin consent first (granting all app permissions), then immediately to OAuth login — so all permissions are granted on first sign-in.
 
 ### 2. API Permissions (Application, not Delegated)
 
@@ -56,8 +60,13 @@ Azure App Service
 | `User.Read.All` | Application | Read user details |
 | `RoleManagement.Read.Directory` | Application | Read role assignments |
 | `UserAuthenticationMethod.ReadWrite.All` | Application | MFA enforcement (optional) |
+| `Policy.Read.All` | Application | Read Conditional Access policies |
+| `Policy.ReadWrite.ConditionalAccess` | Application | Create / modify / delete CA policies (Phase 3) |
+| `DeviceManagementManagedDevices.ReadWrite.All` | Application | Intune device actions (wipe, lock, reset) |
 
 > Click **Grant admin consent** for all permissions.
+
+> **Note — Conditional Access permissions:** In the Azure portal, search for `Policy.ReadWrite.ConditionalAccess` under *Microsoft Graph → Application permissions*. This is the correct permission name (sometimes referenced as `ConditionalAccessPolicy.ReadWrite.All` in older docs). After adding it, you must click **Grant admin consent** again.
 
 ### 3. Create Client Secret
 

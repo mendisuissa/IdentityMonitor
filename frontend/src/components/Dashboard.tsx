@@ -36,6 +36,7 @@ export default function Dashboard() {
   const [wizardStep, setWizardStep] = useState(0);
   const [scanMessage, setScanMessage] = useState('');
   const [scanRunning, setScanRunning] = useState(false);
+  const [pimStats, setPimStats] = useState<{ score: number; permanentCritical: number; globalAdmins: number; pimEnabled: boolean } | null>(null);
 
   async function loadDashboardState() {
     const [s, a, u, h, rp] = await Promise.all([
@@ -50,6 +51,15 @@ export default function Dashboard() {
     setUsers(u as PrivilegedUser[]);
     setHealth(h as Health);
     if (rp) setPosture(rp as RiskPosture);
+    // Load PIM stats in background — non-blocking
+    api.getPimAnalysis().then((pim: any) => {
+      if (pim?.stats) setPimStats({
+        score: pim.score ?? 0,
+        permanentCritical: pim.stats.criticalPermanent ?? 0,
+        globalAdmins: pim.stats.globalAdmins ?? 0,
+        pimEnabled: pim.stats.pimEnabled ?? false,
+      });
+    }).catch(() => {});
     return { stats: s as AlertStats, users: u as PrivilegedUser[] };
   }
 
@@ -108,7 +118,7 @@ export default function Dashboard() {
   }, [telemetryIncomplete, posture, stats, users.length, health]);
 
   const checklist = useMemo(() => [
-    { key: 'tenant',  label: 'Connect tenant',            done: users.length > 0 || health?.mockMode === true,  actionLabel: 'Open settings',   action: () => navigate('/settings') },
+    { key: 'tenant',  label: 'Connect tenant',            done: health?.status === 'ok',                        actionLabel: 'Open settings',   action: () => navigate('/settings') },
     { key: 'scan',    label: 'Run first privileged scan', done: (stats?.total ?? 0) > 0,                        actionLabel: 'Open sign-ins',   action: () => navigate('/signins') },
     { key: 'channel', label: 'Enable an alert channel',   done: !!health?.features?.telegram,                   actionLabel: 'Configure alerts', action: () => navigate('/settings') },
     { key: 'storage', label: 'Persistent storage',        done: !!health?.features?.tableStorage,               actionLabel: 'Review storage',  action: () => navigate('/settings') },
@@ -209,6 +219,30 @@ export default function Dashboard() {
           <div className="stat-value" style={{ color: scoreColor(avgRiskScore) }}>{avgRiskScore}</div><div className="stat-label">Avg Risk Score</div><div className="stat-arrow">→</div>
         </div>
       </div>
+
+      {/* ── Privilege Risk Banner ── */}
+      {pimStats && !pimStats.pimEnabled && pimStats.permanentCritical > 0 && (
+        <div style={{ marginBottom: 14, padding: '12px 18px', borderRadius: 10, background: 'rgba(255,59,59,0.07)', border: '1px solid rgba(255,59,59,0.25)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 22 }}>👑</span>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#ff6b6b' }}>
+              {pimStats.globalAdmins} Global Admin{pimStats.globalAdmins !== 1 ? 's' : ''} with permanent assignment — JIT not enabled
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+              {pimStats.permanentCritical} critical role{pimStats.permanentCritical !== 1 ? 's' : ''} permanently assigned. Privilege score: <strong style={{ color: '#ff6b6b' }}>{pimStats.score}/100</strong>. Convert to eligible via Entra ID PIM.
+            </div>
+          </div>
+          <a href="https://entra.microsoft.com/#view/Microsoft_Azure_PIMCommon/ResourceMenuBlade/~/MyActions/resourceId//resourceType/tenant/provider/aadroles" target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--indigo)', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
+            Open Entra PIM →
+          </a>
+        </div>
+      )}
+      {pimStats && pimStats.pimEnabled && pimStats.score >= 80 && (
+        <div style={{ marginBottom: 14, padding: '10px 16px', borderRadius: 10, background: 'rgba(0,201,139,0.07)', border: '1px solid rgba(0,201,139,0.2)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 18 }}>✅</span>
+          <span style={{ fontSize: 13, color: 'var(--green-clean)' }}>JIT access enabled — privilege hygiene score <strong>{pimStats.score}/100</strong></span>
+        </div>
+      )}
 
       {/* ── Executive + Trust ── */}
       <div className="two-col" style={{ marginBottom: 14 }}>
