@@ -78,7 +78,7 @@ async function sendAlertWithPlaybook(alert, tokenOverride, chatIdOverride) {
 
     // For critical alerts — auto-revoke if no action within 15 min
     if (alert.severity === 'critical') {
-      scheduleAutoRevoke(alert, data.result.message_id);
+      scheduleAutoRevoke(alert, data.result.message_id, token, chatId);
     }
 
     return data.result.message_id;
@@ -89,23 +89,34 @@ async function sendAlertWithPlaybook(alert, tokenOverride, chatIdOverride) {
 }
 
 // ─── Update message after action taken ───────────────────────────────────
-async function updateMessageAfterAction(messageId, actionText) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
+async function updateMessageAfterAction(messageId, tokenOrAction, chatIdOrUndefined, actionText) {
+  // Supports both old call signature (messageId, actionText) and
+  // new call signature (messageId, token, chatId, actionText)
+  let token, chatId, text;
+  if (actionText !== undefined) {
+    token = tokenOrAction || TELEGRAM_BOT_TOKEN;
+    chatId = chatIdOrUndefined || TELEGRAM_CHAT_ID;
+    text = actionText;
+  } else {
+    token = TELEGRAM_BOT_TOKEN;
+    chatId = TELEGRAM_CHAT_ID;
+    text = tokenOrAction; // old signature: second arg was actionText
+  }
+  if (!token || !chatId) return;
   try {
     await fetch(
-      'https://api.telegram.org/bot' + TELEGRAM_BOT_TOKEN + '/editMessageReplyMarkup',
+      'https://api.telegram.org/bot' + token + '/editMessageReplyMarkup',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id:      TELEGRAM_CHAT_ID,
+          chat_id:      chatId,
           message_id:   messageId,
           reply_markup: { inline_keyboard: [] }  // Remove buttons
         })
       }
     );
-
-    await sendMessage('✅ Action taken: ' + actionText);
+    await sendMessageWithToken(token, chatId, '✅ Action taken: ' + text);
   } catch (err) {
     console.error('[Telegram] updateMessage error:', err.message);
   }
@@ -133,7 +144,9 @@ async function sendMessage(text) {
 }
 
 // ─── Auto-revoke for critical alerts if no action ─────────────────────────
-function scheduleAutoRevoke(alert, messageId) {
+function scheduleAutoRevoke(alert, messageId, token, chatId) {
+  const _token  = token  || TELEGRAM_BOT_TOKEN;
+  const _chatId = chatId || TELEGRAM_CHAT_ID;
   const TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
   const timer = setTimeout(async () => {
@@ -144,7 +157,7 @@ function scheduleAutoRevoke(alert, messageId) {
       try {
         const graphService = require('./graphService');
         await graphService.revokeUserSessions(alert.tenantId, alert.userId);
-        await updateMessageAfterAction(messageId,
+        await updateMessageAfterAction(messageId, _token, _chatId,
           '🤖 AUTO-REVOKED (no admin action within 15 minutes)\nUser: ' + alert.userDisplayName
         );
       } catch (err) {
@@ -158,7 +171,9 @@ function scheduleAutoRevoke(alert, messageId) {
   // Warn at 10 min
   setTimeout(() => {
     if (pendingActions.has(alert.id)) {
-      sendMessage('⏰ *Reminder:* Critical alert for *' + alert.userDisplayName + '* has no action yet\\. Auto\\-revoke in 5 minutes\\.');
+      sendMessageWithToken(_token, _chatId,
+        '⏰ *Reminder:* Critical alert for *' + alert.userDisplayName + '*\\. No action yet — auto\\-revoke in 5 minutes\\.'
+      );
     }
   }, 10 * 60 * 1000);
 }

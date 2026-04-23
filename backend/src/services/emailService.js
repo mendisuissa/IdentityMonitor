@@ -131,25 +131,24 @@ function buildUserNoticeHtml(user, alert) {
 </html>`;
 }
 
-async function sendAdminAlert(alert) {
-  const adminEmail = process.env.ALERT_ADMIN_EMAIL;
-  if (!adminEmail) {
-    console.warn('[Email] ALERT_ADMIN_EMAIL not configured');
-    return;
-  }
+async function sendAdminAlert(alert, tenantId, email) {
+  // Use the email passed from settings; fall back to env var for backwards compat
+  const recipient = email || process.env.ALERT_ADMIN_EMAIL;
+  if (!recipient) { console.warn('[Email] No admin email configured — skipping'); return; }
+  if (!tenantId)  { console.warn('[Email] No tenantId — skipping email'); return; }
 
-  await graphService.sendAlertEmail({
-    to: adminEmail,
+  await graphService.sendAlertEmail(tenantId, {
+    to: recipient,
     subject: `[${alert.severity.toUpperCase()}] Privileged User Alert — ${alert.anomalyLabel} — ${alert.userPrincipalName}`,
     body: buildAdminAlertHtml(alert)
   });
 }
 
-async function sendUserSecurityNotice(user, alert) {
+async function sendUserSecurityNotice(user, alert, tenantId) {
   const userEmail = user.mail || user.userPrincipalName;
-  if (!userEmail) return;
+  if (!userEmail || !tenantId) return;
 
-  await graphService.sendAlertEmail({
+  await graphService.sendAlertEmail(tenantId, {
     to: userEmail,
     subject: '🔒 Security Alert: Unusual Activity Detected on Your Account',
     body: buildUserNoticeHtml(user, alert)
