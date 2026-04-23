@@ -47,6 +47,8 @@ function getFriendlyErrorMessage(error: any) {
   if (normalized.includes('no tvm license')) return 'Live Defender vulnerability data is not available for this tenant.';
   if (normalized.includes('unauthorized')) return 'The Defender integration is connected, but this tenant is not authorized.';
   if (normalized.includes('failed to fetch')) return 'The app could not reach the Defender integration service.';
+  if (normalized.includes('not authenticated') || normalized.includes('no authenticated') || normalized.includes('please sign in'))
+    return 'Connect a Microsoft tenant to load live Defender vulnerability data.';
   return raw || 'Failed to load Defender vulnerabilities.';
 }
 

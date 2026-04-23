@@ -178,6 +178,17 @@ router.get('/callback', async (req, res) => {
       lastLoginAt: new Date().toISOString()
     };
 
+    // Determine if this is a genuinely new tenant BEFORE upserting
+    let isNewTenant = true;
+    try {
+      const { getTenantIntegration } = require('../services/tenantIntegrationStore');
+      const existingIntegration = await getTenantIntegration(tenantId).catch(() => null);
+      if (existingIntegration) isNewTenant = false;
+    } catch (_) {
+      // Azure Storage not configured — fall back to filesystem check
+      isNewTenant = !tenantRegistry.getAllTenantIds().includes(tenantId);
+    }
+
     await upsertTenantIntegration({
       tenantId,
       tenantName: claims.tenant_display_name || claims.name || tenantId,
@@ -214,18 +225,20 @@ router.get('/callback', async (req, res) => {
       }
     });
 
-    setImmediate(async () => {
-      try {
-        const telegram = require('../services/telegramService');
-        await telegram.sendMessage(
-          '🏢 *New tenant connected*\n\n' +
-          '*User:* ' + escMd(req.session.tenant.userName) + '\n' +
-          '*Email:* `' + escMd(req.session.tenant.userEmail) + '`\n' +
-          '*Tenant ID:* `' + tenantId + '`\n' +
-          '*Time:* ' + escMd(new Date().toLocaleString('en-GB'))
-        );
-      } catch (err) { /* non-fatal */ }
-    });
+    if (isNewTenant) {
+      setImmediate(async () => {
+        try {
+          const telegram = require('../services/telegramService');
+          await telegram.sendMessage(
+            '🏢 *New tenant connected*\n\n' +
+            '*User:* ' + escMd(req.session.tenant.userName) + '\n' +
+            '*Email:* `' + escMd(req.session.tenant.userEmail) + '`\n' +
+            '*Tenant ID:* `' + tenantId + '`\n' +
+            '*Time:* ' + escMd(new Date().toLocaleString('en-GB'))
+          );
+        } catch (err) { /* non-fatal */ }
+      });
+    }
 
     req.session.save(function(err) {
       if (err) {

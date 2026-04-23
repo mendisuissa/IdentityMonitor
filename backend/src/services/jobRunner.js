@@ -14,33 +14,38 @@ function init() {
   if (initialized) return;
   initialized = true;
 
-  // ── Scan all active tenants every 15 minutes ──────────────────────────
+  // ── Scan all known tenants every 15 minutes ───────────────────────────
+  // Merges in-memory (recently logged in) + filesystem (survives restarts)
   cron.schedule('*/15 * * * *', async () => {
-    const tenants = tenantRegistry.getActiveTenants();
-    if (tenants.length === 0) return;
-    console.log('[Jobs] Running scan for', tenants.length, 'tenants...');
+    const tenantIds = Array.from(new Set([
+      ...tenantRegistry.getActiveTenants().map(t => t.tenantId),
+      ...tenantRegistry.getAllTenantIds()
+    ])).filter(Boolean);
 
-    for (const tenant of tenants) {
+    if (tenantIds.length === 0) return;
+    console.log('[Jobs] Running scan for', tenantIds.length, 'tenants...');
+
+    for (const tenantId of tenantIds) {
       try {
-        const newAlerts = await anomalyService.runFullScan(tenant.tenantId);
+        const newAlerts = await anomalyService.runFullScan(tenantId);
 
-        tenantRegistry.updateTenantHealth(tenant.tenantId, {
+        tenantRegistry.updateTenantHealth(tenantId, {
           lastScanAt:         new Date().toISOString(),
           lastSuccessfulScan: new Date().toISOString(),
           lastScanAlertCount: newAlerts.length
         });
 
-        tenantRegistry.updateOnboarding(tenant.tenantId, 'firstScanDone');
+        tenantRegistry.updateOnboarding(tenantId, 'firstScanDone');
 
         if (newAlerts.length > 0) {
-          wsService.broadcastScanComplete(tenant.tenantId, newAlerts.length);
-          tenantRegistry.updateTenantStats(tenant.tenantId, {
+          wsService.broadcastScanComplete(tenantId, newAlerts.length);
+          tenantRegistry.updateTenantStats(tenantId, {
             lastAlertAt: new Date().toISOString()
           });
         }
       } catch (err) {
-        console.error('[Jobs] Scan failed for', tenant.tenantId, ':', err.message);
-        tenantRegistry.updateTenantHealth(tenant.tenantId, {
+        console.error('[Jobs] Scan failed for', tenantId, ':', err.message);
+        tenantRegistry.updateTenantHealth(tenantId, {
           lastScanAt: new Date().toISOString()
         });
       }
@@ -49,57 +54,65 @@ function init() {
 
   // ── Renew webhook subscriptions — daily at 3am ────────────────────────
   cron.schedule('0 3 * * *', async () => {
-    const tenants = tenantRegistry.getActiveTenants();
-    console.log('[Jobs] Renewing webhooks for', tenants.length, 'tenants...');
+    const tenantIds = Array.from(new Set([
+      ...tenantRegistry.getActiveTenants().map(t => t.tenantId),
+      ...tenantRegistry.getAllTenantIds()
+    ])).filter(Boolean);
+    console.log('[Jobs] Renewing webhooks for', tenantIds.length, 'tenants...');
 
-    for (const tenant of tenants) {
+    for (const tenantId of tenantIds) {
       try {
-        const subs = await require('./tableStorage').getWebhookSubscriptions(tenant.tenantId)
+        const subs = await require('./tableStorage').getWebhookSubscriptions(tenantId)
           .catch(() => []);
 
         if (subs.length === 0) {
-          // Create webhook if none exists
           const WEBHOOK_URL = process.env.WEBHOOK_NOTIFICATION_URL;
           if (WEBHOOK_URL) {
-            const sub = await webhookService.createSignInSubscription(tenant.tenantId);
+            const sub = await webhookService.createSignInSubscription(tenantId);
             if (sub) {
-              tenantRegistry.updateTenantHealth(tenant.tenantId, {
-                webhookActive:   true,
-                webhookId:       sub.id,
+              tenantRegistry.updateTenantHealth(tenantId, {
+                webhookActive:    true,
+                webhookId:        sub.id,
                 webhookExpiresAt: sub.expirationDateTime
               });
-              tenantRegistry.updateOnboarding(tenant.tenantId, 'webhookActive');
+              tenantRegistry.updateOnboarding(tenantId, 'webhookActive');
             }
           }
         } else {
-          await webhookService.renewAllExpiring([tenant.tenantId]);
+          await webhookService.renewAllExpiring([tenantId]);
         }
       } catch (err) {
-        console.error('[Jobs] Webhook renewal failed for', tenant.tenantId, ':', err.message);
-        tenantRegistry.updateTenantHealth(tenant.tenantId, { webhookActive: false });
+        console.error('[Jobs] Webhook renewal failed for', tenantId, ':', err.message);
+        tenantRegistry.updateTenantHealth(tenantId, { webhookActive: false });
       }
     }
   });
 
   // ── Weekly digest — every Sunday at 8am ──────────────────────────────
   cron.schedule('0 8 * * 0', async () => {
-    const tenants = tenantRegistry.getActiveTenants();
-    console.log('[Jobs] Sending weekly digests to', tenants.length, 'tenants...');
+    const tenantIds = Array.from(new Set([
+      ...tenantRegistry.getActiveTenants().map(t => t.tenantId),
+      ...tenantRegistry.getAllTenantIds()
+    ])).filter(Boolean);
+    console.log('[Jobs] Sending weekly digests to', tenantIds.length, 'tenants...');
 
-    for (const tenant of tenants) {
+    for (const tenantId of tenantIds) {
       try {
-        await weeklyDigest.generateAndSend(tenant.tenantId);
+        await weeklyDigest.generateAndSend(tenantId);
       } catch (err) {
-        console.error('[Jobs] Digest failed for', tenant.tenantId, ':', err.message);
+        console.error('[Jobs] Digest failed for', tenantId, ':', err.message);
       }
     }
   });
 
   // ── Health check — every hour ─────────────────────────────────────────
   cron.schedule('0 * * * *', async () => {
-    const tenants = tenantRegistry.getActiveTenants();
-    for (const tenant of tenants) {
-      await checkTenantHealth(tenant.tenantId).catch(() => {});
+    const tenantIds = Array.from(new Set([
+      ...tenantRegistry.getActiveTenants().map(t => t.tenantId),
+      ...tenantRegistry.getAllTenantIds()
+    ])).filter(Boolean);
+    for (const tenantId of tenantIds) {
+      await checkTenantHealth(tenantId).catch(() => {});
     }
   });
 

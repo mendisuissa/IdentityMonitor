@@ -5,28 +5,20 @@ interface Props {
   onLogin: (tenantId: string) => void;
 }
 
-const PERMISSIONS = [
-  { icon: '📋', label: 'AuditLog.Read.All', desc: 'Read sign-in logs' },
-  { icon: '👥', label: 'Directory.Read.All', desc: 'List privileged users & roles' },
-  { icon: '✉️', label: 'Mail.Send', desc: 'Send alert emails' },
-  { icon: '🔑', label: 'RoleManagement.Read', desc: 'Read role assignments' },
-  { icon: '👤', label: 'User.Read.All', desc: 'Read user details' }
-];
-
-const DEFENDER_REQUIREMENTS = [
-  {
-    icon: '🛡️',
-    label: 'Vulnerability.Read.All',
-    desc: 'Read Microsoft Defender vulnerability findings'
-  }
+// What the app reads — friendly language, not raw API scope names
+const WHAT_WE_READ = [
+  { icon: '🔍', label: 'Sign-in history', desc: 'Detect impossible travel, new countries, unusual hours' },
+  { icon: '👥', label: 'Privileged accounts', desc: 'Global Admins, Role Admins, Intune Admins and similar' },
+  { icon: '🔑', label: 'Role assignments', desc: 'Who has what privilege — permanent or just-in-time' },
+  { icon: '📋', label: 'Audit events', desc: 'Role changes, consent grants, policy modifications' },
+  { icon: '✉️', label: 'Alert emails', desc: 'Send notifications when threats are detected' },
 ];
 
 export default function LoginPage({ onLogin }: Props) {
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showPerms, setShowPerms] = useState(true);
-  const [showDefenderPerms, setShowDefenderPerms] = useState(true);
+  const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
     const err = searchParams.get('error');
@@ -39,260 +31,166 @@ export default function LoginPage({ onLogin }: Props) {
     window.location.href = '/api/auth/login';
   };
 
-  const styles: Record<string, React.CSSProperties> = {
-    shell: {
+  return (
+    <div style={{
       minHeight: '100vh',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       padding: '32px 16px',
-      background:
-        'radial-gradient(circle at top, rgba(245, 158, 11, 0.08), transparent 28%), linear-gradient(180deg, #02112b 0%, #020b1f 100%)'
-    },
-    card: {
-      width: '100%',
-      maxWidth: 560,
-      background: 'linear-gradient(180deg, rgba(7,26,58,0.96) 0%, rgba(4,18,43,0.96) 100%)',
-      border: '1px solid rgba(59,130,246,0.18)',
-      borderRadius: 24,
-      boxShadow: '0 20px 60px rgba(0,0,0,0.38)',
-      padding: 32,
-      color: '#f8fafc'
-    },
-    logoWrap: {
-      display: 'flex',
-      justifyContent: 'center',
-      marginBottom: 20
-    },
-    logoBox: {
-      width: 76,
-      height: 76,
-      borderRadius: 18,
-      border: '1px solid rgba(245, 158, 11, 0.45)',
-      background: 'rgba(245, 158, 11, 0.08)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: 28,
-      color: '#f59e0b',
-      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.03)'
-    },
-    title: {
-      fontSize: 34,
-      fontWeight: 800,
-      textAlign: 'center',
-      margin: 0,
-      letterSpacing: '-0.02em'
-    },
-    subtitle: {
-      textAlign: 'center',
-      marginTop: 8,
-      color: '#7aa2e3',
-      fontSize: 13,
-      letterSpacing: '0.14em'
-    },
-    divider: {
-      height: 1,
-      background: 'linear-gradient(90deg, transparent, rgba(96,165,250,0.35), transparent)',
-      margin: '22px 0 24px'
-    },
-    description: {
-      textAlign: 'center',
-      color: '#dbeafe',
-      fontSize: 18,
-      lineHeight: 1.7,
-      margin: '0 0 24px'
-    },
-    panel: {
-      background: 'rgba(16, 38, 79, 0.72)',
-      border: '1px solid rgba(96,165,250,0.18)',
-      borderRadius: 16,
-      overflow: 'hidden',
-      marginBottom: 16
-    },
-    panelHeader: {
-      width: '100%',
-      background: 'rgba(30, 58, 138, 0.22)',
-      border: 'none',
-      borderBottom: '1px solid rgba(96,165,250,0.12)',
-      color: '#dbeafe',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '14px 16px',
-      fontSize: 16,
-      fontWeight: 700,
-      cursor: 'pointer'
-    },
-    panelBody: {
-      padding: 16
-    },
-    permissionItem: {
-      display: 'grid',
-      gridTemplateColumns: '28px 1fr',
-      gap: 12,
-      alignItems: 'start',
-      padding: '10px 0'
-    },
-    permissionIcon: {
-      fontSize: 18,
-      lineHeight: '24px'
-    },
-    permissionLabel: {
-      fontSize: 20,
-      fontWeight: 700,
-      color: '#f8fafc'
-    },
-    permissionDesc: {
-      marginTop: 4,
-      color: '#9fb6d9',
-      fontSize: 15,
-      lineHeight: 1.5
-    },
-    note: {
-      marginTop: 14,
-      paddingTop: 14,
-      borderTop: '1px solid rgba(255,255,255,0.08)',
-      color: '#d6e4ff',
-      fontSize: 15,
-      lineHeight: 1.6
-    },
-    button: {
-      width: '100%',
-      marginTop: 24,
-      background: '#f8fafc',
-      color: '#0f172a',
-      border: 'none',
-      borderRadius: 16,
-      padding: '18px 20px',
-      fontSize: 22,
-      fontWeight: 700,
-      cursor: loading ? 'not-allowed' : 'pointer',
-      opacity: loading ? 0.7 : 1,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 12,
-      boxShadow: '0 10px 24px rgba(0,0,0,0.18)'
-    },
-    error: {
-      marginTop: 18,
-      padding: 14,
-      borderRadius: 14,
-      border: '1px solid rgba(248,113,113,0.3)',
-      background: 'rgba(127,29,29,0.16)',
-      color: '#fecaca',
-      fontSize: 14,
-      lineHeight: 1.6
-    },
-    footer: {
-      marginTop: 22,
-      textAlign: 'center',
-      color: '#7aa2e3',
-      fontSize: 13,
-      lineHeight: 1.8
-    }
-  };
+      background: 'radial-gradient(ellipse at 50% 0%, rgba(232,120,74,0.07) 0%, transparent 60%), #0C0C11',
+    }}>
+      <div style={{
+        width: '100%',
+        maxWidth: 480,
+        background: '#14141B',
+        border: '1px solid rgba(232,120,74,0.2)',
+        borderRadius: 24,
+        boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+        padding: '36px 32px',
+        color: '#f1f1f3',
+      }}>
 
-  return (
-    <div style={styles.shell}>
-      <div style={styles.card}>
-        <div style={styles.logoWrap}>
-          <div style={styles.logoBox}>⬡</div>
+        {/* Logo */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: 18,
+            background: 'rgba(232,120,74,0.1)',
+            border: '1px solid rgba(232,120,74,0.35)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 30,
+          }}>🛡️</div>
         </div>
 
-        <h1 style={styles.title}>Privileged Identity Monitor</h1>
-        <div style={styles.subtitle}>MODERN ENDPOINT · SECURITY OPERATIONS</div>
-
-        <div style={styles.divider} />
-
-        <p style={styles.description}>
-          Connect your Microsoft Entra ID tenant to monitor privileged user sign-in activity
-          and detect anomalies in real time.
-        </p>
-
-        <div style={styles.panel}>
-          <button
-            type="button"
-            style={styles.panelHeader}
-            onClick={() => setShowPerms((p) => !p)}
-          >
-            <span>🔐 Required permissions</span>
-            <span>{showPerms ? 'hide ▲' : 'show ▼'}</span>
-          </button>
-
-          {showPerms && (
-            <div style={styles.panelBody}>
-              {PERMISSIONS.map((p) => (
-                <div key={p.label} style={styles.permissionItem}>
-                  <div style={styles.permissionIcon}>{p.icon}</div>
-                  <div>
-                    <div style={styles.permissionLabel}>{p.label}</div>
-                    <div style={styles.permissionDesc}>{p.desc}</div>
-                  </div>
-                </div>
-              ))}
-
-              <div style={styles.note}>
-                ⚠️ Requires <strong>Global Administrator</strong> or{' '}
-                <strong>Privileged Role Administrator</strong> to consent.
-              </div>
-            </div>
-          )}
+        {/* Title */}
+        <h1 style={{ fontSize: 26, fontWeight: 800, textAlign: 'center', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+          IdentityMonitor
+        </h1>
+        <div style={{ textAlign: 'center', color: 'rgba(241,241,243,0.45)', fontSize: 12, letterSpacing: '0.12em', marginBottom: 28 }}>
+          PRIVILEGED IDENTITY · SECURITY OPERATIONS
         </div>
 
-        <div style={styles.panel}>
-          <button
-            type="button"
-            style={styles.panelHeader}
-            onClick={() => setShowDefenderPerms((p) => !p)}
-          >
-            <span>🛡 Defender Vulnerability Integration</span>
-            <span>{showDefenderPerms ? 'hide ▲' : 'show ▼'}</span>
-          </button>
-
-          {showDefenderPerms && (
-            <div style={styles.panelBody}>
-              {DEFENDER_REQUIREMENTS.map((p) => (
-                <div key={p.label} style={styles.permissionItem}>
-                  <div style={styles.permissionIcon}>{p.icon}</div>
-                  <div>
-                    <div style={styles.permissionLabel}>{p.label}</div>
-                    <div style={styles.permissionDesc}>{p.desc}</div>
-                  </div>
-                </div>
-              ))}
-
-              <div style={styles.note}>
-                Optional advanced module for live Defender vulnerability ingestion.
-              </div>
-
-              <div style={{ ...styles.note, marginTop: 10 }}>
-                Requires <strong>WindowsDefenderATP</strong> application permission and admin consent.
-              </div>
-
-              <div style={{ ...styles.note, marginTop: 10 }}>
-                Requires <strong>Microsoft Defender Vulnerability Management</strong> or eligible TVM entitlement.
-              </div>
-            </div>
-          )}
+        {/* Value prop */}
+        <div style={{
+          background: 'rgba(232,120,74,0.06)',
+          border: '1px solid rgba(232,120,74,0.15)',
+          borderRadius: 14,
+          padding: '16px 18px',
+          marginBottom: 24,
+          fontSize: 14,
+          color: 'rgba(241,241,243,0.75)',
+          lineHeight: 1.7,
+          textAlign: 'center',
+        }}>
+          Connects to your Microsoft Entra ID tenant and monitors privileged accounts in real time —
+          detecting anomalies, impossible travel, and unauthorized role changes.
         </div>
 
-        <button style={styles.button} onClick={handleConnect} disabled={loading}>
-          <span style={{ fontSize: 24 }}>🪟</span>
-          <span>{loading ? 'Redirecting to Microsoft...' : 'Connect with Microsoft'}</span>
+        {/* CTA button */}
+        <button
+          onClick={handleConnect}
+          disabled={loading}
+          style={{
+            width: '100%',
+            padding: '16px 20px',
+            background: loading ? 'rgba(232,120,74,0.5)' : '#E8784A',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 14,
+            fontSize: 16,
+            fontWeight: 700,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            boxShadow: loading ? 'none' : '0 4px 20px rgba(232,120,74,0.35)',
+            transition: 'all 0.15s',
+            marginBottom: 16,
+          }}
+        >
+          <span style={{ fontSize: 18 }}>🪟</span>
+          <span>{loading ? 'Redirecting to Microsoft…' : 'Connect with Microsoft'}</span>
         </button>
 
-        {error ? (
-          <div style={styles.error}>
-            <strong>Authentication failed:</strong>
-            <div>{error}</div>
+        {/* Error */}
+        {error && (
+          <div style={{
+            padding: '12px 16px',
+            borderRadius: 12,
+            background: 'rgba(239,68,68,0.1)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            color: '#FCA5A5',
+            fontSize: 13,
+            lineHeight: 1.6,
+            marginBottom: 16,
+          }}>
+            <strong>Sign-in failed:</strong> {error}
           </div>
-        ) : null}
+        )}
 
-        <div style={styles.footer}>
-          <div>One-time admin consent per tenant</div>
-          <div>Your credentials are never stored — session expires after 24 hours of inactivity</div>
+        {/* What we access — collapsed by default */}
+        <button
+          onClick={() => setShowDetails(d => !d)}
+          style={{
+            width: '100%',
+            background: 'none',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 10,
+            color: 'rgba(241,241,243,0.5)',
+            fontSize: 12,
+            padding: '10px 14px',
+            cursor: 'pointer',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: showDetails ? 0 : 0,
+          }}
+        >
+          <span>What data does this app access?</span>
+          <span style={{ fontSize: 10 }}>{showDetails ? '▲ hide' : '▼ show'}</span>
+        </button>
+
+        {showDetails && (
+          <div style={{
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderTop: 'none',
+            borderRadius: '0 0 10px 10px',
+            padding: '4px 14px 14px',
+            marginBottom: 0,
+          }}>
+            {WHAT_WE_READ.map(item => (
+              <div key={item.label} style={{
+                display: 'flex', gap: 12, padding: '10px 0',
+                borderBottom: '1px solid rgba(255,255,255,0.05)',
+              }}>
+                <span style={{ fontSize: 16, marginTop: 1, flexShrink: 0 }}>{item.icon}</span>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{item.label}</div>
+                  <div style={{ color: 'rgba(241,241,243,0.5)', fontSize: 12, lineHeight: 1.5 }}>{item.desc}</div>
+                </div>
+              </div>
+            ))}
+            <div style={{
+              marginTop: 12, fontSize: 12, color: 'rgba(241,241,243,0.4)', lineHeight: 1.6,
+              paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)',
+            }}>
+              ℹ️ First-time setup requires a <strong style={{ color: 'rgba(241,241,243,0.7)' }}>Global Administrator</strong> to approve access.
+              Subsequent logins are one click — no re-approval needed.
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={{
+          marginTop: 20,
+          textAlign: 'center',
+          color: 'rgba(241,241,243,0.3)',
+          fontSize: 11,
+          lineHeight: 1.8,
+        }}>
+          <div>Your credentials are never stored · Read-only access to Entra ID</div>
+          <div>Session stays active while the app is in use</div>
         </div>
       </div>
     </div>

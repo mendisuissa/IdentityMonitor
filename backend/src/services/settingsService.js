@@ -49,14 +49,23 @@ async function _fetchAndCache(tenantId) {
   try {
     const raw = await tableStorage.getTenantSettings(tenantId);
     if (raw && Object.keys(raw).length > 2) {
-      const data = _migrate({ ...raw, tenantId }, tenantId);
-      _cacheSet(tenantId, data);
-      return data;
+      const fetched = _migrate({ ...raw, tenantId }, tenantId);
+      // Only overwrite cache if fetched data is newer than what's currently cached
+      // (saveSettings sets updatedAt to now, so a recent save wins over a stale Azure read)
+      const current = _cacheGet(tenantId);
+      if (!current || new Date(fetched.updatedAt || 0) >= new Date(current.updatedAt || 0)) {
+        _cacheSet(tenantId, fetched);
+      }
+      return fetched;
     }
   } catch (err) { console.warn('[Settings] Azure fetch failed:', err.message); }
-  const def = defaultSettings(tenantId);
-  _cacheSet(tenantId, def);
-  return def;
+  // Only set defaults if nothing else has populated the cache in the meantime
+  if (!_cacheGet(tenantId)) {
+    const def = defaultSettings(tenantId);
+    _cacheSet(tenantId, def);
+    return def;
+  }
+  return _cacheGet(tenantId);
 }
 
 function getSettings(tenantId) {
@@ -108,8 +117,17 @@ function getTrialStatus(tenantId) {
 }
 
 function isTrialOrActive(tenantId) { const { status } = getTrialStatus(tenantId); return status === 'trial' || status === 'active'; }
-function addAdmin(tenantId, admin) { const s = getSettings(tenantId); if (!s.admins) s.admins = []; if (!s.admins.find(a => a.email === admin.email)) s.admins.push({ ...admin, addedAt: new Date().toISOString() }); return saveSettings(tenantId, { admins: s.admins }); }
-function removeAdmin(tenantId, email) { const s = getSettings(tenantId); s.admins = (s.admins || []).filter(a => a.email !== email); return saveSettings(tenantId, { admins: s.admins }); }
+async function addAdmin(tenantId, admin) {
+  const s = await getSettingsAsync(tenantId);
+  if (!s.admins) s.admins = [];
+  if (!s.admins.find(a => a.email === admin.email)) s.admins.push({ ...admin, addedAt: new Date().toISOString() });
+  return saveSettingsAsync(tenantId, { admins: s.admins });
+}
+async function removeAdmin(tenantId, email) {
+  const s = await getSettingsAsync(tenantId);
+  s.admins = (s.admins || []).filter(a => a.email !== email);
+  return saveSettingsAsync(tenantId, { admins: s.admins });
+}
 function getAdmins(tenantId) { return getSettings(tenantId).admins || []; }
 
 function isOffHours(settings, dateStr) {

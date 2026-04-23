@@ -278,6 +278,18 @@ export const api = {
       method: 'POST',
     }),
 
+  getTelegramSettings: () =>
+    apiFetch<any>('/settings/telegram'),
+
+  saveTelegramSettings: (body: any) =>
+    apiFetch<any>('/settings/telegram', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  testTelegram: () =>
+    apiFetch<any>('/settings/telegram/test', { method: 'POST' }),
+
   getResponsePolicies: () =>
     apiFetch<any>('/settings/response-policies'),
 
@@ -379,21 +391,6 @@ export const api = {
   savePlanAndTrial: (body: any) =>
     apiFetch<any>('/settings/plan-trial', {
       method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-
-  getTelegramSettings: () =>
-    apiFetch<any>('/settings/telegram'),
-
-  saveTelegramSettings: (body: any) =>
-    apiFetch<any>('/settings/telegram', {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-
-  testTelegramDelivery: (body: any) =>
-    apiFetch<any>('/settings/telegram/test', {
-      method: 'POST',
       body: JSON.stringify(body),
     }),
 

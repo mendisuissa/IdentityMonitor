@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from './services/api';
-import { BrowserRouter, Routes, Route, NavLink, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import UsersPage from './components/UsersPage';
 import AlertsPage from './components/AlertsPage';
@@ -327,6 +327,7 @@ function AppShell() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/remediation" element={<RemediationPage />} />
             <Route path="/identity" element={<ConditionalAccessPage />} />
+            <Route path="/ca" element={<Navigate to="/identity" replace />} />
           </Routes>
         </main>
       </div>
@@ -336,7 +337,7 @@ function AppShell() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AppShell />
     </BrowserRouter>
   );
