@@ -1,9 +1,10 @@
 // tenantRegistry.js — In-memory registry of connected tenants
 // Tracks active sessions, health data, onboarding status, and stats
-// Supplemented by filesystem scan of settings/audit/workflow directories
+// Supplemented by filesystem scan + Azure Table Storage (survives restarts)
 
 const fs = require('fs');
 const path = require('path');
+const tableStorage = require('./tableStorage');
 
 const DIRS = {
   settings:  process.env.NODE_ENV === 'production' ? '/home/settings'  : path.join(__dirname, '../../../settings'),
@@ -35,16 +36,19 @@ function collectIdsFromDir(dir) {
 function registerTenant(tenant) {
   if (!tenant?.tenantId) return;
   const existing = _tenants.get(tenant.tenantId) || {};
-  _tenants.set(tenant.tenantId, {
+  const record = {
     ...existing,
-    tenantId:    tenant.tenantId,
-    tenantName:  tenant.tenantName  || existing.tenantName  || tenant.tenantId,
-    primaryEmail: tenant.userEmail  || existing.primaryEmail || '',
-    userName:    tenant.userName    || existing.userName     || '',
-    connectedAt: existing.connectedAt || tenant.connectedAt || new Date().toISOString(),
-    lastSeenAt:  new Date().toISOString(),
-    onboarding:  existing.onboarding || { connected: true }
-  });
+    tenantId:     tenant.tenantId,
+    tenantName:   tenant.tenantName  || existing.tenantName  || tenant.tenantId,
+    primaryEmail: tenant.userEmail   || existing.primaryEmail || '',
+    userName:     tenant.userName    || existing.userName     || '',
+    connectedAt:  existing.connectedAt || tenant.connectedAt || new Date().toISOString(),
+    lastSeenAt:   new Date().toISOString(),
+    onboarding:   existing.onboarding || { connected: true }
+  };
+  _tenants.set(tenant.tenantId, record);
+  // Persist to Azure so tenant name/email survive restarts
+  tableStorage.saveTenantProfile(tenant.tenantId, record).catch(() => {});
   // Mark onboarding step
   updateOnboarding(tenant.tenantId, 'connected');
 }
@@ -55,18 +59,42 @@ function getActiveTenants() {
 }
 
 /**
- * Returns all tenants — merging in-memory registered tenants with
- * filesystem-tracked tenants (those with settings/audit/workflow files).
+ * Returns all tenants — async version that merges:
+ *   1. in-memory (richest, most recent)
+ *   2. Azure Table Storage profiles (survive restarts)
+ *   3. filesystem IDs (last resort, no metadata)
  */
-function getAllTenants() {
-  // Build a merged set: in-memory first (richer data), then filesystem-only IDs
+async function getAllTenants() {
   const result = new Map(_tenants);
+
+  // Layer 2: Azure profiles (have name, email, connectedAt)
+  try {
+    const azureProfiles = await tableStorage.getAllTenantProfiles();
+    for (const p of azureProfiles) {
+      if (!result.has(p.tenantId)) {
+        result.set(p.tenantId, p);
+      } else {
+        // Backfill missing fields from Azure into the in-memory record
+        const existing = result.get(p.tenantId);
+        result.set(p.tenantId, {
+          tenantName:   existing.tenantName   || p.tenantName,
+          primaryEmail: existing.primaryEmail || p.primaryEmail,
+          userName:     existing.userName     || p.userName,
+          connectedAt:  existing.connectedAt  || p.connectedAt,
+          ...existing
+        });
+      }
+    }
+  } catch (_) {}
+
+  // Layer 3: filesystem IDs (just IDs, no metadata)
   const fsIds = getAllTenantIds();
   for (const id of fsIds) {
     if (!result.has(id)) {
       result.set(id, { tenantId: id, tenantName: id, primaryEmail: '', connectedAt: null });
     }
   }
+
   return Array.from(result.values()).map(t => ({
     ...t,
     health: _health.get(t.tenantId) || {}

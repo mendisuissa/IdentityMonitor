@@ -6,6 +6,7 @@ const router         = express.Router();
 const tenantRegistry = require('../services/tenantRegistry');
 const settingsService = require('../services/settingsService');
 const tableStorage   = require('../services/tableStorage');
+const jobRunner      = require('../services/jobRunner');
 
 const SUPERADMIN_EMAILS = [
   'menahem@modernendpoint.tech',
@@ -22,7 +23,14 @@ router.get('/tenants', async (req, res) => {
   if (!isSuperAdmin(req)) return res.status(403).json({ error: 'Access denied' });
 
   try {
-    const tenants = tenantRegistry.getAllTenants();
+    const tenants = await tenantRegistry.getAllTenants();
+
+    // Run health check for any tenant that has no health data yet (fire-and-forget)
+    tenants.forEach(t => {
+      if (!t.health || Object.keys(t.health).length === 0) {
+        jobRunner.checkTenantHealth(t.tenantId).catch(() => {});
+      }
+    });
 
     // Enrich each tenant with settings + alert count
     const enriched = await Promise.all(tenants.map(async t => {

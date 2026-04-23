@@ -158,6 +158,41 @@ async function deleteWebhookSubscription(tenantId, subscriptionId) {
   } catch (err) { /* ignore */ }
 }
 
+// ─── TENANT REGISTRY (profile + health, survives restarts) ───────────────
+async function saveTenantProfile(tenantId, profile) {
+  if (!tenantId) return;
+  const client = getClient(TABLES.TENANTS);
+  await client.upsertEntity({
+    partitionKey: 'profile',
+    rowKey:       tenantId,
+    tenantId,
+    tenantName:   profile.tenantName   || tenantId,
+    primaryEmail: profile.primaryEmail || '',
+    userName:     profile.userName     || '',
+    connectedAt:  profile.connectedAt  || new Date().toISOString(),
+    lastSeenAt:   new Date().toISOString()
+  }, 'Merge');
+}
+
+async function getAllTenantProfiles() {
+  const client = getClient(TABLES.TENANTS);
+  const profiles = [];
+  try {
+    const iter = client.listEntities({ queryOptions: { filter: `PartitionKey eq 'profile'` } });
+    for await (const entity of iter) {
+      profiles.push({
+        tenantId:     entity.rowKey,
+        tenantName:   entity.tenantName   || entity.rowKey,
+        primaryEmail: entity.primaryEmail || '',
+        userName:     entity.userName     || '',
+        connectedAt:  entity.connectedAt  || null,
+        lastSeenAt:   entity.lastSeenAt   || null
+      });
+    }
+  } catch (err) { console.warn('[TableStorage] getAllTenantProfiles:', err.message); }
+  return profiles;
+}
+
 // ─── TENANT SETTINGS ─────────────────────────────────────────────────────
 async function saveTenantSettings(tenantId, settings) {
   const client = getClient(TABLES.TENANTS);
@@ -216,5 +251,6 @@ module.exports = {
   getBaseline, saveBaseline,
   saveWebhookSubscription, getWebhookSubscriptions, deleteWebhookSubscription,
   saveTenantSettings, getTenantSettings,
+  saveTenantProfile, getAllTenantProfiles,
   TABLES
 };
