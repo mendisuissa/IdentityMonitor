@@ -17,6 +17,7 @@ import CaseBoardPage from './components/CaseBoardPage';
 import TenantOpsPage from './components/TenantOpsPage';
 import RemediationPage from './components/RemediationPage';
 import ConditionalAccessPage from './components/ConditionalAccessPage';
+import SuperAdminPage from './components/SuperAdminPage';
 import './styles.css';
 
 interface TenantUser {
@@ -328,6 +329,8 @@ function AppShell() {
             <Route path="/remediation" element={<RemediationPage />} />
             <Route path="/identity" element={<ConditionalAccessPage />} />
             <Route path="/ca" element={<Navigate to="/identity" replace />} />
+            {/* Hidden super-admin route — not in sidebar, server enforces email allowlist */}
+            <Route path="/superadmin" element={<SuperAdminPage />} />
           </Routes>
         </main>
       </div>

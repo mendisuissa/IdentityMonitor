@@ -38,6 +38,7 @@ const tenantRegistry = require('./services/tenantRegistry');
 const defenderVulnerabilityRoutes = require('./routes/defenderVulnerabilities');
 const mspRoutes = require('./routes/msp');
 const identityRoutes = require('./routes/identity');
+const superadminRoutes = require('./routes/superadmin');
 
 const app    = express();
 const server = http.createServer(app);
@@ -88,6 +89,7 @@ app.use('/api/device-actions', deviceActionsRoutes);
 app.use('/api/defender',  defenderVulnerabilityRoutes);
 app.use('/api/msp',       mspRoutes);
 app.use('/api/identity',  identityRoutes);
+app.use('/api/superadmin', superadminRoutes);
 
 // Settings route
 try {
