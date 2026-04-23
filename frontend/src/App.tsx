@@ -18,6 +18,9 @@ import TenantOpsPage from './components/TenantOpsPage';
 import RemediationPage from './components/RemediationPage';
 import ConditionalAccessPage from './components/ConditionalAccessPage';
 import SuperAdminPage from './components/SuperAdminPage';
+import PricingPage from './components/PricingPage';
+import BillingPage from './components/BillingPage';
+import OnboardingWizard from './components/OnboardingWizard';
 import './styles.css';
 
 interface TenantUser {
@@ -164,6 +167,9 @@ function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, on
             <NavLink to="/settings" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
               <span>⚙️</span> Settings
             </NavLink>
+            <NavLink to="/billing" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+              <span>💳</span> Billing
+            </NavLink>
           </div>
         </div>
 
@@ -231,6 +237,7 @@ function AppShell() {
   const [showMockPanel, setShowMockPanel] = useState(false);
   const [inbox, setInbox] = useState<any[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -246,6 +253,14 @@ function AppShell() {
       .catch(err => console.error('[App] health/auth check failed:', err))
       .finally(() => setAuthLoading(false));
   }, []);
+
+  // Show onboarding wizard for new tenants (check after user loads)
+  useEffect(() => {
+    if (!user) return;
+    api.getSettings().then((s: any) => {
+      if (!s?.onboarding?.wizardCompleted) setShowWizard(true);
+    }).catch(() => {});
+  }, [user]);
 
   useEffect(() => {
     api.getNotificationInbox({ limit: 12, dedupe: true }).then((res: any) => setInbox(res.items || [])).catch(() => {});
@@ -275,10 +290,22 @@ function AppShell() {
     </div>
   );
 
-  if (!mockMode && !user) return <LoginPage onLogin={() => {}} />;
+  if (!mockMode && !user) {
+    // Allow public /pricing without auth
+    if (window.location.pathname === '/pricing') return <PricingPage />;
+    return <LoginPage onLogin={() => {}} />;
+  }
 
   return (
     <div className="app">
+      {/* Onboarding wizard — shown to new tenants until wizard is completed */}
+      {showWizard && user && (
+        <OnboardingWizard
+          tenantId={user.tenantId}
+          tenantName={user.tenantName || user.userEmail}
+          onComplete={() => setShowWizard(false)}
+        />
+      )}
       <button className="hamburger-btn" onClick={() => setSidebarOpen(v => !v)} aria-label="Open menu">☰</button>
       <Sidebar
         user={user}
@@ -329,6 +356,8 @@ function AppShell() {
             <Route path="/remediation" element={<RemediationPage />} />
             <Route path="/identity" element={<ConditionalAccessPage />} />
             <Route path="/ca" element={<Navigate to="/identity" replace />} />
+            <Route path="/billing" element={<BillingPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
             {/* Hidden super-admin route — not in sidebar, server enforces email allowlist */}
             <Route path="/superadmin" element={<SuperAdminPage />} />
           </Routes>

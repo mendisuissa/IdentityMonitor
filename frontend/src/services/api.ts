@@ -590,6 +590,22 @@ export const api = {
 
   acknowledgeDeviceAction: (id: string) =>
     apiFetch<any>(`/device-actions/${id}/acknowledge`, { method: 'POST' }),
+
+  // ── Billing ──────────────────────────────────────────────────────────────
+  getBillingPlans: () =>
+    apiFetch<any>('/billing/plans'),
+
+  getBillingStatus: () =>
+    apiFetch<any>('/billing/status'),
+
+  createCheckout: (plan: string) =>
+    apiFetch<{ url: string }>('/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ plan }),
+    }),
+
+  getBillingPortal: () =>
+    apiFetch<{ url: string }>('/billing/portal'),
 };
 
 export default api;
