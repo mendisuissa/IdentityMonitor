@@ -252,7 +252,10 @@ async function scanUser(tenantId, user, signIns, settings) {
 async function runFullScan(tenantId) {
   if (!tenantId) { console.warn('[Anomaly] No tenantId — skipping'); return []; }
 
-  const settings   = settingsService.getSettings(tenantId);
+  // Use async version so we always get real settings from Azure (not stale defaults).
+  // The 15-min cron fires long after the 60s cache TTL expires, so getSettings() would
+  // return empty defaults (no Telegram token, no admin emails) every single run.
+  const settings   = await settingsService.getSettingsAsync(tenantId);
   const users      = await graphService.getPrivilegedUsers(tenantId);
   const allAlerts  = [];
 
@@ -298,22 +301,14 @@ async function triggerActions(tenantId, alerts, user, settings) {
     const shouldEmail    = emailSeverities.includes(alert.severity) && adminEmails.length > 0;
     const shouldTelegram = telegramSeverities.includes(alert.severity) && telegramToken && telegramChatId;
 
-    // ── Immediate Telegram (critical/high) ────────────────────────────
+    // ── Immediate Telegram (critical/high) — rich playbook with action buttons ──
     if (shouldTelegram) {
       try {
         const telegramService = require('./telegramService');
-        const emoji = alert.severity === 'critical' ? '🚨' : '⚠️';
-        await telegramService.sendMessageWithToken(telegramToken, telegramChatId,
-          `${emoji} *${alert.severity.toUpperCase()} Alert*\n\n` +
-          `*User:* ${escMd(alert.userDisplayName)}\n` +
-          `*UPN:* \`${escMd(alert.userPrincipalName)}\`\n` +
-          `*Threat:* ${escMd(alert.anomalyLabel)}\n` +
-          `*Detail:* ${escMd(alert.detail)}\n` +
-          `*App:* ${escMd(alert.appName || 'Unknown')}\n` +
-          `*Location:* ${escMd([alert.city, alert.country].filter(Boolean).join(', ') || 'Unknown')}\n` +
-          `*IP:* \`${escMd(alert.ipAddress || 'N/A')}\`\n` +
-          `*Detected:* ${new Date(alert.detectedAt).toLocaleString('en-GB')}`
-        );
+        // sendAlertWithPlaybook sends the rich interactive message with
+        // Revoke / Disable / Dismiss / Investigate buttons.
+        // Pass settings-based credentials so UI-configured bots work.
+        await telegramService.sendAlertWithPlaybook(alert, telegramToken, telegramChatId);
         alertsStore.addAction(alert.id, 'telegram_sent');
       } catch (err) {
         console.error('[Actions] Telegram failed:', err.message);
