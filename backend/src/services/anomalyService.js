@@ -281,8 +281,10 @@ async function runFullScan(tenantId) {
 }
 
 async function triggerActions(tenantId, alerts, user, settings) {
-  // Freemium gate: notifications and auto-actions require an active paid subscription
-  const premium = settingsService.isPremium(tenantId);
+  // Freemium gate: use the already-fetched settings object (avoids sync cache miss)
+  // isPremium() sync version can return false when 60s cache expires at scan time
+  const plan    = settings?.billing?.plan || 'free';
+  const premium = plan === 'active' || process.env.BILLING_DISABLED === 'true';
 
   const adminEmails = settingsService.getAdminEmails(settings);
   const notifyCfg   = settings.notifications || {};
