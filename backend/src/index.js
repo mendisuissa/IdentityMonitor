@@ -93,6 +93,14 @@ app.use('/api/identity',  identityRoutes);
 app.use('/api/superadmin', superadminRoutes);
 app.use('/api/billing',   billingRoutes);
 
+// Gumroad webhook alias — matches the URL configured in Gumroad Ping settings
+// Accepts both /api/billing/gumroad-webhook and /api/webhooks/gumroad
+app.post('/api/webhooks/gumroad', express.urlencoded({ extended: true }), (req, res, next) => {
+  // Rewrite to billing route and forward
+  req.url = '/gumroad-webhook' + (req._parsedUrl?.search || '');
+  billingRoutes(req, res, next);
+});
+
 // Settings route
 try {
   const settingsRoutes = require('./routes/settings');
