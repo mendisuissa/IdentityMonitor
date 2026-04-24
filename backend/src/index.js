@@ -192,12 +192,7 @@ async function startup() {
     console.warn('[Storage] AZURE_STORAGE_CONNECTION_STRING not set — using in-memory store');
   }
 
-  // Telegram startup message
-  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
-    try {
-      await telegramService.sendMessage('🟢 *Privileged Identity Monitor* started\nMode: ' + (MOCK ? 'MOCK' : 'LIVE'));
-    } catch (err) { /* ignore */ }
-  }
+  // Startup Telegram message intentionally removed — Azure restarts triggered too many notifications.
 
   // Load alerts from Azure Tables into memory
   try {
