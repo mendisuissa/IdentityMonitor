@@ -84,17 +84,22 @@ router.get('/plans', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/billing/checkout — redirect user to Gumroad with email pre-filled
+// GET /api/billing/checkout — redirect user to Gumroad with email + redirect_url pre-filled
+// After purchase Gumroad sends the buyer back to /billing automatically.
 // ---------------------------------------------------------------------------
 router.get('/checkout', (req, res) => {
   const tenantId = requireAuth(req, res);
   if (!tenantId) return;
 
   try {
-    const email = req.session?.tenant?.userEmail || '';
-    const url   = email
-      ? `${GUMROAD_PRODUCT_URL}?email=${encodeURIComponent(email)}`
-      : GUMROAD_PRODUCT_URL;
+    const email   = req.session?.tenant?.userEmail || '';
+    const appUrl  = process.env.APP_URL || 'https://identitymonitor.modernendpoint.tech';
+
+    const params = new URLSearchParams();
+    if (email) params.set('email', email);
+    params.set('redirect_url', `${appUrl}/billing`);
+
+    const url = `${GUMROAD_PRODUCT_URL}?${params.toString()}`;
 
     auditLog.log(tenantId, 'billing.checkout_started', { url }, req.session.tenant.userEmail || 'system');
     res.json({ url });
