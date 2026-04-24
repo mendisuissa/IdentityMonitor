@@ -44,24 +44,26 @@ const FEATURES = [
     desc: 'Continuous scanning every minute. Threats are caught in near real-time, not after the damage is done.',
   },
   {
-    icon: '📱',
-    title: 'Telegram action alerts',
-    desc: 'Rich notifications with one-tap Revoke / Disable / Investigate buttons — straight to your phone.',
+    icon: '🔥',
+    title: 'One-tap remediation',
+    desc: 'Revoke sessions, disable users, and contain threats instantly — from your phone, in one tap. No Azure Portal needed.',
+    highlight: true,
   },
   {
-    icon: '🔒',
-    title: 'Automated remediation',
-    desc: 'Sessions revoked and users disabled automatically on critical threats, with full audit trail.',
+    icon: '📱',
+    title: 'Telegram action alerts',
+    desc: 'Rich notifications with Revoke / Disable / Dismiss / Investigate buttons — straight to your phone the moment a threat fires.',
+  },
+  {
+    icon: '🤖',
+    title: 'Automatic response',
+    desc: 'Configure critical alerts to auto-revoke sessions and disable users before you even pick up your phone.',
+    highlight: true,
   },
   {
     icon: '🌍',
     title: 'Global threat signals',
     desc: 'Impossible travel, new countries, unknown devices, MFA failures, high-risk logins — all covered.',
-  },
-  {
-    icon: '🛡️',
-    title: 'Conditional Access',
-    desc: 'Monitor and manage CA policies from one place without logging into Azure Portal.',
   },
   {
     icon: '📊',
@@ -153,11 +155,11 @@ export default function LandingPage() {
         </h1>
 
         <p style={{
-          fontSize: 18, color: 'rgba(255,255,255,0.55)', maxWidth: 560,
+          fontSize: 18, color: 'rgba(255,255,255,0.55)', maxWidth: 580,
           margin: '0 auto 40px', lineHeight: 1.7,
         }}>
-          Real-time anomaly detection for privileged identities. Instant Telegram alerts.
-          One-tap remediation. Runs every 60 seconds.
+          Detects identity threats in your Microsoft 365 every 60 seconds —
+          then lets you <strong style={{ color: 'rgba(255,255,255,0.85)' }}>revoke sessions, disable users, and contain threats</strong> in one tap from Telegram.
         </p>
 
         <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -199,16 +201,119 @@ export default function LandingPage() {
             Everything you need to stay ahead of identity threats
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
-            {FEATURES.map(f => (
+            {FEATURES.map((f: any) => (
               <div key={f.title} style={{
-                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+                background: f.highlight ? 'rgba(232,120,74,0.07)' : 'rgba(255,255,255,0.03)',
+                border: f.highlight ? '1px solid rgba(232,120,74,0.25)' : '1px solid rgba(255,255,255,0.08)',
                 borderRadius: 16, padding: '24px 22px',
               }}>
                 <div style={{ fontSize: 28, marginBottom: 12 }}>{f.icon}</div>
-                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>{f.title}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, color: f.highlight ? ORANGE : undefined }}>{f.title}</div>
                 <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.65 }}>{f.desc}</div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── REMEDIATION SHOWCASE ── */}
+      <section style={{ padding: '0 24px 100px' }}>
+        <div style={{ maxWidth: 960, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 56 }}>
+            <Badge>🔥 Detect → Alert → Contain</Badge>
+            <h2 style={{ fontSize: 28, fontWeight: 800, marginTop: 20, marginBottom: 12, letterSpacing: -0.5 }}>
+              From threat detected to session revoked — in seconds
+            </h2>
+            <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.45)', maxWidth: 560, margin: '0 auto' }}>
+              Most tools just tell you something happened. IdentityMonitor lets you stop it.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'stretch' }}>
+
+            {/* Left: Timeline */}
+            <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {[
+                { icon: '🔍', color: '#888',    label: 'Detected',  text: 'Impossible travel — Tel Aviv → New York in 90 min' },
+                { icon: '📱', color: ORANGE,    label: 'Alerted',   text: 'Telegram message with full context fired in <60s' },
+                { icon: '👆', color: '#9B8AFB', label: 'Responded', text: 'You tap Revoke — or it happens automatically' },
+                { icon: '✅', color: '#00C98B', label: 'Contained', text: 'Session revoked. Attacker locked out. Audit logged.' },
+              ].map((step, i, arr) => (
+                <div key={step.label} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                  {/* connector */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                      background: `${step.color}22`, border: `2px solid ${step.color}55`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+                    }}>
+                      {step.icon}
+                    </div>
+                    {i < arr.length - 1 && (
+                      <div style={{ width: 2, height: 36, background: 'rgba(255,255,255,0.08)', margin: '4px 0' }} />
+                    )}
+                  </div>
+                  <div style={{ paddingTop: 8, paddingBottom: i < arr.length - 1 ? 0 : 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, color: step.color, marginBottom: 2 }}>{step.label}</div>
+                    <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 1.5, marginBottom: 20 }}>{step.text}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Right: Telegram mockup */}
+            <div style={{ flex: '1 1 320px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{
+                background: '#17212B', borderRadius: 16, padding: '20px 18px',
+                width: '100%', maxWidth: 380,
+                boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
+                border: '1px solid rgba(255,255,255,0.07)',
+              }}>
+                {/* Telegram header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: `linear-gradient(135deg, ${ORANGE}, #F5A462)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🛡️</div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>IdentityMonitor</div>
+                    <div style={{ fontSize: 11, color: '#5B7FA6' }}>bot</div>
+                  </div>
+                </div>
+
+                {/* Alert message */}
+                <div style={{ background: '#1E2D3D', borderRadius: 10, padding: '12px 14px', marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#FF4455', marginBottom: 6 }}>🚨 CRITICAL ALERT</div>
+                  <div style={{ fontSize: 12, color: '#aaa', lineHeight: 1.6 }}>
+                    <div><span style={{ color: '#fff', fontWeight: 600 }}>User:</span> john.doe@contoso.com</div>
+                    <div><span style={{ color: '#fff', fontWeight: 600 }}>Threat:</span> Impossible Travel</div>
+                    <div><span style={{ color: '#fff', fontWeight: 600 }}>Route:</span> 🇮🇱 Tel Aviv → 🇺🇸 New York</div>
+                    <div><span style={{ color: '#fff', fontWeight: 600 }}>Time gap:</span> 90 min (impossible)</div>
+                    <div><span style={{ color: '#fff', fontWeight: 600 }}>App:</span> Microsoft Azure Portal</div>
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {[
+                    { label: '🚫 Revoke Session', color: '#FF4455', bg: 'rgba(255,68,85,0.15)' },
+                    { label: '⛔ Disable User',   color: '#FF8C00', bg: 'rgba(255,140,0,0.12)' },
+                    { label: '🔍 Investigate',     color: '#5B7FA6', bg: 'rgba(91,127,166,0.15)' },
+                    { label: '✅ Dismiss',          color: '#00C98B', bg: 'rgba(0,201,139,0.12)' },
+                  ].map(btn => (
+                    <div key={btn.label} style={{
+                      padding: '9px 6px', borderRadius: 8, textAlign: 'center',
+                      background: btn.bg, border: `1px solid ${btn.color}33`,
+                      fontSize: 11, fontWeight: 700, color: btn.color, cursor: 'default',
+                    }}>
+                      {btn.label}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: 10, fontSize: 10, color: '#5B7FA6', textAlign: 'center' }}>
+                  Auto-revoke in 30 min if no action taken
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </section>
