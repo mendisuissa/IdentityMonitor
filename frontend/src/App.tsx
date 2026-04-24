@@ -21,6 +21,8 @@ import SuperAdminPage from './components/SuperAdminPage';
 import PricingPage from './components/PricingPage';
 import BillingPage from './components/BillingPage';
 import OnboardingWizard from './components/OnboardingWizard';
+import TermsPage from './components/TermsPage';
+import PrivacyPage from './components/PrivacyPage';
 import './styles.css';
 
 interface TenantUser {
@@ -291,8 +293,14 @@ function AppShell() {
   );
 
   if (!mockMode && !user) {
-    // Allow public /pricing without auth
-    if (window.location.pathname === '/pricing') return <PricingPage />;
+    // Public pages — accessible without login
+    const publicPaths: Record<string, React.ReactElement> = {
+      '/pricing': <PricingPage />,
+      '/terms':   <TermsPage />,
+      '/privacy': <PrivacyPage />,
+    };
+    const publicPage = publicPaths[window.location.pathname];
+    if (publicPage) return publicPage;
     return <LoginPage onLogin={() => {}} />;
   }
 
@@ -358,6 +366,8 @@ function AppShell() {
             <Route path="/ca" element={<Navigate to="/identity" replace />} />
             <Route path="/billing" element={<BillingPage />} />
             <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/terms"   element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
             {/* Hidden super-admin route — not in sidebar, server enforces email allowlist */}
             <Route path="/superadmin" element={<SuperAdminPage />} />
           </Routes>

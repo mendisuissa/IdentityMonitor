@@ -272,6 +272,20 @@ export default function PricingPage() {
           Already have an account?{' '}
           <a href="/" style={{ color: '#E8784A', textDecoration: 'none', fontWeight: 600 }}>Sign in</a>
         </div>
+
+        {/* Footer links */}
+        <div
+          style={{
+            textAlign: 'center', marginTop: 32,
+            paddingTop: 24, borderTop: '1px solid rgba(255,255,255,0.06)',
+            display: 'flex', justifyContent: 'center', gap: 24,
+            fontSize: 12, color: 'var(--text-muted)',
+          }}
+        >
+          <a href="/terms"   style={{ color: 'inherit', textDecoration: 'none' }}>Terms of Service</a>
+          <a href="/privacy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy Policy</a>
+          <a href="mailto:support@modernendpoint.tech" style={{ color: 'inherit', textDecoration: 'none' }}>support@modernendpoint.tech</a>
+        </div>
       </div>
     </div>
   );
