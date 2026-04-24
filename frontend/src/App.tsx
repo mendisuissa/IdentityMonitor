@@ -23,6 +23,7 @@ import BillingPage from './components/BillingPage';
 import OnboardingWizard from './components/OnboardingWizard';
 import TermsPage from './components/TermsPage';
 import PrivacyPage from './components/PrivacyPage';
+import LandingPage from './components/LandingPage';
 import './styles.css';
 
 interface TenantUser {
@@ -295,13 +296,15 @@ function AppShell() {
   if (!mockMode && !user) {
     // Public pages — accessible without login
     const publicPaths: Record<string, React.ReactElement> = {
+      '/':        <LandingPage />,
       '/pricing': <PricingPage />,
       '/terms':   <TermsPage />,
       '/privacy': <PrivacyPage />,
     };
     const publicPage = publicPaths[window.location.pathname];
     if (publicPage) return publicPage;
-    return <LoginPage onLogin={() => {}} />;
+    // Any other path (e.g. /dashboard) → show landing page so user can sign in
+    return <LandingPage />;
   }
 
   return (
