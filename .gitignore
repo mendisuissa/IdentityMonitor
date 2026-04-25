@@ -1,7 +1,9 @@
 node_modules/
 .env
 dist/
-public/
+# Backend build output (frontend bundle served here — generated, do not commit)
+backend/public/
+backend/src/public/
 *.log
 
 # Azure publish profiles (contain credentials — never commit)

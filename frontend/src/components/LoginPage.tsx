@@ -53,13 +53,7 @@ export default function LoginPage({ onLogin }: Props) {
 
         {/* Logo */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
-          <div style={{
-            width: 72, height: 72, borderRadius: 18,
-            background: 'rgba(232,120,74,0.1)',
-            border: '1px solid rgba(232,120,74,0.35)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 30,
-          }}>🛡️</div>
+          <img src="/logo.svg" alt="IdentityMonitor" style={{ width: 72, height: 72, filter: 'drop-shadow(0 0 14px rgba(232,120,74,0.45))' }} />
         </div>
 
         {/* Title */}

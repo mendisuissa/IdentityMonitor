@@ -106,12 +106,7 @@ export default function LandingPage() {
         borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}>
         <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 9,
-            background: `linear-gradient(135deg, ${ORANGE}, #F5A462)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 16, boxShadow: '0 0 16px rgba(232,120,74,0.30)',
-          }}>🛡️</div>
+          <img src="/logo.svg" alt="IdentityMonitor logo" style={{ width: 34, height: 34, filter: 'drop-shadow(0 0 8px rgba(232,120,74,0.40))' }} />
           <span style={{ fontWeight: 800, fontSize: 15, color: '#fff', letterSpacing: -0.2 }}>
             IdentityMonitor
           </span>
@@ -271,7 +266,7 @@ export default function LandingPage() {
               }}>
                 {/* Telegram header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: `linear-gradient(135deg, ${ORANGE}, #F5A462)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🛡️</div>
+                  <img src="/logo.svg" alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>IdentityMonitor</div>
                     <div style={{ fontSize: 11, color: '#5B7FA6' }}>bot</div>
@@ -425,11 +420,7 @@ export default function LandingPage() {
         padding: '32px 24px', textAlign: 'center',
       }}>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: 7,
-            background: `linear-gradient(135deg, ${ORANGE}, #F5A462)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12,
-          }}>🛡️</div>
+          <img src="/logo.svg" alt="" style={{ width: 24, height: 24 }} />
           <span style={{ fontWeight: 800, fontSize: 13 }}>IdentityMonitor</span>
           <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>by ModernEndpoint.tech</span>
         </div>
