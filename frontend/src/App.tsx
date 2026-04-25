@@ -114,7 +114,7 @@ function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, on
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         {/* Logo */}
         <div className="sidebar-logo">
-          <div className="logo-icon">🛡️</div>
+          <img src="/logo.svg" alt="IdentityMonitor" className="logo-icon" style={{ width: 32, height: 32, objectFit: 'contain' }} />
           <div>
             <div className="logo-text">IdentityMonitor</div>
             <div className="logo-sub">Security Operations</div>

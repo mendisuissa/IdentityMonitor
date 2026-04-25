@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 220" fill="none">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E8784A"/>
+      <stop offset="100%" stop-color="#C0492B"/>
+    </linearGradient>
+    <linearGradient id="shieldTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F5A462"/>
+      <stop offset="100%" stop-color="#E8784A"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Shield body -->
+  <path d="M100 8 L180 42 L180 110 Q180 170 100 210 Q20 170 20 110 L20 42 Z"
+        fill="url(#shieldGrad)" />
+
+  <!-- Shield inner highlight -->
+  <path d="M100 22 L166 50 L166 112 Q166 162 100 196 Q34 162 34 112 L34 50 Z"
+        fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+
+  <!-- Eye shape: representing identity monitoring -->
+  <!-- Outer eye -->
+  <ellipse cx="100" cy="108" rx="44" ry="28" fill="rgba(0,0,0,0.25)"/>
+  <path d="M56 108 Q78 72 100 72 Q122 72 144 108 Q122 144 100 144 Q78 144 56 108 Z"
+        fill="rgba(0,0,0,0.3)"/>
+  <!-- White of eye -->
+  <path d="M62 108 Q80 78 100 78 Q120 78 138 108 Q120 138 100 138 Q80 138 62 108 Z"
+        fill="white" opacity="0.92"/>
+
+  <!-- Iris -->
+  <circle cx="100" cy="108" r="20" fill="#1a1a2e"/>
+  <!-- Iris ring -->
+  <circle cx="100" cy="108" r="20" fill="none" stroke="#E8784A" stroke-width="2.5"/>
+
+  <!-- Pupil -->
+  <circle cx="100" cy="108" r="10" fill="#0d0d1a"/>
+
+  <!-- Eye shine -->
+  <circle cx="107" cy="102" r="4" fill="white" opacity="0.7"/>
+  <circle cx="94" cy="113" r="2" fill="white" opacity="0.35"/>
+
+  <!-- Scan line through eye (monitoring effect) -->
+  <line x1="58" y1="108" x2="142" y2="108" stroke="#E8784A" stroke-width="1.2" opacity="0.6" filter="url(#glow)"/>
+
+  <!-- Shield top notch / badge accent -->
+  <path d="M84 28 L100 22 L116 28 L116 38 L100 34 L84 38 Z" fill="rgba(255,255,255,0.18)"/>
+</svg>

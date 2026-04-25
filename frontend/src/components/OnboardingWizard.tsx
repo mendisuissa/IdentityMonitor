@@ -348,9 +348,9 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: 26,
                     flexShrink: 0,
-                  }}>🛡️</div>
+                    overflow: 'hidden',
+                  }}><img src="/logo.svg" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
                   <div>
                     <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>
                       Welcome to IdentityMonitor

@@ -69,16 +69,7 @@ export default function PricingPage() {
       {/* ── Header ── */}
       <div style={{ textAlign: 'center', padding: '72px 16px 40px', maxWidth: 640, margin: '0 auto' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <div
-            style={{
-              width: 40, height: 40, borderRadius: 12,
-              background: 'linear-gradient(135deg, #E8784A, #F5A462)',
-              boxShadow: '0 0 20px rgba(232,120,74,0.35)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
-            }}
-          >
-            🛡️
-          </div>
+          <img src="/logo.svg" alt="IdentityMonitor" style={{ width: 40, height: 40, filter: 'drop-shadow(0 0 8px rgba(232,120,74,0.40))' }} />
           <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: 0.3 }}>IdentityMonitor</span>
         </div>
         <h1 style={{ fontSize: 38, fontWeight: 800, letterSpacing: -0.5, marginBottom: 12, lineHeight: 1.15 }}>
