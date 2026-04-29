@@ -148,25 +148,25 @@ export default function LandingPage() {
         background: 'radial-gradient(ellipse at 50% 0%, rgba(232,120,74,0.08) 0%, transparent 60%)',
       }}>
         <div style={{ marginBottom: 24 }}>
-          <Badge>🔴 Live • Microsoft 365 Identity Security</Badge>
+          <Badge>🔴 Detect · Contain · Remediate — Microsoft 365</Badge>
         </div>
 
         <h1 style={{
           fontSize: 'clamp(32px, 6vw, 58px)', fontWeight: 900,
-          letterSpacing: -1.5, lineHeight: 1.1, marginBottom: 24,
+          letterSpacing: -1.5, lineHeight: 1.1,
           maxWidth: 820, margin: '0 auto 24px',
         }}>
-          Know when someone breaks into your{' '}
+          Detect threats in your{' '}
           <span style={{ color: ORANGE }}>Microsoft 365.</span>
-          <br />Before they do damage.
+          <br />Contain them before they cause damage.
         </h1>
 
         <p style={{
-          fontSize: 18, color: 'rgba(255,255,255,0.55)', maxWidth: 580,
+          fontSize: 18, color: 'rgba(255,255,255,0.55)', maxWidth: 600,
           margin: '0 auto 40px', lineHeight: 1.7,
         }}>
-          Detects identity threats in your Microsoft 365 every 60 seconds —
-          then lets you <strong style={{ color: 'rgba(255,255,255,0.85)' }}>revoke sessions, disable users, and contain threats</strong> in one tap from Telegram.
+          Continuous identity & endpoint monitoring every 60 seconds —
+          then <strong style={{ color: 'rgba(255,255,255,0.85)' }}>revoke sessions, patch CVEs, run remediation scripts, and disable accounts</strong> in one tap. No Azure Portal needed.
         </p>
 
         <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -181,23 +181,54 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── DETECTION STRIP ── */}
+      {/* ── DETECT + ACT STRIP ── */}
       <section style={{ padding: '0 24px 80px' }}>
-        <div style={{ maxWidth: 900, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 24, fontSize: 12, fontWeight: 700, letterSpacing: 1, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase' }}>
-            What we detect
+        <div style={{ maxWidth: 940, margin: '0 auto' }}>
+
+          {/* Detect row */}
+          <div style={{ textAlign: 'center', marginBottom: 14, fontSize: 11, fontWeight: 700, letterSpacing: 1, color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase' }}>
+            🔍 What we detect
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginBottom: 28 }}>
             {DETECTIONS.map(d => (
               <span key={d} style={{
-                padding: '7px 16px', borderRadius: 99, fontSize: 13, fontWeight: 500,
+                padding: '6px 15px', borderRadius: 99, fontSize: 12, fontWeight: 500,
                 background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)',
-                color: 'rgba(255,255,255,0.70)',
+                color: 'rgba(255,255,255,0.65)',
               }}>
                 {d}
               </span>
             ))}
           </div>
+
+          {/* Divider */}
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginBottom: 28 }} />
+
+          {/* Act row */}
+          <div style={{ textAlign: 'center', marginBottom: 14, fontSize: 11, fontWeight: 700, letterSpacing: 1, color: ORANGE, textTransform: 'uppercase' }}>
+            ⚡ What we do about it
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+            {[
+              'Revoke active sessions',
+              'Disable compromised user',
+              'Patch CVE via Windows Update',
+              'Run remediation script',
+              'Push Intune policy',
+              'App update (Chrome, Edge, Office…)',
+              'Telegram one-tap action',
+              'Auto-remediate on trigger',
+            ].map(a => (
+              <span key={a} style={{
+                padding: '6px 15px', borderRadius: 99, fontSize: 12, fontWeight: 600,
+                background: 'rgba(232,120,74,0.08)', border: '1px solid rgba(232,120,74,0.22)',
+                color: '#F5A462',
+              }}>
+                {a}
+              </span>
+            ))}
+          </div>
+
         </div>
       </section>
 
@@ -297,22 +328,32 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                {/* Action buttons */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  {[
-                    { label: '🚫 Revoke Session', color: '#FF4455', bg: 'rgba(255,68,85,0.15)' },
-                    { label: '⛔ Disable User',   color: '#FF8C00', bg: 'rgba(255,140,0,0.12)' },
-                    { label: '🔍 Investigate',     color: '#5B7FA6', bg: 'rgba(91,127,166,0.15)' },
-                    { label: '✅ Dismiss',          color: '#00C98B', bg: 'rgba(0,201,139,0.12)' },
-                  ].map(btn => (
-                    <div key={btn.label} style={{
-                      padding: '9px 6px', borderRadius: 8, textAlign: 'center',
-                      background: btn.bg, border: `1px solid ${btn.color}33`,
-                      fontSize: 11, fontWeight: 700, color: btn.color, cursor: 'default',
-                    }}>
-                      {btn.label}
-                    </div>
-                  ))}
+                {/* Action buttons — styled to match real app buttons */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  {/* btn-danger */}
+                  <div style={{
+                    padding: '8px 6px', borderRadius: 8, textAlign: 'center', cursor: 'default',
+                    background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.25)',
+                    fontSize: 11, fontWeight: 600, color: '#ef4444',
+                  }}>⊘ Revoke Sessions</div>
+                  {/* btn-warning (orange variant) */}
+                  <div style={{
+                    padding: '8px 6px', borderRadius: 8, textAlign: 'center', cursor: 'default',
+                    background: 'rgba(232,120,74,0.10)', border: '1px solid rgba(232,120,74,0.25)',
+                    fontSize: 11, fontWeight: 600, color: '#E8784A',
+                  }}>⊘ Disable User</div>
+                  {/* btn-ghost */}
+                  <div style={{
+                    padding: '8px 6px', borderRadius: 8, textAlign: 'center', cursor: 'default',
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)',
+                    fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.60)',
+                  }}>🔍 Investigate</div>
+                  {/* btn-ghost */}
+                  <div style={{
+                    padding: '8px 6px', borderRadius: 8, textAlign: 'center', cursor: 'default',
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)',
+                    fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.60)',
+                  }}>✓ Dismiss</div>
                 </div>
 
                 <div style={{ marginTop: 10, fontSize: 10, color: '#5B7FA6', textAlign: 'center' }}>
@@ -441,30 +482,32 @@ export default function LandingPage() {
                   <span style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, background: 'rgba(255,61,107,0.10)', color: '#FF3D6B', fontWeight: 700, border: '1px solid rgba(255,61,107,0.18)' }}>🔴 Exploit in wild</span>
                 </div>
 
-                {/* Action buttons */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button style={{
-                    padding: '10px 16px', borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
-                    background: `linear-gradient(135deg, ${ORANGE}, #F5A462)`, color: '#fff',
-                    boxShadow: '0 4px 16px rgba(232,120,74,0.30)',
-                    textAlign: 'left',
+                {/* Action buttons — match real app btn styles */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {/* btn-primary */}
+                  <div style={{
+                    padding: '9px 16px', borderRadius: 8, cursor: 'default', fontWeight: 600, fontSize: 12,
+                    background: 'linear-gradient(135deg, #E8784A, #F5A462)', color: '#fff',
+                    boxShadow: '0 4px 16px rgba(232,120,74,0.35)',
                   }}>
                     ⊞ Trigger Windows Update on all 12 devices
-                  </button>
-                  <button style={{
-                    padding: '10px 16px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.10)', cursor: 'pointer', fontWeight: 600, fontSize: 12,
-                    background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.7)',
-                    textAlign: 'left',
+                  </div>
+                  {/* btn-ghost */}
+                  <div style={{
+                    padding: '9px 16px', borderRadius: 8, cursor: 'default', fontWeight: 600, fontSize: 12,
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)',
+                    color: 'rgba(255,255,255,0.60)',
                   }}>
                     🔄 Reset Windows Update components (script)
-                  </button>
-                  <button style={{
-                    padding: '10px 16px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.10)', cursor: 'pointer', fontWeight: 600, fontSize: 12,
-                    background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.7)',
-                    textAlign: 'left',
+                  </div>
+                  {/* btn-ghost */}
+                  <div style={{
+                    padding: '9px 16px', borderRadius: 8, cursor: 'default', fontWeight: 600, fontSize: 12,
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)',
+                    color: 'rgba(255,255,255,0.60)',
                   }}>
                     🔍 View all 12 affected devices
-                  </button>
+                  </div>
                 </div>
               </div>
 
