@@ -112,25 +112,37 @@ export default function LandingPage() {
   return (
     <div style={{ background: BG, color: '#e8e8f0', fontFamily: 'system-ui, -apple-system, sans-serif', minHeight: '100vh' }}>
 
+      {/* Responsive nav helpers */}
+      <style>{`
+        .nav-links { display: flex; gap: 20px; align-items: center; }
+        .nav-text-links { display: flex; gap: 20px; }
+        @media (max-width: 560px) {
+          .nav-text-links { display: none; }
+          .nav-links { gap: 10px; }
+        }
+      `}</style>
+
       {/* ── NAV ── */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 100,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 24px', height: 60,
+        padding: '0 20px', height: 58,
         background: 'rgba(12,12,17,0.92)', backdropFilter: 'blur(14px)',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}>
-        <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-          <img src="/logo.svg" alt="IdentityMonitor logo" style={{ width: 34, height: 34, filter: 'drop-shadow(0 0 8px rgba(232,120,74,0.40))' }} />
-          <span style={{ fontWeight: 800, fontSize: 15, color: '#fff', letterSpacing: -0.2 }}>IdentityMonitor</span>
+        <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 9, textDecoration: 'none', flexShrink: 0 }}>
+          <img src="/logo.svg" alt="IdentityMonitor logo" style={{ width: 30, height: 30, filter: 'drop-shadow(0 0 8px rgba(232,120,74,0.40))' }} />
+          <span style={{ fontWeight: 800, fontSize: 14, color: '#fff', letterSpacing: -0.2 }}>IdentityMonitor</span>
         </a>
-        <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
-          <a href="#how" style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', textDecoration: 'none', fontWeight: 500 }}>How it works</a>
-          <a href="/pricing" style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', textDecoration: 'none', fontWeight: 500 }}>Pricing</a>
+        <div className="nav-links">
+          <div className="nav-text-links">
+            <a href="#how" style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', textDecoration: 'none', fontWeight: 500 }}>How it works</a>
+            <a href="/pricing" style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', textDecoration: 'none', fontWeight: 500 }}>Pricing</a>
+          </div>
           <a href="/api/auth/login" style={{
-            fontSize: 13, fontWeight: 700, padding: '7px 18px', borderRadius: 8,
+            fontSize: 13, fontWeight: 700, padding: '7px 16px', borderRadius: 8,
             background: `linear-gradient(135deg, ${ORANGE}, #F5A462)`,
-            color: '#fff', textDecoration: 'none',
+            color: '#fff', textDecoration: 'none', whiteSpace: 'nowrap',
             boxShadow: '0 2px 12px rgba(232,120,74,0.28)',
           }}>
             Sign in →
