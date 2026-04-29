@@ -120,6 +120,38 @@ export default function LandingPage() {
           .nav-text-links { display: none; }
           .nav-links { gap: 10px; }
         }
+
+        /* Comparison table → responsive rows */
+        .cmp-grid { display: grid; grid-template-columns: 1.6fr 1fr 1.2fr 1.1fr; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.07); }
+        .cmp-cell { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .cmp-head { padding: 12px 16px; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; border-bottom: 2px solid rgba(255,255,255,0.08); }
+        .cmp-head.im { border-bottom-color: #E8784A; background: rgba(232,120,74,0.05); color: #E8784A; }
+        .cmp-cell.im  { background: rgba(232,120,74,0.03); font-weight: 600; }
+        .cmp-cell.yes { color: #00C98B; }
+        .cmp-cell.no  { color: rgba(255,255,255,0.30); }
+        .cmp-cell.val { color: #fff; }
+        .cmp-cell.feat { color: rgba(255,255,255,0.60); font-weight: 500; }
+        .cmp-alt { display: none; }
+
+        @media (max-width: 620px) {
+          .cmp-grid { display: none; }
+          .cmp-alt  { display: flex; flex-direction: column; gap: 10px; }
+          .cmp-alt-row {
+            background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 12px; padding: 14px 16px;
+            display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center;
+          }
+          .cmp-alt-feat { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.80); grid-column: 1; }
+          .cmp-alt-others { font-size: 11px; color: rgba(255,255,255,0.32); grid-column: 1; margin-top: 2px; }
+          .cmp-alt-im {
+            grid-column: 2; grid-row: 1 / 3;
+            font-size: 13px; font-weight: 700;
+            background: rgba(232,120,74,0.10); border: 1px solid rgba(232,120,74,0.25);
+            border-radius: 8px; padding: 6px 12px; text-align: center; white-space: nowrap;
+          }
+          .cmp-alt-im.yes  { color: #00C98B; border-color: rgba(0,201,139,0.25); background: rgba(0,201,139,0.08); }
+          .cmp-alt-im.no   { color: rgba(255,255,255,0.35); border-color: rgba(255,255,255,0.10); background: transparent; }
+        }
       `}</style>
 
       {/* ── NAV ── */}
@@ -539,48 +571,50 @@ export default function LandingPage() {
           <p style={{ textAlign: 'center', fontSize: 15, color: 'rgba(255,255,255,0.40)', marginBottom: 48, maxWidth: 540, margin: '0 auto 48px' }}>
             Great tools — but built for enterprise security teams with $10k/month budgets and full-time analysts. IdentityMonitor is built for MSPs and IT admins who need results without the complexity.
           </p>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr>
-                  {['', 'Microsoft Sentinel', 'Defender for Identity', 'IdentityMonitor'].map((h, i) => (
-                    <th key={h} style={{
-                      padding: '12px 16px', textAlign: 'left', fontWeight: 700, fontSize: 12,
-                      color: i === 3 ? ORANGE : 'rgba(255,255,255,0.45)',
-                      borderBottom: `2px solid ${i === 3 ? ORANGE : 'rgba(255,255,255,0.08)'}`,
-                      background: i === 3 ? 'rgba(232,120,74,0.04)' : 'transparent',
-                      letterSpacing: 0.3,
-                    }}>{h}</th>
+          {(() => {
+            const rows: [string, string, string, string][] = [
+              ['Price',                      '$100–$500+/mo',    '$9/user/mo',   '$15/mo flat' ],
+              ['Setup time',                 'Weeks',            'Days',         '2 minutes'   ],
+              ['Requires analyst',           '✓ Yes',            '✓ Yes',        '✗ No'        ],
+              ['One-tap remediation',        '✗ No',             '✗ No',         '✓ Yes'       ],
+              ['Telegram action alerts',     '✗ No',             '✗ No',         '✓ Yes'       ],
+              ['Defender CVE + remediation', '✗ Separate module','✗ No',         '✓ Built in'  ],
+              ['Auto session revoke',        '✗ SOAR add-on',    '✗ No',         '✓ Built in'  ],
+              ['Multi-tenant (MSP)',         '✓ Complex',        '✓ Complex',    '✓ Built in'  ],
+            ];
+            const imClass = (v: string) => v.startsWith('✓') ? 'yes' : v.startsWith('✗') ? 'no' : 'val';
+            return (
+              <>
+                {/* Desktop: 4-column grid */}
+                <div className="cmp-grid">
+                  {/* Header */}
+                  <div className="cmp-head" style={{ color: 'rgba(255,255,255,0.30)' }}> </div>
+                  <div className="cmp-head" style={{ color: 'rgba(255,255,255,0.40)' }}>Microsoft Sentinel</div>
+                  <div className="cmp-head" style={{ color: 'rgba(255,255,255,0.40)' }}>Defender for Identity</div>
+                  <div className="cmp-head im">IdentityMonitor</div>
+                  {rows.map(([feat, s, d, im]) => (
+                    <React.Fragment key={feat}>
+                      <div className="cmp-cell feat">{feat}</div>
+                      <div className={`cmp-cell ${s.startsWith('✓') ? '' : s.startsWith('✗') ? 'no' : ''}`} style={{ color: 'rgba(255,255,255,0.38)', fontSize: 12 }}>{s}</div>
+                      <div className={`cmp-cell ${d.startsWith('✓') ? '' : d.startsWith('✗') ? 'no' : ''}`} style={{ color: 'rgba(255,255,255,0.38)', fontSize: 12 }}>{d}</div>
+                      <div className={`cmp-cell im ${imClass(im)}`}>{im}</div>
+                    </React.Fragment>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  ['Price', '$100–$500+/mo', '$9/user/mo', '$15/mo flat'],
-                  ['Setup time', 'Weeks', 'Days', '2 minutes'],
-                  ['Requires analyst', '✓ Yes', '✓ Yes', '✗ No'],
-                  ['One-tap remediation', '✗ No', '✗ No', '✓ Yes'],
-                  ['Telegram action alerts', '✗ No', '✗ No', '✓ Yes'],
-                  ['Defender CVE + remediation', '✗ Separate module', '✗ No', '✓ Built in'],
-                  ['Auto session revoke', '✗ SOAR add-on', '✗ No', '✓ Built in'],
-                  ['Multi-tenant (MSP)', '✓ Complex', '✓ Complex', '✓ Built in'],
-                ].map((row, ri) => (
-                  <tr key={ri} style={{ background: ri % 2 === 0 ? 'rgba(255,255,255,0.015)' : 'transparent' }}>
-                    {row.map((cell, ci) => (
-                      <td key={ci} style={{
-                        padding: '11px 16px',
-                        color: ci === 0 ? 'rgba(255,255,255,0.55)' : ci === 3 ? (cell.startsWith('✓') ? '#00C98B' : cell.startsWith('✗') ? 'rgba(255,255,255,0.35)' : '#fff') : 'rgba(255,255,255,0.40)',
-                        fontWeight: ci === 3 ? 600 : ci === 0 ? 500 : 400,
-                        background: ci === 3 ? 'rgba(232,120,74,0.03)' : 'transparent',
-                        borderBottom: '1px solid rgba(255,255,255,0.05)',
-                        fontSize: ci === 0 ? 13 : 12,
-                      }}>{cell}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </div>
+
+                {/* Mobile: stacked cards */}
+                <div className="cmp-alt">
+                  {rows.map(([feat, s, d, im]) => (
+                    <div key={feat} className="cmp-alt-row">
+                      <div className="cmp-alt-feat">{feat}</div>
+                      <div className="cmp-alt-others">Sentinel: {s} · Defender: {d}</div>
+                      <div className={`cmp-alt-im ${imClass(im)}`}>{im}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
         </div>
       </section>
 
