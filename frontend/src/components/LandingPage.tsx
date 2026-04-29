@@ -66,6 +66,18 @@ const FEATURES = [
     desc: 'Impossible travel, new countries, unknown devices, MFA failures, high-risk logins — all covered.',
   },
   {
+    icon: '🛡️',
+    title: 'Defender vulnerability scan',
+    desc: 'Pulls CVEs directly from Microsoft Defender TVM — scored by CVSS, EPSS exploit probability, and affected device count. Know what to fix first.',
+    highlight: true,
+  },
+  {
+    icon: '🔧',
+    title: 'One-click endpoint remediation',
+    desc: 'Windows Update, app patches, PowerShell scripts, Intune policies — applied per CVE, per device, without touching the Azure Portal.',
+    highlight: true,
+  },
+  {
     icon: '📊',
     title: 'Full audit trail',
     desc: '365-day retention. Every alert, every action, every remediation — logged and searchable.',
@@ -341,6 +353,166 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── DEFENDER VULNERABILITY SECTION ── */}
+      <section style={{ padding: '0 24px 100px' }}>
+        <div style={{ maxWidth: 980, margin: '0 auto' }}>
+
+          {/* Header */}
+          <div style={{ textAlign: 'center', marginBottom: 56 }}>
+            <Badge>🛡️ Microsoft Defender Integration</Badge>
+            <h2 style={{ fontSize: 'clamp(24px, 4vw, 36px)', fontWeight: 800, margin: '20px 0 14px', letterSpacing: -0.5 }}>
+              Endpoint vulnerability management — built in
+            </h2>
+            <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.45)', maxWidth: 560, margin: '0 auto', lineHeight: 1.7 }}>
+              Connect Microsoft Defender and see every open CVE across your fleet — prioritised by severity, exploit probability, and number of affected devices. Fix in one click.
+            </p>
+          </div>
+
+          {/* Two-col layout: CVE list mock + remediation panel */}
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+
+            {/* Left: CVE list mock */}
+            <div style={{
+              flex: '1 1 340px',
+              background: '#0f0f17', borderRadius: 18,
+              border: '1px solid rgba(255,255,255,0.07)',
+              overflow: 'hidden',
+            }}>
+              {/* Header bar */}
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.4)', letterSpacing: 0.8 }}>DEFENDER · VULNERABILITIES</div>
+                <div style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: 'rgba(232,120,74,0.12)', color: '#E8784A', fontWeight: 700 }}>24 open</div>
+              </div>
+              {/* CVE rows */}
+              {[
+                { cve: 'CVE-2024-43461', product: 'Windows MSHTML Platform', severity: 'Critical', cvss: '9.8', devices: 12, exploit: true,  type: 'windows-update' },
+                { cve: 'CVE-2024-38189', product: 'Microsoft Office Project',  severity: 'High',     cvss: '8.8', devices: 7,  exploit: true,  type: 'application'    },
+                { cve: 'CVE-2024-38213', product: 'Windows SmartScreen',       severity: 'High',     cvss: '6.5', devices: 15, exploit: false, type: 'windows-update' },
+                { cve: 'CVE-2024-21447', product: 'Google Chrome',             severity: 'Medium',   cvss: '5.9', devices: 9,  exploit: false, type: 'application'    },
+              ].map((row, i) => {
+                const severityColor = row.severity === 'Critical' ? '#FF3D6B' : row.severity === 'High' ? '#FF7A3D' : '#F5C543';
+                const typeColor     = row.type === 'windows-update' ? '#5B9BD5' : '#A78BFA';
+                const typeLabel     = row.type === 'windows-update' ? '⊞ Windows Update' : '📦 App patch';
+                return (
+                  <div key={row.cve} style={{
+                    padding: '13px 20px',
+                    borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    background: i === 0 ? 'rgba(255,61,107,0.04)' : 'transparent',
+                    cursor: 'pointer',
+                  }}>
+                    {/* Severity dot */}
+                    <div style={{ width: 9, height: 9, borderRadius: '50%', background: severityColor, flexShrink: 0, boxShadow: `0 0 6px ${severityColor}88` }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#fff', fontFamily: 'monospace' }}>{row.cve}</span>
+                        {row.exploit && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: 'rgba(255,61,107,0.15)', color: '#FF3D6B', fontWeight: 700 }}>EXPLOIT</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.product}</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: severityColor }}>{row.severity}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.30)' }}>CVSS {row.cvss} · {row.devices} devices</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Right: Remediation panel mock */}
+            <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* Active CVE detail */}
+              <div style={{ background: '#0f0f17', borderRadius: 18, border: '1px solid rgba(255,61,107,0.18)', padding: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#FF3D6B', fontWeight: 700, marginBottom: 4 }}>CVE-2024-43461</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>Windows MSHTML Platform</div>
+                  </div>
+                  <div style={{ padding: '4px 12px', borderRadius: 99, background: 'rgba(255,61,107,0.12)', color: '#FF3D6B', fontSize: 11, fontWeight: 800 }}>CRITICAL 9.8</div>
+                </div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.6, marginBottom: 16 }}>
+                  Remote code execution via crafted HTML file. Active exploit in the wild. <span style={{ color: '#FF3D6B' }}>12 devices exposed.</span>
+                </div>
+
+                {/* Remediation type badge */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, background: 'rgba(91,155,213,0.12)', color: '#5B9BD5', fontWeight: 700, border: '1px solid rgba(91,155,213,0.20)' }}>⊞ Windows Update</span>
+                  <span style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, background: 'rgba(255,61,107,0.10)', color: '#FF3D6B', fontWeight: 700, border: '1px solid rgba(255,61,107,0.18)' }}>🔴 Exploit in wild</span>
+                </div>
+
+                {/* Action buttons */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button style={{
+                    padding: '10px 16px', borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                    background: `linear-gradient(135deg, ${ORANGE}, #F5A462)`, color: '#fff',
+                    boxShadow: '0 4px 16px rgba(232,120,74,0.30)',
+                    textAlign: 'left',
+                  }}>
+                    ⊞ Trigger Windows Update on all 12 devices
+                  </button>
+                  <button style={{
+                    padding: '10px 16px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.10)', cursor: 'pointer', fontWeight: 600, fontSize: 12,
+                    background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.7)',
+                    textAlign: 'left',
+                  }}>
+                    🔄 Reset Windows Update components (script)
+                  </button>
+                  <button style={{
+                    padding: '10px 16px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.10)', cursor: 'pointer', fontWeight: 600, fontSize: 12,
+                    background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.7)',
+                    textAlign: 'left',
+                  }}>
+                    🔍 View all 12 affected devices
+                  </button>
+                </div>
+              </div>
+
+              {/* Stats row */}
+              <div style={{ display: 'flex', gap: 12 }}>
+                {[
+                  { label: 'Critical CVEs', value: '3',  color: '#FF3D6B' },
+                  { label: 'Devices at risk', value: '15', color: ORANGE },
+                  { label: 'With exploit', value: '2',  color: '#F5C543' },
+                ].map(s => (
+                  <div key={s.label} style={{
+                    flex: 1, background: '#0f0f17', borderRadius: 12,
+                    border: '1px solid rgba(255,255,255,0.07)', padding: '14px 12px', textAlign: 'center',
+                  }}>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: s.color, marginBottom: 4 }}>{s.value}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontWeight: 600 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Remediation type pills */}
+          <div style={{ marginTop: 40, textAlign: 'center' }}>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.30)', marginBottom: 16, letterSpacing: 0.8, fontWeight: 700, textTransform: 'uppercase' }}>Remediation types supported</div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {[
+                { label: '⊞ Windows Update', color: '#5B9BD5' },
+                { label: '📦 Application patch', color: '#A78BFA' },
+                { label: '⚡ PowerShell script', color: ORANGE },
+                { label: '📋 Intune policy', color: '#00C98B' },
+                { label: '🔍 Affected device drill-down', color: 'rgba(255,255,255,0.45)' },
+                { label: '🧬 CVSS + EPSS scoring', color: 'rgba(255,255,255,0.45)' },
+              ].map(p => (
+                <span key={p.label} style={{
+                  padding: '7px 16px', borderRadius: 99, fontSize: 12, fontWeight: 600,
+                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)',
+                  color: p.color,
+                }}>
+                  {p.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </section>
+
       {/* ── PRICING PREVIEW ── */}
       <section style={{ padding: '80px 24px 100px' }}>
         <div style={{ maxWidth: 700, margin: '0 auto', textAlign: 'center' }}>
@@ -381,7 +553,7 @@ export default function LandingPage() {
             }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: ORANGE, marginBottom: 12 }}>PRO</div>
               <div style={{ fontSize: 36, fontWeight: 900, color: ORANGE, marginBottom: 20 }}>$15<span style={{ fontSize: 14, fontWeight: 400, color: 'rgba(255,255,255,0.4)' }}>/mo</span></div>
-              {['Everything in Free', 'Telegram alerts + action buttons', 'Email notifications', 'Auto session revoke', 'Conditional Access + PIM'].map(f => (
+              {['Everything in Free', 'Telegram alerts + action buttons', 'Email notifications', 'Auto session revoke', 'Conditional Access + PIM', 'Defender vulnerability management'].map(f => (
                 <div key={f} style={{ fontSize: 13, color: 'rgba(255,255,255,0.70)', marginBottom: 8, display: 'flex', gap: 8 }}>
                   <span style={{ color: ORANGE }}>✓</span> {f}
                 </div>
