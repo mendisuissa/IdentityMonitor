@@ -788,6 +788,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
   const [recsError, setRecsError] = useState('');
+  const [selectedRecIndex, setSelectedRecIndex] = useState<number | null>(null);
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [affectedMachines, setAffectedMachines] = useState<string[]>([]);
   const [affectedMachinesError, setAffectedMachinesError] = useState('');
@@ -1262,10 +1263,31 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
       {mainTab === 'recommendations' && (
         <section className="remediation-list-card" style={{padding:'20px 24px'}}>
-          <h3 style={{margin:'0 0 4px'}}>Security Recommendations</h3>
-          <p style={{margin:'0 0 18px',color:'var(--text-secondary)',fontSize:13}}>
-            Configuration-level recommendations from Defender TVM — not CVEs, but hardening actions that reduce attack surface.
-          </p>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
+            <div>
+              <h3 style={{margin:'0 0 4px'}}>Security Recommendations</h3>
+              <p style={{margin:0,color:'var(--text-secondary)',fontSize:13}}>
+                Configuration-level hardening actions from Defender TVM. Click any row for details and deployment options.
+              </p>
+            </div>
+            {recommendations.length > 0 && (
+              <button className="btn btn-secondary" style={{flexShrink:0,marginLeft:16}} onClick={() => {
+                const rows = [['Recommendation','Product','Publisher','Category','ID']];
+                recommendations.forEach(r => rows.push([
+                  r.recommendationName || '',
+                  r.productName || '',
+                  r.publisher || '',
+                  r.category || 'ASR / Config',
+                  r.id || '',
+                ]));
+                const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+                a.download = 'security-recommendations.csv';
+                a.click();
+              }}>Export CSV</button>
+            )}
+          </div>
           {loadingRecs && <div style={{padding:32,textAlign:'center',color:'var(--text-secondary)'}}>Loading recommendations…</div>}
           {recsError && <div style={{padding:16,color:'var(--danger,#ef4444)'}}>{recsError}</div>}
           {!loadingRecs && !recsError && recommendations.length === 0 && (
@@ -1279,21 +1301,69 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                   <th>Product</th>
                   <th>Publisher</th>
                   <th>Category</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                {recommendations.map((rec, i) => (
-                  <tr key={rec.id || i}>
-                    <td>
-                      <div className="rec-name">{rec.recommendationName || rec.id || '—'}</div>
-                      {rec.description && <div className="rec-product">{rec.description}</div>}
-                      {rec.fixingKbId && <div className="rec-product">KB: {rec.fixingKbId}</div>}
-                    </td>
-                    <td><div className="rec-product">{rec.productName || '—'}</div></td>
-                    <td><div className="rec-product">{rec.publisher || '—'}</div></td>
-                    <td>{rec.category ? <span className="rec-badge">{rec.category}</span> : <span style={{color:'var(--text-secondary)'}}>ASR / Config</span>}</td>
-                  </tr>
-                ))}
+                {recommendations.map((rec, i) => {
+                  const isOpen = selectedRecIndex === i;
+                  const defenderUrl = rec.id
+                    ? `https://security.microsoft.com/security-recommendations?id=${encodeURIComponent(rec.id)}`
+                    : 'https://security.microsoft.com/security-recommendations';
+                  return (
+                    <React.Fragment key={rec.id || i}>
+                      <tr
+                        style={{cursor:'pointer'}}
+                        onClick={() => setSelectedRecIndex(isOpen ? null : i)}
+                      >
+                        <td>
+                          <div className="rec-name">{rec.recommendationName || rec.id || '—'}</div>
+                          {rec.description && <div className="rec-product">{rec.description}</div>}
+                        </td>
+                        <td><div className="rec-product">{rec.productName || '—'}</div></td>
+                        <td><div className="rec-product">{rec.publisher || '—'}</div></td>
+                        <td>{rec.category ? <span className="rec-badge">{rec.category}</span> : <span className="rec-badge">ASR / Config</span>}</td>
+                        <td style={{textAlign:'right',color:'var(--text-secondary)',fontSize:18}}>{isOpen ? '▲' : '▼'}</td>
+                      </tr>
+                      {isOpen && (
+                        <tr>
+                          <td colSpan={5} style={{padding:0}}>
+                            <div style={{background:'rgba(99,102,241,.06)',border:'1px solid rgba(99,102,241,.2)',borderRadius:10,margin:'4px 0 8px',padding:'16px 20px',display:'flex',flexDirection:'column',gap:12}}>
+                              <div style={{display:'flex',gap:24,flexWrap:'wrap'}}>
+                                <div style={{flex:1,minWidth:220}}>
+                                  <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',color:'var(--text-secondary)',marginBottom:6}}>Deployment methods</div>
+                                  <ul style={{margin:0,paddingLeft:18,fontSize:13,lineHeight:1.7,color:'var(--text-primary)'}}>
+                                    <li><strong>Intune</strong> — Endpoint Security → Attack Surface Reduction policy</li>
+                                    <li><strong>Group Policy</strong> — Computer Config → Admin Templates → Windows Defender</li>
+                                    <li><strong>MDM</strong> — ./Vendor/MSFT/Policy/Config/Defender/AttackSurfaceReductionRules</li>
+                                  </ul>
+                                </div>
+                                <div style={{flex:1,minWidth:200}}>
+                                  <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',color:'var(--text-secondary)',marginBottom:6}}>Recommended mode</div>
+                                  <div style={{fontSize:13,color:'var(--text-primary)',lineHeight:1.6}}>
+                                    Start in <strong>Audit</strong> mode to review impact, then switch to <strong>Block</strong> mode once validated.
+                                  </div>
+                                  {rec.fixingKbId && (
+                                    <div style={{marginTop:8,fontSize:13}}>
+                                      KB: <a href={`https://support.microsoft.com/kb/${rec.fixingKbId}`} target="_blank" rel="noreferrer" style={{color:'var(--text-accent)'}}>
+                                        {rec.fixingKbId}
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div style={{display:'flex',gap:10,paddingTop:4}}>
+                                <a href={defenderUrl} target="_blank" rel="noreferrer" className="btn btn-primary" style={{fontSize:13,padding:'7px 16px'}}>
+                                  Open in Defender →
+                                </a>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           )}
