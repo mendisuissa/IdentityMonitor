@@ -37,6 +37,17 @@ type Finding = {
   classification?: { type?: string; family?: string };
 };
 
+type Recommendation = {
+  id?: string;
+  recommendationName?: string;
+  productName?: string;
+  publisher?: string;
+  description?: string;
+  category?: string;
+  fixingKbId?: string;
+};
+
+type MainTab = 'vulnerabilities' | 'recommendations';
 type DetailTab = 'details' | 'devices' | 'plan';
 
 type Props = { tenantId?: string; tenantName?: string };
@@ -220,6 +231,45 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       background:var(--navy-700);
       color:var(--text-primary);
       border:1px solid var(--navy-border-light);
+    }
+    .remediation-main-tabs{
+      display:flex;
+      gap:4px;
+      border-bottom:2px solid var(--navy-border);
+      padding:0 4px;
+    }
+    .remediation-main-tabs button{
+      background:none;
+      border:none;
+      border-bottom:2px solid transparent;
+      margin-bottom:-2px;
+      padding:10px 18px;
+      font-size:14px;
+      font-weight:600;
+      color:var(--text-secondary);
+      cursor:pointer;
+      border-radius:6px 6px 0 0;
+      transition:color .15s,border-color .15s;
+    }
+    .remediation-main-tabs button:hover{ color:var(--text-primary); }
+    .remediation-main-tabs button.active{
+      color:var(--text-accent,#f97316);
+      border-bottom-color:var(--text-accent,#f97316);
+    }
+    .rec-table{ width:100%; border-collapse:collapse; font-size:13px; }
+    .rec-table th{
+      text-align:left; padding:10px 14px; font-size:11px; font-weight:700;
+      text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary);
+      border-bottom:1px solid var(--navy-border);
+    }
+    .rec-table td{ padding:12px 14px; border-bottom:1px solid var(--navy-border,rgba(255,255,255,.07)); vertical-align:top; }
+    .rec-table tr:last-child td{ border-bottom:none; }
+    .rec-table tr:hover td{ background:rgba(255,255,255,.03); }
+    .rec-name{ font-weight:600; color:var(--text-primary); line-height:1.4; }
+    .rec-product{ font-size:12px; color:var(--text-secondary); margin-top:2px; }
+    .rec-badge{
+      display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px;
+      font-weight:700; background:rgba(99,102,241,.15); color:#818cf8;
     }
     .remediation-stats-grid{
       display:grid;
@@ -732,8 +782,12 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [filterPublisher, setFilterPublisher] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
-  const [remediationRequiredOnly, setRemediationRequiredOnly] = useState(true);
-  const [exposedDevicesOnly, setExposedDevicesOnly] = useState(true);
+  const [remediationRequiredOnly, setRemediationRequiredOnly] = useState(false);
+  const [exposedDevicesOnly, setExposedDevicesOnly] = useState(false);
+  const [mainTab, setMainTab] = useState<MainTab>('vulnerabilities');
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [loadingRecs, setLoadingRecs] = useState(false);
+  const [recsError, setRecsError] = useState('');
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [affectedMachines, setAffectedMachines] = useState<string[]>([]);
   const [affectedMachinesError, setAffectedMachinesError] = useState('');
@@ -832,6 +886,24 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       .catch(() => {/* not found — filter will just show 0 results */});
     return () => { mounted = false; };
   }, [filterCve, findings.length]);
+
+  useEffect(() => {
+    if (mainTab !== 'recommendations' || recommendations.length > 0) return;
+    let mounted = true;
+    setLoadingRecs(true);
+    setRecsError('');
+    api.getDefenderRecommendations(0)
+      .then((res: any) => {
+        if (!mounted) return;
+        setRecommendations(Array.isArray(res?.items) ? res.items : []);
+      })
+      .catch((err: any) => {
+        if (!mounted) return;
+        setRecsError(err?.message || 'Failed to load recommendations.');
+      })
+      .finally(() => { if (mounted) setLoadingRecs(false); });
+    return () => { mounted = false; };
+  }, [mainTab]);
 
   const selectedFinding = useMemo(() => filteredFindings[selectedIndex] || null, [filteredFindings, selectedIndex]);
   const selectedExecutor = planResult?.plan?.executor || null;
@@ -1138,6 +1210,15 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         <div className="remediation-stat-card"><span>High / Critical</span><strong>{highOrCriticalCount}</strong></div>
       </section>
 
+      <div className="remediation-main-tabs">
+        <button className={mainTab === 'vulnerabilities' ? 'active' : ''} onClick={() => setMainTab('vulnerabilities')}>
+          Vulnerabilities (CVEs) {findings.length > 0 ? `· ${findings.length}` : ''}
+        </button>
+        <button className={mainTab === 'recommendations' ? 'active' : ''} onClick={() => setMainTab('recommendations')}>
+          Security Recommendations {recommendations.length > 0 ? `· ${recommendations.length}` : ''}
+        </button>
+      </div>
+
       {needsAdminConsent && (
         <section className="remediation-banner warning">
           <div>
@@ -1179,7 +1260,47 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         </section>
       )}
 
-      <section className="remediation-filters">
+      {mainTab === 'recommendations' && (
+        <section className="remediation-list-card" style={{padding:'20px 24px'}}>
+          <h3 style={{margin:'0 0 4px'}}>Security Recommendations</h3>
+          <p style={{margin:'0 0 18px',color:'var(--text-secondary)',fontSize:13}}>
+            Configuration-level recommendations from Defender TVM — not CVEs, but hardening actions that reduce attack surface.
+          </p>
+          {loadingRecs && <div style={{padding:32,textAlign:'center',color:'var(--text-secondary)'}}>Loading recommendations…</div>}
+          {recsError && <div style={{padding:16,color:'var(--danger,#ef4444)'}}>{recsError}</div>}
+          {!loadingRecs && !recsError && recommendations.length === 0 && (
+            <div style={{padding:32,textAlign:'center',color:'var(--text-secondary)'}}>No recommendations found for this tenant.</div>
+          )}
+          {!loadingRecs && recommendations.length > 0 && (
+            <table className="rec-table">
+              <thead>
+                <tr>
+                  <th>Recommendation</th>
+                  <th>Product</th>
+                  <th>Publisher</th>
+                  <th>Category</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recommendations.map((rec, i) => (
+                  <tr key={rec.id || i}>
+                    <td>
+                      <div className="rec-name">{rec.recommendationName || rec.id || '—'}</div>
+                      {rec.description && <div className="rec-product">{rec.description}</div>}
+                      {rec.fixingKbId && <div className="rec-product">KB: {rec.fixingKbId}</div>}
+                    </td>
+                    <td><div className="rec-product">{rec.productName || '—'}</div></td>
+                    <td><div className="rec-product">{rec.publisher || '—'}</div></td>
+                    <td>{rec.category ? <span className="rec-badge">{rec.category}</span> : <span style={{color:'var(--text-secondary)'}}>ASR / Config</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
+
+      {mainTab === 'vulnerabilities' && (<><section className="remediation-filters">
         <div className="filters-headline">
           <div>
             <h3>Refine the Defender view</h3>
@@ -1598,7 +1719,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             </>
           )}
         </article>
-      </section>
+      </section></>)}
     </div>
     </>
   );

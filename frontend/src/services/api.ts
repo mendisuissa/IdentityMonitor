@@ -479,6 +479,11 @@ export const api = {
   getDefenderVulnerabilityMachines: (cveId: string, top = 0) =>
     apiFetch<any>(top > 0 ? `/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines?top=${top}` : `/defender/vulnerabilities/${encodeURIComponent(cveId)}/machines`),
 
+  getDefenderRecommendations: (top = 0) => {
+    const q = top > 0 ? `?top=${top}` : '';
+    return apiFetch<any>(`/defender/recommendations${q}`);
+  },
+
   getDefenderTenantConfig: () =>
     apiFetch<any>('/defender/tenant/config'),
 
