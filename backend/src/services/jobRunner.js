@@ -119,6 +119,29 @@ function init() {
     }
   });
 
+  // ── Retention enforcement — daily at 2am ─────────────────────────────
+  cron.schedule('0 2 * * *', async () => {
+    const settingsService = require('./settingsService');
+    const tableStorage    = require('./tableStorage');
+    const tenantIds = Array.from(new Set([
+      ...tenantRegistry.getActiveTenants().map(t => t.tenantId),
+      ...tenantRegistry.getAllTenantIds()
+    ])).filter(Boolean);
+
+    for (const tenantId of tenantIds) {
+      try {
+        const rp = settingsService.getSettings(tenantId).retentionPolicy || {};
+        if (rp.incidentDays) {
+          const cutoff = new Date(Date.now() - rp.incidentDays * 86400000).toISOString();
+          const n = await tableStorage.purgeOldAlerts(tenantId, cutoff);
+          if (n > 0) console.log('[Retention] Purged', n, 'old alerts for tenant', tenantId);
+        }
+      } catch (err) {
+        console.error('[Retention] Failed for', tenantId, ':', err.message);
+      }
+    }
+  });
+
   // ── Health check — every hour ─────────────────────────────────────────
   cron.schedule('0 * * * *', async () => {
     const tenantIds = Array.from(new Set([

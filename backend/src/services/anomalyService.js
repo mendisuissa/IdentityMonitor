@@ -272,7 +272,7 @@ async function runFullScan(tenantId) {
         await triggerActions(tenantId, newAlerts, user, settings);
       }
     } catch (err) {
-      console.error('[Anomaly] Error scanning', user.userPrincipalName, ':', err.message);
+      console.error('[Anomaly] Error scanning user:', err.message);
     }
   }
 
@@ -326,7 +326,7 @@ async function triggerActions(tenantId, alerts, user, settings) {
           await emailService.sendAdminAlert(alert, tenantId, email);
           alertsStore.addAction(alert.id, 'admin_email_sent:' + email);
         } catch (err) {
-          console.error('[Actions] Email to', email, 'failed:', err.message);
+          console.error('[Actions] Email notification failed:', err.message);
         }
       }
     }
@@ -352,7 +352,7 @@ async function triggerActions(tenantId, alerts, user, settings) {
       try {
         await graphService.disableUser(tenantId, user.id);
         alertsStore.addAction(alert.id, 'user_disabled');
-        console.log('[Actions] User disabled:', user.userPrincipalName);
+        console.log('[Actions] User account disabled (id:', user.id, ')');
       } catch (err) {
         console.error('[Actions] Disable user failed:', err.message);
       }

@@ -1,5 +1,22 @@
 // settingsService.js — per-tenant settings persisted to Azure Table Storage
 const tableStorage = require('./tableStorage');
+const { encrypt, decrypt } = require('./encryptionService');
+
+const ENCRYPTED_NOTIFICATION_FIELDS = ['telegramBotToken'];
+
+function encryptNotificationSecrets(settings) {
+  if (!settings?.notifications) return settings;
+  const notif = { ...settings.notifications };
+  ENCRYPTED_NOTIFICATION_FIELDS.forEach(f => { if (notif[f]) notif[f] = encrypt(notif[f]); });
+  return { ...settings, notifications: notif };
+}
+
+function decryptNotificationSecrets(settings) {
+  if (!settings?.notifications) return settings;
+  const notif = { ...settings.notifications };
+  ENCRYPTED_NOTIFICATION_FIELDS.forEach(f => { if (notif[f]) notif[f] = decrypt(notif[f]); });
+  return { ...settings, notifications: notif };
+}
 
 const _cache = new Map();
 const CACHE_TTL = 60 * 1000;
@@ -48,7 +65,7 @@ async function _fetchAndCache(tenantId) {
   try {
     const raw = await tableStorage.getTenantSettings(tenantId);
     if (raw && Object.keys(raw).length > 2) {
-      const fetched = _migrate({ ...raw, tenantId }, tenantId);
+      const fetched = decryptNotificationSecrets(_migrate({ ...raw, tenantId }, tenantId));
       // Only overwrite cache if fetched data is newer than what's currently cached
       // (saveSettings sets updatedAt to now, so a recent save wins over a stale Azure read)
       const current = _cacheGet(tenantId);
@@ -86,7 +103,7 @@ function saveSettings(tenantId, updates) {
   if (merged.workHours && !merged.businessHours) merged.businessHours = merged.workHours;
   merged.tenantId = tenantId; merged.updatedAt = new Date().toISOString();
   _cacheSet(tenantId, merged);
-  tableStorage.saveTenantSettings(tenantId, merged).catch(err => console.error('[Settings] save error:', err.message));
+  tableStorage.saveTenantSettings(tenantId, encryptNotificationSecrets(merged)).catch(err => console.error('[Settings] save error:', err.message));
   return merged;
 }
 
@@ -95,7 +112,7 @@ async function saveSettingsAsync(tenantId, updates) {
   const merged = deepMerge(current, updates);
   if (merged.workHours && !merged.businessHours) merged.businessHours = merged.workHours;
   merged.tenantId = tenantId; merged.updatedAt = new Date().toISOString();
-  await tableStorage.saveTenantSettings(tenantId, merged);
+  await tableStorage.saveTenantSettings(tenantId, encryptNotificationSecrets(merged));
   _cacheSet(tenantId, merged);
   return merged;
 }
@@ -174,4 +191,6 @@ function deepMerge(target, source) {
   return result;
 }
 
-module.exports = { getSettings, getSettingsAsync, saveSettings, saveSettingsAsync, getTrialStatus, isPremium, isTrialOrActive, addAdmin, removeAdmin, getAdmins, isWhitelisted, isRuleEnabled, getEffectiveSeverity, getAdminEmails, isOffHours, defaultSettings };
+function clearCache(tenantId) { _cache.delete(tenantId); }
+
+module.exports = { getSettings, getSettingsAsync, saveSettings, saveSettingsAsync, getTrialStatus, isPremium, isTrialOrActive, addAdmin, removeAdmin, getAdmins, isWhitelisted, isRuleEnabled, getEffectiveSeverity, getAdminEmails, isOffHours, defaultSettings, clearCache };

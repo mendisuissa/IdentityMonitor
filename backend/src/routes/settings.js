@@ -580,6 +580,46 @@ router.post('/siem', (req, res) => {
   res.json(updated.siem);
 });
 
+// ─── GDPR Right to Erasure ────────────────────────────────────────────────
+// DELETE /api/settings/tenant-data
+// Permanently deletes ALL data stored for this tenant. Requires owner role.
+// The tenant must re-authenticate after this action (their session remains until expiry,
+// but all stored alerts, baselines, settings, and integrations are gone).
+router.delete('/tenant-data', requirePermission('settings.manage'), async (req, res) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+
+  // Only the owner role may trigger a full erasure
+  const role = req.session?.tenant?.role;
+  if (!['owner', 'superadmin'].includes(role) && process.env.MOCK_MODE !== 'true') {
+    return res.status(403).json({ error: 'Only tenant owners may erase tenant data.' });
+  }
+
+  try {
+    const tableStorage = require('../services/tableStorage');
+    const tenantIntegrationStore = require('../services/tenantIntegrationStore');
+
+    const deleted = await tableStorage.eraseAllTenantData(tenantId);
+
+    // Clear the settings cache so future requests don't hit stale data
+    const ss = require('../services/settingsService');
+    if (ss.clearCache) ss.clearCache(tenantId);
+
+    // Remove TenantIntegrations entry (separate table)
+    const integClient = require('@azure/data-tables').TableClient.fromConnectionString(
+      process.env.AZURE_STORAGE_CONNECTION_STRING,
+      process.env.AZURE_STORAGE_TENANT_TABLE || 'TenantIntegrations'
+    );
+    await integClient.deleteEntity('TENANT', tenantId).catch(() => {});
+
+    auditLog.log(tenantId, 'gdpr.erasure_completed', { deleted }, getActor(req));
+
+    res.json({ ok: true, message: 'All tenant data has been permanently deleted.', deleted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/settings/siem/test-log-analytics (alias for /siem/test)
 router.post('/siem/test-log-analytics', async (req, res) => {
   const tenantId = requireAuth(req, res);

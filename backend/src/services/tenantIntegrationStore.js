@@ -1,7 +1,10 @@
 const { TableClient } = require('@azure/data-tables');
+const { encrypt, decrypt } = require('./encryptionService');
 
 const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
 const tableName = process.env.AZURE_STORAGE_TENANT_TABLE || 'TenantIntegrations';
+
+const SECRET_FIELDS = ['defenderClientSecret', 'sharedToken'];
 
 function getTableClient() {
   if (!connectionString) {
@@ -37,10 +40,10 @@ async function getTenantIntegration(tenantId) {
       tenantName: entity.tenantName || null,
       defenderTenantId: entity.defenderTenantId || tenantId,
       defenderClientId: configuredClientId,
-      defenderClientSecret: configuredClientSecret,
+      defenderClientSecret: decrypt(configuredClientSecret),
       defenderEnabled: String(entity.defenderEnabled || 'true').toLowerCase() === 'true',
       webappBaseUrl: entity.webappBaseUrl || null,
-      sharedToken: entity.sharedToken || null,
+      sharedToken: decrypt(entity.sharedToken) || null,
       status: entity.status || 'unknown',
       lastValidatedAt: entity.lastValidatedAt || null,
       authMode: entity.defenderClientId ? 'per-tenant-app' : (configuredClientId ? 'shared-multi-tenant-app' : 'unconfigured')
@@ -69,10 +72,10 @@ async function upsertTenantIntegration(integration) {
     tenantName: integration.tenantName || existing?.tenantName || '',
     defenderTenantId: integration.defenderTenantId || existing?.defenderTenantId || integration.tenantId,
     defenderClientId: integration.defenderClientId || existing?.defenderClientId || '',
-    defenderClientSecret: integration.defenderClientSecret || existing?.defenderClientSecret || '',
+    defenderClientSecret: encrypt(integration.defenderClientSecret || existing?.defenderClientSecret || ''),
     defenderEnabled: String(integration.defenderEnabled ?? existing?.defenderEnabled ?? true),
     webappBaseUrl: integration.webappBaseUrl || existing?.webappBaseUrl || '',
-    sharedToken: integration.sharedToken || existing?.sharedToken || '',
+    sharedToken: encrypt(integration.sharedToken || existing?.sharedToken || ''),
     status: integration.status || existing?.status || 'configured',
     lastValidatedAt: integration.lastValidatedAt || existing?.lastValidatedAt || ''
   };

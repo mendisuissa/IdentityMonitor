@@ -245,6 +245,73 @@ function unflattenFromTable(entity) {
   return result;
 }
 
+// ─── RETENTION ENFORCEMENT ───────────────────────────────────────────────
+// Deletes alert rows older than `cutoffIso` for a specific tenant.
+async function purgeOldAlerts(tenantId, cutoffIso) {
+  const client = getClient(TABLES.ALERTS);
+  const pk = tenantId || 'default';
+  const filter = `PartitionKey eq '${pk}' and detectedAt lt '${cutoffIso}'`;
+  const toDelete = [];
+  try {
+    const iter = client.listEntities({ queryOptions: { filter } });
+    for await (const entity of iter) toDelete.push({ partitionKey: entity.partitionKey, rowKey: entity.rowKey });
+  } catch (err) { console.warn('[Retention] purgeOldAlerts list error:', err.message); return 0; }
+  for (const { partitionKey, rowKey } of toDelete) {
+    await client.deleteEntity(partitionKey, rowKey).catch(() => {});
+  }
+  return toDelete.length;
+}
+
+// Purge baseline entries older than `cutoffIso` (based on lastUpdated field).
+async function purgeOldBaselines(tenantId, cutoffIso) {
+  const client = getClient(TABLES.BASELINES);
+  const filter = `PartitionKey eq '${tenantId}' and lastUpdated lt '${cutoffIso}'`;
+  const toDelete = [];
+  try {
+    const iter = client.listEntities({ queryOptions: { filter } });
+    for await (const entity of iter) toDelete.push({ partitionKey: entity.partitionKey, rowKey: entity.rowKey });
+  } catch (err) { console.warn('[Retention] purgeOldBaselines list error:', err.message); return 0; }
+  for (const { partitionKey, rowKey } of toDelete) {
+    await client.deleteEntity(partitionKey, rowKey).catch(() => {});
+  }
+  return toDelete.length;
+}
+
+// ─── GDPR RIGHT TO ERASURE ────────────────────────────────────────────────
+// Deletes ALL data for a tenant across every table. Irreversible.
+async function eraseAllTenantData(tenantId) {
+  const deleted = {};
+
+  async function _purgeTable(tableName, partitionKey) {
+    const client = getClient(tableName);
+    const rows = [];
+    try {
+      const iter = client.listEntities({ queryOptions: { filter: `PartitionKey eq '${partitionKey}'` } });
+      for await (const e of iter) rows.push({ partitionKey: e.partitionKey, rowKey: e.rowKey });
+    } catch (err) { console.warn('[Erasure] list error in', tableName, ':', err.message); }
+    for (const { partitionKey: pk, rowKey } of rows) {
+      await client.deleteEntity(pk, rowKey).catch(() => {});
+    }
+    return rows.length;
+  }
+
+  deleted.alerts    = await _purgeTable(TABLES.ALERTS,    tenantId);
+  deleted.baselines = await _purgeTable(TABLES.BASELINES, tenantId);
+  deleted.webhooks  = await _purgeTable(TABLES.WEBHOOKS,  tenantId);
+  deleted.incidents = await _purgeTable(TABLES.INCIDENTS, tenantId);
+  deleted.workflows = await _purgeTable(TABLES.WORKFLOWS, tenantId);
+
+  // Tenant profile (partitionKey = 'profile') and settings (partitionKey = 'settings')
+  const tenantsClient = getClient(TABLES.TENANTS);
+  await tenantsClient.deleteEntity('profile',  tenantId).catch(() => {});
+  await tenantsClient.deleteEntity('settings', tenantId).catch(() => {});
+  deleted.tenantProfile  = 1;
+  deleted.tenantSettings = 1;
+
+  console.log('[Erasure] Tenant data erased for', tenantId, ':', JSON.stringify(deleted));
+  return deleted;
+}
+
 module.exports = {
   initTables,
   saveAlert, getAlerts, updateAlertStatus,
@@ -252,5 +319,6 @@ module.exports = {
   saveWebhookSubscription, getWebhookSubscriptions, deleteWebhookSubscription,
   saveTenantSettings, getTenantSettings,
   saveTenantProfile, getAllTenantProfiles,
+  purgeOldAlerts, purgeOldBaselines, eraseAllTenantData,
   TABLES
 };

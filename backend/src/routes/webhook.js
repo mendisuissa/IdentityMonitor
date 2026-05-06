@@ -96,7 +96,7 @@ async function processNotification(tenantId, signInId, subscriptionId) {
       return;
     }
 
-    console.log('[Webhook] 🎯 Privileged user sign-in:', signIn.userPrincipalName);
+    console.log('[Webhook] Privileged user sign-in detected (userId:', signIn.userId, ')');
 
     // Get user's baseline
     const baseline = await tableStorage.getBaseline(tenantId, signIn.userId);
