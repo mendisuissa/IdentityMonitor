@@ -1133,6 +1133,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           deviceIds,
           targetDeviceIds: deviceIds,
           affectedDeviceNames: resolvedNames,
+          // When no specific devices are known, tell the webapp to deploy to all Windows devices
+          deployToAllDevices: isWebapp && !resolvedNames.length && !deviceIds.length,
           policyTarget,
           scriptName: getEffectiveScriptName(),
           notes: executionNotes,
