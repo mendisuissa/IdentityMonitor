@@ -77,11 +77,13 @@ function buildHints(finding = {}) {
     fixVersion: finding.fixVersion || null,
   };
 
-  // If enrichment resolved a definitive WinGet ID, pass it as the primary wingetId
-  // so the webapp uses it directly instead of running its own package resolution.
+  // If enrichment resolved a definitive WinGet ID, override productName with the
+  // exact package identifier so the webapp does a direct lookup instead of fuzzy search.
+  // This prevents the webapp from picking .Dev/.Beta variants when we want Stable.
   if (finding.suggestedWingetId) {
     hints.wingetId = finding.suggestedWingetId;
     hints.packageIdentifier = finding.suggestedWingetId;
+    hints.productName = finding.suggestedWingetId;
   }
 
   return hints;
