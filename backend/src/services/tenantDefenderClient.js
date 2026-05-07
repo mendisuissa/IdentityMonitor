@@ -547,11 +547,79 @@ async function getTenantVulnerabilityByCveId(tenantId, cveId) {
   return normalizeVulnerability(data);
 }
 
+/**
+ * Returns a fully-enriched finding for a single CVE:
+ * - Full CVE object from Defender (more fields than the list endpoint)
+ * - Affected machines from /machineReferences
+ * - Software (productName + publisher) from /machinesVulnerabilities filtered by cveId
+ * Used by the remediation panel before calling /plan so the webapp gets complete data.
+ */
+async function enrichTenantVulnerability(tenantId, cveId) {
+  const normalized = String(cveId || '').toUpperCase().trim();
+  if (!normalized.startsWith('CVE-')) return null;
+
+  const { config } = await getTenantConfigOrThrow(tenantId);
+
+  // 1. Full CVE object
+  const rawCve = await defenderGet(config, `/api/vulnerabilities/${encodeURIComponent(normalized)}`).catch(() => null);
+  const base = rawCve ? normalizeVulnerability(rawCve) : { cveId: normalized, id: normalized, name: normalized };
+
+  // 2. Machine references (affected devices)
+  const machineRows = await fetchDefenderCollectionWithSkip(
+    config,
+    `/api/vulnerabilities/${encodeURIComponent(normalized)}/machineReferences`,
+    { pageSize: 100, maxPageSize: 200, maxPages: 10, top: 200 }
+  ).catch(() => []);
+
+  const affectedMachines = Array.isArray(machineRows)
+    ? machineRows.map(r => r.computerDnsName || r.deviceName || r.id || 'Unknown').filter(Boolean)
+    : [];
+
+  // 3. Software index — fetch machine-vulnerability rows filtered to this CVE
+  //    Defender allows $filter on machinesVulnerabilities
+  const swRows = await fetchDefenderCollectionWithSkip(
+    config,
+    `/api/vulnerabilities/machinesVulnerabilities?$filter=cveId+eq+'${encodeURIComponent(normalized)}'`,
+    { pageSize: 200, maxPageSize: 200, maxPages: 10 }
+  ).catch(() => []);
+
+  const softwareMap = buildSoftwareIndex(swRows);
+  const software = softwareMap.get(normalized) || null;
+
+  const productName =
+    base.productName ||
+    software?.productName ||
+    software?.products?.[0]?.productName ||
+    guessProductFromText(base.description) ||
+    null;
+
+  const publisher =
+    base.publisher ||
+    software?.publisher ||
+    software?.products?.[0]?.publisher ||
+    null;
+
+  const relatedProducts = Array.isArray(software?.products)
+    ? software.products.map(p => ({ productName: p.productName, publisher: p.publisher || null, productVersion: p.productVersion || null }))
+    : [];
+
+  return {
+    ...base,
+    productName,
+    publisher,
+    affectedMachines: affectedMachines.length ? affectedMachines : (software?.affectedMachines?.map(m => m.name) || []),
+    affectedMachineCount: affectedMachines.length || software?.affectedMachineCount || base.affectedMachineCount || 0,
+    relatedProducts,
+    productNames: relatedProducts.map(p => p.productName).filter(Boolean),
+  };
+}
+
 module.exports = {
   listTenantVulnerabilities,
   listTenantRecommendations,
   listTenantVulnerabilityMachines,
   getTenantVulnerabilityByCveId,
+  enrichTenantVulnerability,
   getTenantConfigOrThrow,
   readVulnerabilityCache,
 };

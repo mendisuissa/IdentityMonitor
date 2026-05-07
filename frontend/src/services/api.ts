@@ -484,6 +484,9 @@ export const api = {
     return apiFetch<any>(`/defender/recommendations${q}`);
   },
 
+  enrichDefenderVulnerability: (cveId: string) =>
+    apiFetch<any>(`/defender/vulnerabilities/${encodeURIComponent(cveId)}/enrich`),
+
   getDefenderTenantConfig: () =>
     apiFetch<any>('/defender/tenant/config'),
 

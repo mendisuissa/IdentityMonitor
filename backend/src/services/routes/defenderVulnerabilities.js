@@ -2,7 +2,8 @@ const express = require('express');
 const { getTenantIntegration } = require('../services/tenantIntegrationStore');
 const {
   listTenantVulnerabilities,
-  listTenantRecommendations
+  listTenantRecommendations,
+  enrichTenantVulnerability
 } = require('../services/tenantDefenderClient');
 
 const router = express.Router();
@@ -194,6 +195,25 @@ router.get('/vulnerabilities/:cveId/machines', async (req, res) => {
     tenantId,
     error: 'Machine-level drill-down is not enabled yet for the multi-tenant Defender route.',
   });
+});
+
+// GET /api/defender/vulnerabilities/:cveId/enrich
+// Returns a fully-enriched finding (productName, publisher, affectedMachines)
+// for use by the remediation panel before calling /remediation/plan.
+router.get('/vulnerabilities/:cveId/enrich', async (req, res) => {
+  try {
+    const tenantId = resolveActiveTenantId(req);
+    if (!tenantId) return res.status(401).json({ ok: false, error: 'Not authenticated.' });
+
+    const { cveId } = req.params;
+    const enriched = await enrichTenantVulnerability(tenantId, cveId);
+    if (!enriched) return res.status(404).json({ ok: false, error: `CVE ${cveId} not found in Defender.` });
+
+    res.json({ ok: true, tenantId, finding: enriched });
+  } catch (error) {
+    const friendly = getFriendlyError(error);
+    res.status(friendly.statusCode).json({ ok: false, error: friendly.message, details: friendly.details });
+  }
 });
 
 module.exports = router;

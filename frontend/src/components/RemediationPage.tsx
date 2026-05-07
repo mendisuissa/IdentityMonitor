@@ -1054,11 +1054,28 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       const names = (classificationType === 'script' || classificationType === 'windows-update')
         ? await ensureAffectedMachinesLoaded()
         : affectedMachines;
+
+      // Enrich the finding with publisher, productName and affected machines
+      // for CVEs where Defender's list endpoint omits these fields.
+      let enrichedFinding = { ...selectedFinding };
+      const cveId = selectedFinding.cveId || selectedFinding.id || '';
+      const needsEnrichment =
+        cveId.toUpperCase().startsWith('CVE-') &&
+        (!selectedFinding.publisher || selectedFinding.publisher === 'Not provided by Defender payload' ||
+         !selectedFinding.productName || selectedFinding.productName === 'Unknown product' ||
+         !selectedFinding.affectedMachineCount);
+      if (needsEnrichment) {
+        try {
+          const enrichRes = await api.enrichDefenderVulnerability(cveId);
+          if (enrichRes?.finding) enrichedFinding = { ...enrichedFinding, ...enrichRes.finding };
+        } catch (_) { /* enrichment is best-effort — proceed with original data */ }
+      }
+
       const result = await api.planRemediation({
         tenantId,
         finding: {
-          ...selectedFinding,
-          affectedMachines: names.length ? names : (selectedFinding.affectedMachines || []),
+          ...enrichedFinding,
+          affectedMachines: names.length ? names : (enrichedFinding.affectedMachines || []),
         },
         options: {
           updateType,
@@ -1068,7 +1085,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           affectedDeviceNames: names,
         },
       });
-      setPlanResult(result);
+      setPlanResult({ ...result, enrichedFinding: enrichedFinding });
       setActiveTab('plan');
     } catch (err: any) {
       setError(err?.message || 'Planning failed.');
@@ -1106,7 +1123,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         approvalId: 'apr-ui-001',
         devices: deviceIds,
         finding: {
-          ...selectedFinding,
+          ...(planResult?.enrichedFinding || selectedFinding),
           affectedMachines: resolvedNames,
         },
         plan: planResult.plan,
