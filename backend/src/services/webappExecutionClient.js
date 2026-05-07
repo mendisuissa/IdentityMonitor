@@ -62,7 +62,7 @@ async function requestJson(method, path, payload, timeoutMs = 15000) {
 }
 
 function buildHints(finding = {}) {
-  return {
+  const hints = {
     id: finding.id || finding.cveId || finding.name || null,
     cveId: finding.cveId || null,
     productName: finding.productName || finding.displayProductName || finding.softwareName || finding.name || null,
@@ -72,7 +72,39 @@ function buildHints(finding = {}) {
     category: finding.category || null,
     severity: finding.severity || null,
     relatedProducts: Array.isArray(finding.relatedProducts) ? finding.relatedProducts : [],
-    productNames: Array.isArray(finding.productNames) ? finding.productNames : []
+    productNames: Array.isArray(finding.productNames) ? finding.productNames : [],
+    remediationConfidence: finding.remediationConfidence || null,
+    fixVersion: finding.fixVersion || null,
+  };
+
+  // If enrichment resolved a definitive WinGet ID, pass it as the primary wingetId
+  // so the webapp uses it directly instead of running its own package resolution.
+  if (finding.suggestedWingetId) {
+    hints.wingetId = finding.suggestedWingetId;
+    hints.packageIdentifier = finding.suggestedWingetId;
+  }
+
+  return hints;
+}
+
+function buildExecuteBody(payload) {
+  const { finding = {}, options = {}, ...rest } = payload || {};
+  const hints = buildHints(finding);
+
+  // Merge deployToAllDevices from options into the top-level payload
+  // so the webapp assigns the app to All Devices when no specific targets exist.
+  const deployToAllDevices = options.deployToAllDevices === true;
+
+  return {
+    ...rest,
+    finding: hints,
+    options: {
+      ...options,
+      deployToAllDevices,
+      // If we know the exact WinGet ID, tell the webapp to skip its own resolution
+      wingetId: hints.wingetId || options.suggestedWingetId || undefined,
+      assignToAllDevices: deployToAllDevices,
+    }
   };
 }
 
@@ -103,8 +135,7 @@ async function resolveApplicationRemediation(finding) {
 }
 
 async function executeApplicationRemediation(payload) {
-  const { finding = {}, ...rest } = payload || {};
-  return requestJson('POST', '/api/remediation/execute', { ...rest, finding: buildHints(finding) }, 120000);
+  return requestJson('POST', '/api/remediation/execute', buildExecuteBody(payload), 120000);
 }
 
 module.exports = {
