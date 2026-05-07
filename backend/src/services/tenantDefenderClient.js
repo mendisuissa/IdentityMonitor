@@ -214,25 +214,195 @@ function normalizeText(value) {
   return text || null;
 }
 
+// Static knowledge base: canonical product name → WinGet package ID
+const PRODUCT_WINGET_MAP = {
+  'google chrome': 'Google.Chrome',
+  'chrome': 'Google.Chrome',
+  'chromium': 'Google.Chrome',
+  'mozilla firefox': 'Mozilla.Firefox',
+  'firefox': 'Mozilla.Firefox',
+  'microsoft edge': 'Microsoft.Edge',
+  'edge': 'Microsoft.Edge',
+  '7-zip': '7zip.7zip',
+  '7zip': '7zip.7zip',
+  'vlc': 'VideoLAN.VLC',
+  'vlc media player': 'VideoLAN.VLC',
+  'zoom': 'Zoom.Zoom',
+  'zoom client': 'Zoom.Zoom',
+  'microsoft teams': 'Microsoft.Teams',
+  'teams': 'Microsoft.Teams',
+  'adobe acrobat reader': 'Adobe.Acrobat.Reader.64-bit',
+  'acrobat reader': 'Adobe.Acrobat.Reader.64-bit',
+  'acrobat': 'Adobe.Acrobat.Reader.64-bit',
+  'notepad++': 'Notepad++.Notepad++',
+  'winrar': 'RARLab.WinRAR',
+  'java': 'Oracle.JavaRuntimeEnvironment',
+  'java runtime': 'Oracle.JavaRuntimeEnvironment',
+  'jre': 'Oracle.JavaRuntimeEnvironment',
+  'python': 'Python.Python.3',
+  'node.js': 'OpenJS.NodeJS',
+  'nodejs': 'OpenJS.NodeJS',
+  'git': 'Git.Git',
+  'visual studio code': 'Microsoft.VisualStudioCode',
+  'vscode': 'Microsoft.VisualStudioCode',
+  'vs code': 'Microsoft.VisualStudioCode',
+  'slack': 'SlackTechnologies.Slack',
+  'dropbox': 'Dropbox.Dropbox',
+  'skype': 'Microsoft.Skype',
+  'putty': 'PuTTY.PuTTY',
+  'wireshark': 'WiresharkFoundation.Wireshark',
+  'opera': 'Opera.Opera',
+  'brave': 'Brave.Brave',
+  'tor browser': 'TorProject.TorBrowser',
+  'signal': 'OpenWhisperSystems.Signal',
+  'telegram': 'Telegram.TelegramDesktop',
+  'discord': 'Discord.Discord',
+  'libreoffice': 'TheDocumentFoundation.LibreOffice',
+  'openoffice': 'Apache.OpenOffice',
+  'inkscape': 'Inkscape.Inkscape',
+  'gimp': 'GIMP.GIMP',
+  'obs': 'OBSProject.OBSStudio',
+  'obs studio': 'OBSProject.OBSStudio',
+  'audacity': 'Audacity.Audacity',
+  'handbrake': 'HandBrake.HandBrake',
+  'filezilla': 'TimKosse.FileZilla.Client',
+  'curl': 'cURL.cURL',
+  'openssh': 'Microsoft.OpenSSH.Beta',
+  'winscp': 'WinSCP.WinSCP',
+  'winpcap': 'WinPcap.WinPcap',
+  'npcap': 'Npcap.Npcap',
+  'microsoft office': 'Microsoft.Office',
+  'office': 'Microsoft.Office',
+  'word': 'Microsoft.Office',
+  'excel': 'Microsoft.Office',
+  'outlook': 'Microsoft.Office',
+  'powershell': 'Microsoft.PowerShell',
+  'dotnet': 'Microsoft.DotNet.Runtime.8',
+  '.net': 'Microsoft.DotNet.Runtime.8',
+  'visual c++': 'Microsoft.VCRedist.2015+.x64',
+  'vcredist': 'Microsoft.VCRedist.2015+.x64',
+  '1password': 'AgileBits.1Password',
+  'lastpass': 'LastPass.LastPass',
+  'bitwarden': 'Bitwarden.Bitwarden',
+  'keepass': 'DominikReichl.KeePass',
+  'tresorit': 'Tresorit.Tresorit',
+  'malwarebytes': 'Malwarebytes.Malwarebytes',
+  'ccleaner': 'Piriform.CCleaner',
+  'cpu-z': 'CPUID.CPU-Z',
+  'hwinfo': 'REALiX.HWiNFO',
+  'speccy': 'Piriform.Speccy',
+  'greenshot': 'Greenshot.Greenshot',
+  'paint.net': 'dotPDN.PaintDotNet',
+  'irfanview': 'IrfanSkiljan.IrfanView',
+  'kdenlive': 'KDE.Kdenlive',
+  'krita': 'KDE.Krita',
+  'blender': 'BlenderFoundation.Blender',
+  'unity hub': 'Unity.UnityHub',
+  'github desktop': 'GitHub.GitHubDesktop',
+  'sourcetree': 'Atlassian.Sourcetree',
+  'fork': 'Fork.Fork',
+  'postman': 'Postman.Postman',
+  'insomnia': 'Insomnia.Insomnia',
+  'docker': 'Docker.DockerDesktop',
+  'virtualbox': 'Oracle.VirtualBox',
+  'vmware workstation': 'VMware.WorkstationPro',
+  'vagrant': 'HashiCorp.Vagrant',
+  'terraform': 'HashiCorp.Terraform',
+  'kubectl': 'Kubernetes.kubectl',
+  'helm': 'Helm.Helm',
+  'nodejs': 'OpenJS.NodeJS',
+  'rust': 'Rustlang.Rust.Msvc',
+  'go': 'GoLang.Go',
+  'ruby': 'RubyInstallerTeam.Ruby',
+  'php': 'PHP.PHP',
+  'mysql': 'Oracle.MySQL',
+  'postgresql': 'PostgreSQL.PostgreSQL',
+  'redis': 'Redis.Redis',
+  'mongodb': 'MongoDB.Server',
+  'elasticsearch': 'Elastic.Elasticsearch',
+  'apache': 'Apache.ApacheHTTPServer',
+  'nginx': 'Nginx.Nginx',
+  'tomcat': 'Apache.Tomcat',
+  'open vpn': 'OpenVPNTechnologies.OpenVPN',
+  'openvpn': 'OpenVPNTechnologies.OpenVPN',
+};
+
+// Direct product name patterns in CVE text (ordered by specificity)
+const CVE_TEXT_PATTERNS = [
+  // "in Google Chrome versions prior to"
+  /\bin\s+(?:the\s+\w+(?:\s+\w+)?\s+(?:feature|component|module|functionality)\s+of\s+)?([A-Z][A-Za-z0-9 .+#-]{2,40}?)\s+versions?\s+(?:prior|before|earlier|below|up to)/i,
+  // "affects Google Chrome before"
+  /\baffects?\s+([A-Z][A-Za-z0-9 .+#-]{2,40}?)\s+(?:versions?\s+)?(?:prior|before|earlier|below)/i,
+  // "Google Chrome 148.x is vulnerable"
+  /\b([A-Z][A-Za-z0-9 .+#-]{2,40}?)\s+\d+[\d.]+\s+is\s+(?:vulnerable|affected)/i,
+  // "vulnerability in Google Chrome"
+  /\bvulnerability\s+in\s+(?:the\s+)?([A-Z][A-Za-z0-9 .+#-]{2,40?}?)(?:\s+application|\s+browser|\s+client|\s+software|\s+plugin|\s+extension)?(?:\s+versions?)?(?:\.|,|\s+(?:prior|before|earlier|allows?|could|may|when|that|which))/i,
+  // "upgrade Google Chrome to"
+  /\bupgrade\s+([A-Z][A-Za-z0-9 .+#-]{2,40}?)\s+to/i,
+  // "update Google Chrome to the latest"
+  /\bupdate\s+([A-Z][A-Za-z0-9 .+#-]{2,40}?)\s+to\s+the\s+latest/i,
+  // "patching Google Chrome"
+  /\bpatch(?:ing)?\s+([A-Z][A-Za-z0-9 .+#-]{2,40}?)(?:\s+to|\s+via|\.|,)/i,
+  // fallback: "exists in X version"
+  /\bexists?\s+in\s+([A-Z][A-Za-z0-9 .+#-]{2,40}?)\s+versions?/i,
+  // fallback: "apply patches for X"
+  /\bapply\s+(?:the\s+)?latest\s+patches?\s+(?:for|to)\s+([A-Z][A-Za-z0-9 .+#-]{2,40?})(?:\s+and|\.|,|$)/i,
+];
+
 function guessProductFromText(text) {
   const raw = normalizeText(text);
   if (!raw) return null;
-  const patterns = [
-    /vulnerability exists in\s+(.+?)\s+version/i,
-    /exists in\s+(.+?)\s+versions?/i,
-    /upgrade\s+(.+?)\s+to\s+/i,
-    /apply\s+the\s+latest\s+patches?\s+for\s+(.+?)(?:\.|$)/i,
-    /affected product:?\s+(.+?)(?:\.|$)/i,
-  ];
-  for (const pattern of patterns) {
+
+  for (const pattern of CVE_TEXT_PATTERNS) {
     const m = raw.match(pattern);
     if (m && m[1]) {
-      const candidate = m[1].replace(/[\[\]()]/g, '').trim();
-      if (candidate && !candidate.toUpperCase().startsWith('CVE-') && !candidate.toUpperCase().startsWith('TVM-')) {
+      const candidate = m[1]
+        .replace(/[\[\]()]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (
+        candidate.length >= 2 &&
+        !candidate.toUpperCase().startsWith('CVE-') &&
+        !candidate.toUpperCase().startsWith('TVM-') &&
+        !/^(the|a|an|this|that|its|their|remote|local|all|any|multiple)$/i.test(candidate)
+      ) {
         return candidate;
       }
     }
   }
+  return null;
+}
+
+// Resolve a product name (from Defender or guessed) to its canonical WinGet ID.
+// Returns { wingetId, canonicalName } or null if unknown.
+function resolveProductToWinget(productName, publisher) {
+  if (!productName) return null;
+  const key = productName.toLowerCase().trim();
+  const pubKey = (publisher || '').toLowerCase().trim();
+
+  // Direct lookup
+  if (PRODUCT_WINGET_MAP[key]) {
+    return { wingetId: PRODUCT_WINGET_MAP[key], canonicalName: productName };
+  }
+
+  // Try partial match (product name contains known key)
+  for (const [known, wingetId] of Object.entries(PRODUCT_WINGET_MAP)) {
+    if (key.includes(known) || known.includes(key)) {
+      return { wingetId, canonicalName: productName };
+    }
+  }
+
+  // Publisher-based hint
+  if (pubKey.includes('google') && (key.includes('chrome') || key.includes('chromium'))) {
+    return { wingetId: 'Google.Chrome', canonicalName: 'Google Chrome' };
+  }
+  if (pubKey.includes('mozilla') && key.includes('firefox')) {
+    return { wingetId: 'Mozilla.Firefox', canonicalName: 'Mozilla Firefox' };
+  }
+  if (pubKey.includes('microsoft') && key.includes('edge')) {
+    return { wingetId: 'Microsoft.Edge', canonicalName: 'Microsoft Edge' };
+  }
+
   return null;
 }
 
@@ -591,6 +761,7 @@ async function enrichTenantVulnerability(tenantId, cveId) {
     software?.productName ||
     software?.products?.[0]?.productName ||
     guessProductFromText(base.description) ||
+    guessProductFromText(base.name) ||
     null;
 
   const publisher =
@@ -603,14 +774,28 @@ async function enrichTenantVulnerability(tenantId, cveId) {
     ? software.products.map(p => ({ productName: p.productName, publisher: p.publisher || null, productVersion: p.productVersion || null }))
     : [];
 
+  // Resolve to a known WinGet package ID for accurate automated remediation
+  const wingetResolution = resolveProductToWinget(productName, publisher);
+  const resolvedProductName = wingetResolution?.canonicalName || productName;
+  const suggestedWingetId = wingetResolution?.wingetId || null;
+
+  // Extract fix version from description (e.g. "prior to 148.0.7778.96")
+  const fixVersionMatch = (base.description || '').match(
+    /(?:prior to|before|earlier than|below|update to|upgrade to)\s+([\d][.\d]+\d)/i
+  );
+  const fixVersion = fixVersionMatch?.[1] || null;
+
   return {
     ...base,
-    productName,
+    productName: resolvedProductName || productName,
     publisher,
     affectedMachines: affectedMachines.length ? affectedMachines : (software?.affectedMachines?.map(m => m.name) || []),
     affectedMachineCount: affectedMachines.length || software?.affectedMachineCount || base.affectedMachineCount || 0,
     relatedProducts,
     productNames: relatedProducts.map(p => p.productName).filter(Boolean),
+    suggestedWingetId,
+    fixVersion,
+    remediationConfidence: suggestedWingetId ? 'high' : (productName ? 'medium' : 'low'),
   };
 }
 

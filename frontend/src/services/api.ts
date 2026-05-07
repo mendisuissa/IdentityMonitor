@@ -535,6 +535,7 @@ export const api = {
       notes?: string;
       affectedDeviceNames?: string[];
       deployToAllDevices?: boolean;
+      suggestedWingetId?: string;
     };
   }) =>
     apiFetch<any>('/remediation/execute', {

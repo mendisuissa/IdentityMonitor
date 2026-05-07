@@ -35,6 +35,9 @@ type Finding = {
   displayPublisher?: string;
   displayCategoryLabel?: string;
   classification?: { type?: string; family?: string };
+  suggestedWingetId?: string | null;
+  fixVersion?: string | null;
+  remediationConfidence?: 'high' | 'medium' | 'low';
 };
 
 type Recommendation = {
@@ -1055,20 +1058,14 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         ? await ensureAffectedMachinesLoaded()
         : affectedMachines;
 
-      // Enrich the finding with publisher, productName and affected machines
-      // for CVEs where Defender's list endpoint omits these fields.
+      // Always enrich CVE findings to get suggestedWingetId, productName, publisher, affected machines.
       let enrichedFinding = { ...selectedFinding };
       const cveId = selectedFinding.cveId || selectedFinding.id || '';
-      const needsEnrichment =
-        cveId.toUpperCase().startsWith('CVE-') &&
-        (!selectedFinding.publisher || selectedFinding.publisher === 'Not provided by Defender payload' ||
-         !selectedFinding.productName || selectedFinding.productName === 'Unknown product' ||
-         !selectedFinding.affectedMachineCount);
-      if (needsEnrichment) {
+      if (cveId.toUpperCase().startsWith('CVE-')) {
         try {
           const enrichRes = await api.enrichDefenderVulnerability(cveId);
           if (enrichRes?.finding) enrichedFinding = { ...enrichedFinding, ...enrichRes.finding };
-        } catch (_) { /* enrichment is best-effort — proceed with original data */ }
+        } catch (_) { /* enrichment is best-effort */ }
       }
 
       const result = await api.planRemediation({
@@ -1114,6 +1111,17 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         return;
       }
     }
+    const resolvedFinding = planResult?.enrichedFinding || selectedFinding;
+
+    // Block execution if we cannot confidently identify the target product for software CVEs
+    if (isWebapp && resolvedFinding.remediationConfidence === 'low' && !resolvedFinding.suggestedWingetId) {
+      setError(
+        'Cannot execute automatically: the target product for this CVE could not be identified. ' +
+        'Check the CVE description and set the product manually, or remediate via Windows Update.'
+      );
+      return;
+    }
+
     setExecuting(true);
     setError('');
     setTechnicalError('');
@@ -1123,7 +1131,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         approvalId: 'apr-ui-001',
         devices: deviceIds,
         finding: {
-          ...(planResult?.enrichedFinding || selectedFinding),
+          ...resolvedFinding,
           affectedMachines: resolvedNames,
         },
         plan: planResult.plan,
@@ -1133,8 +1141,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           deviceIds,
           targetDeviceIds: deviceIds,
           affectedDeviceNames: resolvedNames,
-          // When no specific devices are known, tell the webapp to deploy to all Windows devices
           deployToAllDevices: isWebapp && !resolvedNames.length && !deviceIds.length,
+          suggestedWingetId: resolvedFinding.suggestedWingetId || undefined,
           policyTarget,
           scriptName: getEffectiveScriptName(),
           notes: executionNotes,
