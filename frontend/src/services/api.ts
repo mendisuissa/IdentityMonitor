@@ -534,6 +534,7 @@ export const api = {
       scriptName?: string;
       notes?: string;
       affectedDeviceNames?: string[];
+      deployToAllDevices?: boolean;
     };
   }) =>
     apiFetch<any>('/remediation/execute', {

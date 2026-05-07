@@ -4,7 +4,8 @@ const router  = express.Router();
 
 const CLIENT_ID     = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const { upsertTenantIntegration } = require('../services/tenantIntegrationStore');
+const WEBAPP_CLIENT_ID = process.env.WEBAPP_CLIENT_ID || '';
+const { upsertTenantIntegration, getTenantIntegration, markWebappConsent } = require('../services/tenantIntegrationStore');
 const { clearGraphTokenCache } = require('../services/nativeRemediationExecutor');
 const graphService = require('../services/graphService');
 const tenantRegistry = require('../services/tenantRegistry');
@@ -180,9 +181,9 @@ router.get('/callback', async (req, res) => {
 
     // Determine if this is a genuinely new tenant BEFORE upserting
     let isNewTenant = true;
+    let existingIntegration = null;
     try {
-      const { getTenantIntegration } = require('../services/tenantIntegrationStore');
-      const existingIntegration = await getTenantIntegration(tenantId).catch(() => null);
+      existingIntegration = await getTenantIntegration(tenantId).catch(() => null);
       if (existingIntegration) isNewTenant = false;
     } catch (_) {
       // Azure Storage not configured — fall back to filesystem check
@@ -250,6 +251,17 @@ router.get('/callback', async (req, res) => {
         const returnTo = decodeURIComponent(stateStr.replace('post_consent__', ''));
         return res.redirect(FRONTEND_URL + returnTo + '?consent=granted');
       }
+
+      // If webapp consent not yet granted, redirect silently as part of onboarding
+      if (WEBAPP_CLIENT_ID && !existingIntegration?.webappConsentGrantedAt) {
+        const base = process.env.API_BASE_URL || (req.protocol + '://' + req.get('host'));
+        const webappConsentCallbackUri = base + '/api/auth/webapp-consent/callback';
+        const consentUrl = 'https://login.microsoftonline.com/' + tenantId +
+          '/adminconsent?client_id=' + WEBAPP_CLIENT_ID +
+          '&redirect_uri=' + encodeURIComponent(webappConsentCallbackUri);
+        return res.redirect(consentUrl);
+      }
+
       res.redirect(FRONTEND_URL);
     });
 
@@ -386,6 +398,30 @@ router.get('/admin-consent/callback', async (req, res) => {
     const returnTo = statePayload?.returnTo || '/identity';
     res.redirect(FRONTEND_URL + returnTo + '?consent=error&message=' + encodeURIComponent(err.message));
   }
+});
+
+// GET /api/auth/webapp-consent/callback
+// Microsoft redirects here after the customer grants Intune consent to the webapp.
+// We record the grant and send them to the dashboard — fully transparent.
+router.get('/webapp-consent/callback', async (req, res) => {
+  const { admin_consent, tenant, error, error_description } = req.query;
+
+  if (error) {
+    console.warn('[Auth] Webapp consent declined:', error_description || error);
+    return res.redirect(FRONTEND_URL + '?webapp_consent=declined');
+  }
+
+  const tenantId = String(tenant || req.session?.tenant?.tenantId || '').trim();
+  if (String(admin_consent).toLowerCase() === 'true' && tenantId) {
+    try {
+      await markWebappConsent(tenantId);
+      console.log('[Auth] Webapp consent granted for tenant:', tenantId);
+    } catch (err) {
+      console.warn('[Auth] markWebappConsent failed (non-fatal):', err.message);
+    }
+  }
+
+  res.redirect(FRONTEND_URL);
 });
 
 // GET /api/auth/logout

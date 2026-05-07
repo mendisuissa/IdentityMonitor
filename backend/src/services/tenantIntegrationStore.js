@@ -46,6 +46,7 @@ async function getTenantIntegration(tenantId) {
       sharedToken: decrypt(entity.sharedToken) || null,
       status: entity.status || 'unknown',
       lastValidatedAt: entity.lastValidatedAt || null,
+      webappConsentGrantedAt: entity.webappConsentGrantedAt || null,
       authMode: entity.defenderClientId ? 'per-tenant-app' : (configuredClientId ? 'shared-multi-tenant-app' : 'unconfigured')
     };
   } catch (error) {
@@ -77,14 +78,24 @@ async function upsertTenantIntegration(integration) {
     webappBaseUrl: integration.webappBaseUrl || existing?.webappBaseUrl || '',
     sharedToken: encrypt(integration.sharedToken || existing?.sharedToken || ''),
     status: integration.status || existing?.status || 'configured',
-    lastValidatedAt: integration.lastValidatedAt || existing?.lastValidatedAt || ''
+    lastValidatedAt: integration.lastValidatedAt || existing?.lastValidatedAt || '',
+    webappConsentGrantedAt: integration.webappConsentGrantedAt || existing?.webappConsentGrantedAt || ''
   };
 
   await client.upsertEntity(entity, 'Replace');
   return entity;
 }
 
+async function markWebappConsent(tenantId) {
+  if (!tenantId) throw new Error('tenantId required');
+  await upsertTenantIntegration({
+    tenantId,
+    webappConsentGrantedAt: new Date().toISOString()
+  });
+}
+
 module.exports = {
   getTenantIntegration,
-  upsertTenantIntegration
+  upsertTenantIntegration,
+  markWebappConsent
 };
