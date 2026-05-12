@@ -420,7 +420,21 @@ function inferCategory(raw) {
     .toLowerCase();
 
   if (!text) return 'unknown';
+
+  // Microsoft OS and built-in components → Windows Update (not WinGet)
   if (/(windows 10|windows 11|windows server|kb\d+|cumulative update|security update|feature update|patch tuesday|microsoft windows)/i.test(text)) {
+    return 'windows-update';
+  }
+  // Microsoft Edge and Internet Explorer → Windows Update / Edge Update channel
+  if (/\bmicrosoft edge\b|\bmsedge\b|\bedge browser\b|\binternet explorer\b/i.test(text)) {
+    return 'windows-update';
+  }
+  // Microsoft Office suite components → Windows Update / Microsoft Update
+  if (/\bmicrosoft (word|excel|outlook|powerpoint|access|publisher|onenote|visio|project)\b/i.test(text)) {
+    return 'windows-update';
+  }
+  // .NET Framework / Visual C++ Redistributable → Windows Update
+  if (/\b(\.net framework|dotnet framework|visual c\+\+ (20\d{2}|redistributable)|vcredist)\b/i.test(text)) {
     return 'windows-update';
   }
   if (/(intune|configuration profile|compliance policy|device management|endpoint manager|mobile device management)/i.test(text)) {

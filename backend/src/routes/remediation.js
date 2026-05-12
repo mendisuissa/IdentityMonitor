@@ -204,6 +204,25 @@ router.post('/execute', async (req, res) => {
     if (plan.executor === 'webapp' || classification.type === 'application') {
       try {
         const result = await executeApplicationRemediation({ tenantId, approvalId, finding: enrichedFinding, devices, plan, options });
+
+        // If webapp fell back to Chocolatey (not a WinGet/Intune live deploy), reject it —
+        // Chocolatey is not supported for Intune production deployments.
+        const usedChocolatey = result?.app?.source === 'chocolatey' ||
+          String(result?.app?.installCommand || '').includes('choco ');
+        if (usedChocolatey && result?.mode !== 'live-winget-intune') {
+          return res.json({
+            ok: true, tenantId, approvalId, forwardedTo: 'webapp',
+            result: {
+              ...result,
+              ok: false,
+              status: 'unsupported-installer',
+              message: 'Chocolatey packages are not supported for Intune deployment. ' +
+                'This vulnerability should be resolved via Windows Update or a WinGet package. ' +
+                'Check that the correct product was identified and try again.',
+            }
+          });
+        }
+
         return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'webapp', result });
       } catch (execError) {
         const webappDebug = execError?.details?.debug || null;
