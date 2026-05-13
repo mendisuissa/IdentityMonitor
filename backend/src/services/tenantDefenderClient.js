@@ -417,6 +417,7 @@ function inferCategory(raw) {
   ]
     .filter(Boolean)
     .join(' ')
+    .replace(/_/g, ' ') // Defender uses snake_case product names (e.g. windows_server_2025 → windows server 2025)
     .toLowerCase();
 
   if (!text) return 'unknown';
@@ -451,10 +452,12 @@ function inferCategory(raw) {
 
 function normalizeVulnerability(raw) {
   const cveId = normalizeText(raw.cveId || raw.id || null);
-  const productName =
+  // Defender returns snake_case product names (e.g. "windows_server_2025") — convert to display-friendly form
+  const rawProductName =
     normalizeText(raw.productName) ||
     guessProductFromText(raw.description) ||
     (cveId && cveId.toUpperCase().startsWith('CVE-') ? null : normalizeText(raw.name));
+  const productName = rawProductName ? rawProductName.replace(/_/g, ' ') : rawProductName;
   const publisher = normalizeText(raw.vendor || raw.publisher || null);
   return {
     id: normalizeText(raw.id || cveId),
@@ -637,59 +640,78 @@ async function listTenantVulnerabilities(tenantId, top = 0, options = {}) {
     ? Math.max(requestedTop, Math.min(VULNERABILITY_CACHE_MAX_TOP, 250))
     : VULNERABILITY_CACHE_MAX_TOP;
 
-  // Primary source: machinesVulnerabilities gives us CVEs that actually
-  // affect enrolled devices — mirrors the Defender portal "Affects my org" view.
-  // We deduplicate by cveId and count affected machines per CVE.
+  // Step 1: get CVE IDs + machine counts that actually affect this org's devices
   const machineVulnRows = await fetchDefenderCollectionWithSkip(
     config,
     '/api/vulnerabilities/machinesVulnerabilities',
     { pageSize: 200, maxPageSize: 8000, maxPages: 25, top: fetchTop }
   ).catch(() => []);
 
-  // Build a map: cveId → { count, productName, publisher, ... }
-  const cveMap = new Map();
+  // Build: cveId → { machineCount, productName, publisher }
+  const orgCveMap = new Map();
   for (const row of (Array.isArray(machineVulnRows) ? machineVulnRows : [])) {
     const cveId = String(row?.cveId || row?.CveId || '').toUpperCase();
     if (!cveId) continue;
-    if (!cveMap.has(cveId)) {
-      cveMap.set(cveId, {
-        cveId,
-        id: cveId,
-        name: cveId,
+    if (!orgCveMap.has(cveId)) {
+      orgCveMap.set(cveId, {
+        machineIds: new Set(),
         productName: row.productName || row.softwareName || null,
-        publisher: row.softwareVendor || row.publisher || null,
-        severity: row.severity || row.vulnerabilitySeverityLevel || null,
-        cvssV3: row.cvssV3 || null,
-        description: row.description || null,
-        publicExploit: row.exploitabilityLevel === 'ExploitIsPubliclyAvailable',
-        status: row.patchAdded ? 'RemediationRequired' : null,
-        exposedMachines: 0,
-        machineIds: new Set()
+        publisher: row.softwareVendor || row.softwareVendorId || row.publisher || null,
       });
     }
-    const entry = cveMap.get(cveId);
-    if (row.machineId || row.deviceId) {
-      entry.machineIds.add(row.machineId || row.deviceId);
-      entry.exposedMachines = entry.machineIds.size;
-    }
+    const e = orgCveMap.get(cveId);
+    if (row.machineId || row.deviceId) e.machineIds.add(row.machineId || row.deviceId);
   }
 
-  // If machinesVulnerabilities returned nothing, fall back to /api/vulnerabilities
-  let vulnRows = [];
-  if (cveMap.size === 0) {
-    vulnRows = await fetchDefenderCollectionWithSkip(config, '/api/vulnerabilities', {
-      pageSize: 200, maxPageSize: 8000, maxPages: 25, top: fetchTop,
-    }).catch(() => []);
-  }
+  // Step 2: fetch full CVE details from /api/vulnerabilities (has CVSS, description, etc.)
+  const vulnRows = await fetchDefenderCollectionWithSkip(config, '/api/vulnerabilities', {
+    pageSize: 200, maxPageSize: 8000, maxPages: 25, top: fetchTop,
+  }).catch(() => []);
 
-  // Normalize: prefer the richer machineVuln data, supplement with /api/vulnerabilities
+  // Step 3: merge — if we got org CVEs, filter global list to only those;
+  // inject accurate machine count from machinesVulnerabilities
   let items;
-  if (cveMap.size > 0) {
-    items = Array.from(cveMap.values()).map(entry => normalizeVulnerability({
-      ...entry,
-      exposedMachines: entry.exposedMachines || entry.machineIds?.size || 1
-    }));
+  if (orgCveMap.size > 0 && Array.isArray(vulnRows) && vulnRows.length > 0) {
+    items = vulnRows
+      .filter(r => {
+        const id = String(r?.cveId || r?.id || '').toUpperCase();
+        return orgCveMap.has(id);
+      })
+      .map(r => {
+        const id = String(r?.cveId || r?.id || '').toUpperCase();
+        const orgData = orgCveMap.get(id) || {};
+        return normalizeVulnerability({
+          ...r,
+          exposedMachines: orgData.machineIds?.size || 1,
+          publisher: r.vendor || r.publisher || orgData.publisher || null,
+        });
+      });
+
+    // Include org CVEs that weren't in /api/vulnerabilities (rare edge case)
+    const coveredIds = new Set(items.map(i => i.cveId));
+    for (const [cveId, orgData] of orgCveMap) {
+      if (!coveredIds.has(cveId)) {
+        items.push(normalizeVulnerability({
+          cveId,
+          id: cveId,
+          exposedMachines: orgData.machineIds?.size || 1,
+          productName: orgData.productName,
+          publisher: orgData.publisher,
+        }));
+      }
+    }
+  } else if (orgCveMap.size > 0) {
+    // No /api/vulnerabilities data — use machinesVulnerabilities data only
+    items = Array.from(orgCveMap.entries()).map(([cveId, d]) =>
+      normalizeVulnerability({
+        cveId, id: cveId,
+        exposedMachines: d.machineIds?.size || 1,
+        productName: d.productName,
+        publisher: d.publisher,
+      })
+    );
   } else {
+    // machinesVulnerabilities empty — show all global CVEs as fallback
     items = Array.isArray(vulnRows) ? vulnRows.map(normalizeVulnerability) : [];
   }
 
