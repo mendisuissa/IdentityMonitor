@@ -861,7 +861,12 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       if (filterPublisher && !publisher.includes(filterPublisher.toLowerCase())) return false;
       if (filterCategory && !category.includes(filterCategory.toLowerCase())) return false;
       if (filterSeverity && severity !== filterSeverity.toLowerCase()) return false;
-      if (remediationRequiredOnly && String(f.status || '').toLowerCase() !== 'remediationrequired') return false;
+      // "Remediation required only" — hide CVEs that are explicitly marked as already remediated/fixed.
+      // We cannot check for 'remediationrequired' equality because Defender often returns null/Active.
+      if (remediationRequiredOnly) {
+        const s = String(f.status || '').toLowerCase();
+        if (s === 'remediated' || s === 'fixed' || s === 'closed') return false;
+      }
       if (exposedDevicesOnly && (f.affectedMachineCount ?? 0) <= 0) return false;
       return true;
     });
@@ -1204,8 +1209,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setFilterPublisher('');
     setFilterCategory('');
     setFilterSeverity('');
-    setRemediationRequiredOnly(true);
-    setExposedDevicesOnly(true);
+    setRemediationRequiredOnly(false);
+    setExposedDevicesOnly(false);
   };
 
   const totalFindings = findings.length;
