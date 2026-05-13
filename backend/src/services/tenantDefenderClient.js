@@ -637,18 +637,20 @@ async function listTenantVulnerabilities(tenantId, top = 0, options = {}) {
     ? Math.max(requestedTop, Math.min(VULNERABILITY_CACHE_MAX_TOP, 250))
     : VULNERABILITY_CACHE_MAX_TOP;
 
-  // Filter to only CVEs that affect devices in this tenant (exposedMachines > 0).
-  // This mirrors the Defender portal "Affects my organization" filter and avoids
-  // returning thousands of global CVEs that don't apply to any enrolled device.
-  const vulnRows = await fetchDefenderCollectionWithSkip(
-    config,
-    '/api/vulnerabilities?$filter=exposedMachines+gt+0',
-    { pageSize: 200, maxPageSize: 8000, maxPages: 25, top: fetchTop }
-  );
+  const vulnRows = await fetchDefenderCollectionWithSkip(config, '/api/vulnerabilities', {
+    pageSize: 200,
+    maxPageSize: 8000,
+    maxPages: 25,
+    top: fetchTop,
+  });
 
-  const items = Array.isArray(vulnRows)
+  const allItems = Array.isArray(vulnRows)
     ? vulnRows.map(normalizeVulnerability)
     : [];
+
+  // Keep only CVEs that affect at least one device in this org.
+  // Mirrors the Defender portal "Affects my organization" filter.
+  const items = allItems.filter(v => v.affectedMachineCount > 0);
 
   writeVulnerabilityCache(tenantId, items);
 
