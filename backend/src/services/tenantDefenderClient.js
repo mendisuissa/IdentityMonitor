@@ -637,20 +637,61 @@ async function listTenantVulnerabilities(tenantId, top = 0, options = {}) {
     ? Math.max(requestedTop, Math.min(VULNERABILITY_CACHE_MAX_TOP, 250))
     : VULNERABILITY_CACHE_MAX_TOP;
 
-  const vulnRows = await fetchDefenderCollectionWithSkip(config, '/api/vulnerabilities', {
-    pageSize: 200,
-    maxPageSize: 8000,
-    maxPages: 25,
-    top: fetchTop,
-  });
+  // Primary source: machinesVulnerabilities gives us CVEs that actually
+  // affect enrolled devices — mirrors the Defender portal "Affects my org" view.
+  // We deduplicate by cveId and count affected machines per CVE.
+  const machineVulnRows = await fetchDefenderCollectionWithSkip(
+    config,
+    '/api/vulnerabilities/machinesVulnerabilities',
+    { pageSize: 200, maxPageSize: 8000, maxPages: 25, top: fetchTop }
+  ).catch(() => []);
 
-  const allItems = Array.isArray(vulnRows)
-    ? vulnRows.map(normalizeVulnerability)
-    : [];
+  // Build a map: cveId → { count, productName, publisher, ... }
+  const cveMap = new Map();
+  for (const row of (Array.isArray(machineVulnRows) ? machineVulnRows : [])) {
+    const cveId = String(row?.cveId || row?.CveId || '').toUpperCase();
+    if (!cveId) continue;
+    if (!cveMap.has(cveId)) {
+      cveMap.set(cveId, {
+        cveId,
+        id: cveId,
+        name: cveId,
+        productName: row.productName || row.softwareName || null,
+        publisher: row.softwareVendor || row.publisher || null,
+        severity: row.severity || row.vulnerabilitySeverityLevel || null,
+        cvssV3: row.cvssV3 || null,
+        description: row.description || null,
+        publicExploit: row.exploitabilityLevel === 'ExploitIsPubliclyAvailable',
+        status: row.patchAdded ? 'RemediationRequired' : null,
+        exposedMachines: 0,
+        machineIds: new Set()
+      });
+    }
+    const entry = cveMap.get(cveId);
+    if (row.machineId || row.deviceId) {
+      entry.machineIds.add(row.machineId || row.deviceId);
+      entry.exposedMachines = entry.machineIds.size;
+    }
+  }
 
-  // Keep only CVEs that affect at least one device in this org.
-  // Mirrors the Defender portal "Affects my organization" filter.
-  const items = allItems.filter(v => v.affectedMachineCount > 0);
+  // If machinesVulnerabilities returned nothing, fall back to /api/vulnerabilities
+  let vulnRows = [];
+  if (cveMap.size === 0) {
+    vulnRows = await fetchDefenderCollectionWithSkip(config, '/api/vulnerabilities', {
+      pageSize: 200, maxPageSize: 8000, maxPages: 25, top: fetchTop,
+    }).catch(() => []);
+  }
+
+  // Normalize: prefer the richer machineVuln data, supplement with /api/vulnerabilities
+  let items;
+  if (cveMap.size > 0) {
+    items = Array.from(cveMap.values()).map(entry => normalizeVulnerability({
+      ...entry,
+      exposedMachines: entry.exposedMachines || entry.machineIds?.size || 1
+    }));
+  } else {
+    items = Array.isArray(vulnRows) ? vulnRows.map(normalizeVulnerability) : [];
+  }
 
   writeVulnerabilityCache(tenantId, items);
 
