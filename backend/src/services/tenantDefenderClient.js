@@ -407,103 +407,111 @@ function resolveProductToWinget(productName, publisher) {
 }
 
 function inferCategory(raw) {
-  // ── Step 1: product-name check (highest priority) ────────────────────────
-  // Use ONLY the product name + publisher to classify first.
-  // This prevents description text (e.g. "Microsoft Edge also ships this fix")
-  // from overriding the actual vulnerable product's category.
-  const productName = String(raw?.productName || '').replace(/_/g, ' ').toLowerCase();
-  const publisherName = String(raw?.vendor || raw?.publisher || '').replace(/_/g, ' ').toLowerCase();
+  // ── Core rule ─────────────────────────────────────────────────────────────
+  // 'windows-update' is decided EXCLUSIVELY from the product name + publisher.
+  // The description/recommendation is NEVER used for this decision because
+  // Defender's AI descriptions often say "Microsoft Edge also ships this fix"
+  // for third-party CVEs (Chrome, OpenSSL, etc.), which would cause false
+  // windows-update classifications for every such CVE.
+  //
+  // Only the description/recommendation is used for the secondary categories
+  // (script, intune-policy, identity).
+  // ─────────────────────────────────────────────────────────────────────────
 
-  // Known third-party applications → always "application" (WinGet / Intune deploy)
-  // Check before any Windows/Edge pattern so that "Google Chrome" wins even when
-  // the description mentions "Microsoft Edge (Chromium-based) also addresses this".
-  const THIRD_PARTY_APP_PATTERNS = [
-    /\bgoogle chrome\b/,
-    /\bmozilla firefox\b/,
-    /\bfirefox\b/,
-    /\bchromium\b/,
-    /\bzoom\b/,
-    /\bslack\b/,
-    /\bdiscord\b/,
-    /\bvlc\b/,
-    /\bwinrar\b/,
-    /\b7-?zip\b/,
-    /\bnotepad\+\+/,
-    /\bputty\b/,
-    /\bwireshark\b/,
-    /\btelegram\b/,
-    /\bsignal\b/,
-    /\bopera\b/,
-    /\bbrave\b/,
-    /\blibreoffice\b/,
-    /\bgimp\b/,
-    /\bobs studio\b/,
-    /\bhandbrake\b/,
-    /\bfilezilla\b/,
-    /\bbitwarden\b/,
-    /\bkeepass\b/,
-    /\bmalwarebytes\b/,
-    /\bdocker\b/,
-    /\bvirtualbox\b/,
-    /\bpostman\b/,
-    /\binsomnia\b/,
+  const productName = String(raw?.productName || raw?.name || '')
+    .replace(/_/g, ' ')  // snake_case → spaces (Defender normalisation)
+    .toLowerCase()
+    .trim();
+
+  const publisherName = String(raw?.vendor || raw?.publisher || '')
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .trim();
+
+  // ── 1. Is the publisher clearly NOT Microsoft? → application immediately ──
+  // e.g. Google, Mozilla, Canonical, OpenSSL Project, Oracle, Apache…
+  const NON_MICROSOFT_PUBLISHERS = [
+    'google', 'mozilla', 'canonical', 'ubuntu', 'debian', 'redhat', 'red hat',
+    'openssl', 'oracle', 'apache', 'nginx', 'elastic', 'mongodb', 'postgresql',
+    'videolan', 'zoom', 'slack', 'discord', 'dropbox', 'signal', 'telegram',
+    'bitwarden', 'keepass', 'malwarebytes', 'iobit', 'avast', 'avira', 'kaspersky',
+    'notepad++', 'rarlab', 'winrar', '7-zip', 'putty', 'wireshark', 'hashicorp',
+    'docker', 'vmware', 'virtualbox', 'jetbrains', 'atlassian', 'github',
+    'python', 'nodejs', 'openjs', 'rust', 'golang', 'php',
   ];
-
-  if (THIRD_PARTY_APP_PATTERNS.some((p) => p.test(productName))) {
+  if (NON_MICROSOFT_PUBLISHERS.some((p) => publisherName.includes(p))) {
     return 'application';
   }
 
-  // Known Microsoft Windows OS / built-in product names → windows-update
-  if (/(^windows |windows 10|windows 11|windows server|microsoft windows|dwm core|win32k|ntfs|hyper-v|remote desktop|net logon)/i.test(productName)) {
-    return 'windows-update';
-  }
-  if (/^microsoft edge/i.test(productName) || /\bmsedge\b/i.test(productName)) {
-    return 'windows-update';
-  }
-  if (/^microsoft (word|excel|outlook|powerpoint|access|publisher|onenote|visio|project|office)/i.test(productName)) {
+  // ── 2. Is the PRODUCT NAME a Microsoft Windows OS / built-in component? ──
+  // These always go through Windows Update, not WinGet.
+  const WINDOWS_UPDATE_PRODUCT_PATTERNS = [
+    /^windows\b/,                        // "Windows 10", "Windows Server 2025", "windows_server_2025"
+    /\bwindows (10|11|server|rt)\b/,
+    /^microsoft windows\b/,
+    /\bdwm core library\b/,              // DWM (Desktop Window Manager)
+    /\bwin32k\b/,
+    /\bntfs\b/,
+    /\bhyper-v\b/,
+    /\bremote desktop\b/,
+    /\bnet logon\b/,
+    /\bkernel\b.*\bwindows\b/,
+    /\bwindows\b.*\bkernel\b/,
+    /\bcryptographic services\b/,
+    /\bwindows defender\b/,
+    /\bsecurity support provider\b/,
+    /\bprint spooler\b/,
+    /\btask scheduler\b/,
+    /\bcomponent object model\b/,
+    /\bwmi\b/,
+    /\bdns server\b.*\bwindows\b/,
+    /^microsoft edge\b/,                 // Edge — managed via Windows Update
+    /\bmsedge\b/,
+    /^microsoft office\b/,
+    /^microsoft (word|excel|outlook|powerpoint|access|publisher|onenote|visio|project)\b/,
+    /^microsoft \.net\b/,
+    /^\.net framework\b/,
+    /\bdotnet framework\b/,
+    /^visual c\+\+/,
+    /\bvcredist\b/,
+  ];
+
+  if (WINDOWS_UPDATE_PRODUCT_PATTERNS.some((p) => p.test(productName))) {
     return 'windows-update';
   }
 
-  // ── Step 2: full-text scan (description / recommendation / name) ─────────
-  // Only used when product name alone is not conclusive.
-  const fullText = [
-    raw?.name,
-    raw?.description,
-    raw?.productName,
-    raw?.vendor,
-    raw?.publisher,
-    raw?.recommendation,
-  ]
+  // Publisher "microsoft" + product sounds like a Windows component (not a third-party app)
+  if (publisherName === 'microsoft' || publisherName.startsWith('microsoft ')) {
+    // Check for known Microsoft non-Windows products that go via WinGet
+    const MICROSOFT_WINGET_PRODUCTS = [
+      'visual studio code', 'vscode', 'teams', 'skype', 'powertoys',
+      'winget', 'terminal', 'powershell',
+    ];
+    const isWingetProduct = MICROSOFT_WINGET_PRODUCTS.some((p) => productName.includes(p));
+    if (!isWingetProduct && productName) {
+      // Generic Microsoft product with no specific override → assume Windows Update
+      return 'windows-update';
+    }
+  }
+
+  // ── 3. Description/recommendation — secondary signals only ───────────────
+  // Used for script, intune-policy, identity — NOT for windows-update.
+  const descText = [raw?.description, raw?.recommendation, raw?.name]
     .filter(Boolean)
     .join(' ')
-    .replace(/_/g, ' ')
     .toLowerCase();
 
-  if (!fullText) return 'unknown';
-
-  // Windows OS signals in name/description — but ONLY when no third-party product matched above
-  if (/(windows 10|windows 11|windows server|kb\d+|cumulative update|patch tuesday|microsoft windows)/i.test(fullText)) {
-    return 'windows-update';
-  }
-  // Edge/IE signals — only when the product name itself is not a known third-party browser
-  if (/\bmicrosoft edge\b|\bmsedge\b|\bedge browser\b|\binternet explorer\b/i.test(fullText)) {
-    return 'windows-update';
-  }
-  if (/\bmicrosoft (word|excel|outlook|powerpoint|access|publisher|onenote|visio|project)\b/i.test(fullText)) {
-    return 'windows-update';
-  }
-  if (/\b(\.net framework|dotnet framework|visual c\+\+ (20\d{2}|redistributable)|vcredist)\b/i.test(fullText)) {
-    return 'windows-update';
-  }
-  if (/(intune|configuration profile|compliance policy|device management|endpoint manager|mobile device management)/i.test(fullText)) {
+  if (/(intune|configuration profile|compliance policy|endpoint manager|mobile device management)/i.test(descText)) {
     return 'intune-policy';
   }
-  if (/(powershell|script|remediation script|proactive remediation|bash|shell script)/i.test(fullText)) {
+  if (/(powershell script|remediation script|proactive remediation|device health script)/i.test(descText)) {
     return 'script';
   }
-  if (/(identity|authentication|credential|privilege|entra|azure ad|active directory|mfa)/i.test(fullText)) {
+  if (/(identity|credential theft|privilege escalation|entra id|azure ad|active directory|mfa bypass)/i.test(descText)) {
     return 'identity';
   }
+
+  // ── 4. Default → third-party application ─────────────────────────────────
   return 'application';
 }
 
