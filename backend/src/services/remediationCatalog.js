@@ -68,6 +68,10 @@ function classifyFinding(finding = {}) {
   const identityHints = ['identity', 'conditional access', 'entra', 'azure ad', 'authentication', 'mfa'];
   const appHints = ['chrome', 'chromium', 'firefox', 'edge', 'webview', '7-zip', '7zip', 'notepad++', 'acrobat', 'office', 'vlc', 'java', 'browser', 'runtime', 'mongodb', 'openssl'];
 
+  if (category === 'unsupported-platform') {
+    return { type: 'unsupported-platform', family: 'non-windows' };
+  }
+
   if (windowsUpdateHints.some((hint) => text.includes(hint)) || category === 'windows-update') {
     return { type: 'windows-update', family: 'platform' };
   }
@@ -99,6 +103,7 @@ function classifyFinding(finding = {}) {
 }
 
 function buildDisplayCategoryLabel(finding = {}, classification = null) {
+  if (classification?.type === 'unsupported-platform') return 'unsupported platform';
   if (classification?.type === 'windows-update') return 'windows-update';
   if (classification?.family === 'platform') return 'platform';
   const category = normalizeText(finding.category).toLowerCase();

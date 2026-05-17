@@ -497,6 +497,11 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       color:#ff91a4;
       border:1px solid rgba(239,68,68,.28);
     }
+    .status-badge.platform{
+      background:rgba(100,116,139,.15);
+      color:#94a3b8;
+      border:1px solid rgba(100,116,139,.28);
+    }
     .remediation-detail-card{
       padding:18px;
       min-height:720px;
@@ -1454,7 +1459,10 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                   <div className="finding-card-meta">{getDisplayPublisher(finding)} &nbsp; {getDisplayCategory(finding)}</div>
                   <div className="finding-card-footer">
                     <span>{finding.status || 'Unknown status'}</span>
-                    <span>{count} exposed device{count === 1 ? '' : 's'}</span>
+                    {getDisplayCategory(finding).includes('unsupported')
+                      ? <span className="status-badge platform">non-Windows</span>
+                      : <span>{count} exposed device{count === 1 ? '' : 's'}</span>
+                    }
                   </div>
                 </button>
               );
@@ -1483,7 +1491,17 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                 <button className={activeTab === 'plan' ? 'active' : ''} onClick={() => setActiveTab('plan')}>Remediation plan</button>
               </div>
 
-              <div className="detail-banner">The vulnerability data shown here is sourced from your connected Defender tenant and mapped into a remediation workflow.</div>
+              {getDisplayCategory(selectedFinding).includes('unsupported')
+                ? <div className="detail-banner warning" style={{marginTop:12}}>
+                    <strong>⚠️ Non-Windows platform — automated remediation not available</strong>
+                    <div style={{marginTop:4,fontSize:13}}>
+                      This CVE affects a non-Windows platform ({getDisplayProduct(selectedFinding)}).
+                      Intune WinGet deployment only supports Windows applications.
+                      Use the <strong>Remediation plan</strong> tab for platform-specific manual steps.
+                    </div>
+                  </div>
+                : <div className="detail-banner">The vulnerability data shown here is sourced from your connected Defender tenant and mapped into a remediation workflow.</div>
+              }
 
               {activeTab === 'details' && (
                 <section className="detail-section card-block">
@@ -1771,13 +1789,16 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                       )}
 
                       <div className="plan-actions-row">
-                        <button className="btn btn-secondary" onClick={handlePlan} disabled={planning}>{planning ? 'Refreshing…' : 'Refresh plan'}</button>
-                        {/* Webapp: show Execute when connected (webapp will attempt deep resolution on execute) */}
+                        {/* Don't show refresh/execute for unsupported platforms */}
+                        {planResult.plan.executor !== 'none' && (
+                          <button className="btn btn-secondary" onClick={handlePlan} disabled={planning}>{planning ? 'Refreshing…' : 'Refresh plan'}</button>
+                        )}
+                        {/* Webapp: show Execute when connected */}
                         {isWebappExecutor && planResult.plan.external?.connected && planResult.plan.executionMode !== 'guided-manual' && (
                           <button className="btn btn-primary" onClick={handleExecute} disabled={executing}>{executing ? 'Executing…' : 'Execute remediation'}</button>
                         )}
-                        {/* Native executors: use autoRemediate + executionMode guards */}
-                        {!isWebappExecutor && planResult.plan.autoRemediate !== false && planResult.plan.executionMode !== 'guided-manual' && (
+                        {/* Native executors */}
+                        {!isWebappExecutor && planResult.plan.autoRemediate !== false && planResult.plan.executionMode !== 'guided-manual' && planResult.plan.executor !== 'none' && (
                           <button className="btn btn-primary" onClick={handleExecute} disabled={executing}>{executing ? 'Executing…' : 'Execute remediation'}</button>
                         )}
                       </div>

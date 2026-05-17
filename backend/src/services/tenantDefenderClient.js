@@ -407,6 +407,34 @@ function resolveProductToWinget(productName, publisher) {
 }
 
 function inferCategory(raw) {
+  // ── Step 0: Non-Windows platform → unsupported-platform ──────────────────
+  // Detect Linux, macOS, iOS, Android CVEs before any other check.
+  // These cannot be remediated via Intune WinGet — flag them explicitly
+  // so the UI shows a clear "not supported on this platform" message.
+  const _product0 = String(raw?.productName || raw?.name || '').replace(/_/g, ' ').toLowerCase();
+  const _publisher0 = String(raw?.vendor || raw?.publisher || '').replace(/_/g, ' ').toLowerCase();
+
+  const LINUX_PUBLISHERS = ['canonical', 'debian', 'red hat', 'redhat', 'suse', 'novell', 'centos', 'fedora project', 'alpine linux'];
+  const APPLE_PUBLISHERS = ['apple inc', 'apple'];
+
+  if (LINUX_PUBLISHERS.some((p) => _publisher0.includes(p))) return 'unsupported-platform';
+  if (APPLE_PUBLISHERS.some((p) => _publisher0 === p || _publisher0.startsWith(p + ' '))) return 'unsupported-platform';
+
+  const NON_WINDOWS_PRODUCT_PATTERNS = [
+    // Linux distros / packages
+    /\bubuntu\b/, /\bdebian\b/, /\brhel\b/, /\bcentos\b/, /\bfedora\b/,
+    /\balpine linux\b/, /\bopensuse\b/, /\barch linux\b/,
+    /\blinux kernel\b/, /\bglibc\b/, /\bmusl\b/,
+    // macOS
+    /\bmacos\b/, /\bos x\b/, /\bxcode\b/,
+    // iOS / iPadOS
+    /\bon ios\b/, /\bfor ios\b/, /\bios\b.*\bapp\b/, /\biphone\b/, /\bipad\b/, /\bipados\b/,
+    // Android
+    /\bandroid\b/,
+  ];
+
+  if (NON_WINDOWS_PRODUCT_PATTERNS.some((p) => p.test(_product0))) return 'unsupported-platform';
+
   // ── Core rule ─────────────────────────────────────────────────────────────
   // 'windows-update' is decided EXCLUSIVELY from the product name + publisher.
   // The description/recommendation is NEVER used for this decision because

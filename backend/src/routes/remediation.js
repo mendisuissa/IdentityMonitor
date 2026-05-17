@@ -109,6 +109,70 @@ router.post('/plan', async (req, res) => {
     const enrichedFinding = enrichFinding(finding);
     const classification = enrichedFinding.classification || classifyFinding(enrichedFinding);
 
+    if (classification.type === 'unsupported-platform') {
+      const platformHint = (() => {
+        const p = String(enrichedFinding.productName || '').toLowerCase();
+        const pub = String(enrichedFinding.publisher || '').toLowerCase();
+        if (/ubuntu|debian|rhel|centos|fedora|alpine|opensuse|linux/.test(p) || ['canonical','debian','red hat','redhat'].some(x => pub.includes(x))) return 'Linux';
+        if (/macos|os x|xcode/.test(p) || pub.includes('apple')) return 'macOS';
+        if (/iphone|ipad|ipados|on ios|for ios/.test(p)) return 'iOS';
+        if (/android/.test(p)) return 'Android';
+        return 'non-Windows';
+      })();
+      return res.json({
+        ok: true, tenantId, classification, finding: enrichedFinding,
+        plan: {
+          executor: 'none',
+          supported: false,
+          remediationType: 'manual-review',
+          autoRemediate: false,
+          app: null, candidates: [], checkedSources: [],
+          executionMode: 'guided-manual',
+          message: `This CVE affects a ${platformHint} platform. Automated remediation via Intune WinGet is only available for Windows applications. Remediate through the platform's native package manager or app store.`,
+          statusCard: {
+            code: 'unsupported-platform',
+            label: `${platformHint} · not supported`,
+            tone: 'warning',
+            message: `${platformHint} platform — Intune WinGet remediation does not apply. Use the platform's native update mechanism.`
+          },
+          executionPath: {
+            classification: 'unsupported-platform',
+            family: 'non-windows',
+            executor: 'none',
+            status: 'manual',
+            route: `${platformHint} → Manual / native package manager`
+          },
+          manualSteps: platformHint === 'Linux'
+            ? [
+                'Identify all affected Linux devices using the Exposed devices tab.',
+                'Run the appropriate package manager: `apt-get upgrade <package>` (Debian/Ubuntu) or `yum update <package>` (RHEL/CentOS).',
+                'Verify remediation by re-running a Defender scan or checking the package version.',
+                'Document the action taken and mark the case as resolved.'
+              ]
+            : platformHint === 'macOS'
+            ? [
+                'Identify all affected macOS devices.',
+                'Deploy the update via Jamf, Mosyle, or the relevant MDM solution for macOS.',
+                'Alternatively, use `brew upgrade <package>` if Homebrew is centrally managed.',
+                'Verify remediation and document.'
+              ]
+            : (platformHint === 'iOS' || platformHint === 'Android')
+            ? [
+                'Identify all affected mobile devices.',
+                'Ensure the app is set to auto-update via the App Store / Google Play, or push the update via Intune MAM or Apple Business Manager.',
+                'Verify device compliance status in Intune.',
+                'Document the action taken.'
+              ]
+            : [
+                'Identify all affected devices using the Exposed devices tab.',
+                'Apply the vendor-recommended update or patch on each affected device.',
+                'Verify remediation by re-running a Defender scan.',
+                'Document the action taken and mark the case as resolved.'
+              ],
+        }
+      });
+    }
+
     if (classification.type === 'application') {
       // Plan step: health-check only — fast (~1s). Full WinGet resolve happens during Execute.
       // Doing a full resolve here causes 30s+ timeouts due to deep package lookups.
