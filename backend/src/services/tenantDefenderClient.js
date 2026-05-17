@@ -407,7 +407,66 @@ function resolveProductToWinget(productName, publisher) {
 }
 
 function inferCategory(raw) {
-  const text = [
+  // ── Step 1: product-name check (highest priority) ────────────────────────
+  // Use ONLY the product name + publisher to classify first.
+  // This prevents description text (e.g. "Microsoft Edge also ships this fix")
+  // from overriding the actual vulnerable product's category.
+  const productName = String(raw?.productName || '').replace(/_/g, ' ').toLowerCase();
+  const publisherName = String(raw?.vendor || raw?.publisher || '').replace(/_/g, ' ').toLowerCase();
+
+  // Known third-party applications → always "application" (WinGet / Intune deploy)
+  // Check before any Windows/Edge pattern so that "Google Chrome" wins even when
+  // the description mentions "Microsoft Edge (Chromium-based) also addresses this".
+  const THIRD_PARTY_APP_PATTERNS = [
+    /\bgoogle chrome\b/,
+    /\bmozilla firefox\b/,
+    /\bfirefox\b/,
+    /\bchromium\b/,
+    /\bzoom\b/,
+    /\bslack\b/,
+    /\bdiscord\b/,
+    /\bvlc\b/,
+    /\bwinrar\b/,
+    /\b7-?zip\b/,
+    /\bnotepad\+\+/,
+    /\bputty\b/,
+    /\bwireshark\b/,
+    /\btelegram\b/,
+    /\bsignal\b/,
+    /\bopera\b/,
+    /\bbrave\b/,
+    /\blibreoffice\b/,
+    /\bgimp\b/,
+    /\bobs studio\b/,
+    /\bhandbrake\b/,
+    /\bfilezilla\b/,
+    /\bbitwarden\b/,
+    /\bkeepass\b/,
+    /\bmalwarebytes\b/,
+    /\bdocker\b/,
+    /\bvirtualbox\b/,
+    /\bpostman\b/,
+    /\binsomnia\b/,
+  ];
+
+  if (THIRD_PARTY_APP_PATTERNS.some((p) => p.test(productName))) {
+    return 'application';
+  }
+
+  // Known Microsoft Windows OS / built-in product names → windows-update
+  if (/(^windows |windows 10|windows 11|windows server|microsoft windows|dwm core|win32k|ntfs|hyper-v|remote desktop|net logon)/i.test(productName)) {
+    return 'windows-update';
+  }
+  if (/^microsoft edge/i.test(productName) || /\bmsedge\b/i.test(productName)) {
+    return 'windows-update';
+  }
+  if (/^microsoft (word|excel|outlook|powerpoint|access|publisher|onenote|visio|project|office)/i.test(productName)) {
+    return 'windows-update';
+  }
+
+  // ── Step 2: full-text scan (description / recommendation / name) ─────────
+  // Only used when product name alone is not conclusive.
+  const fullText = [
     raw?.name,
     raw?.description,
     raw?.productName,
@@ -417,34 +476,32 @@ function inferCategory(raw) {
   ]
     .filter(Boolean)
     .join(' ')
-    .replace(/_/g, ' ') // Defender uses snake_case product names (e.g. windows_server_2025 → windows server 2025)
+    .replace(/_/g, ' ')
     .toLowerCase();
 
-  if (!text) return 'unknown';
+  if (!fullText) return 'unknown';
 
-  // Microsoft OS and built-in components → Windows Update (not WinGet)
-  if (/(windows 10|windows 11|windows server|kb\d+|cumulative update|security update|feature update|patch tuesday|microsoft windows)/i.test(text)) {
+  // Windows OS signals in name/description — but ONLY when no third-party product matched above
+  if (/(windows 10|windows 11|windows server|kb\d+|cumulative update|patch tuesday|microsoft windows)/i.test(fullText)) {
     return 'windows-update';
   }
-  // Microsoft Edge and Internet Explorer → Windows Update / Edge Update channel
-  if (/\bmicrosoft edge\b|\bmsedge\b|\bedge browser\b|\binternet explorer\b/i.test(text)) {
+  // Edge/IE signals — only when the product name itself is not a known third-party browser
+  if (/\bmicrosoft edge\b|\bmsedge\b|\bedge browser\b|\binternet explorer\b/i.test(fullText)) {
     return 'windows-update';
   }
-  // Microsoft Office suite components → Windows Update / Microsoft Update
-  if (/\bmicrosoft (word|excel|outlook|powerpoint|access|publisher|onenote|visio|project)\b/i.test(text)) {
+  if (/\bmicrosoft (word|excel|outlook|powerpoint|access|publisher|onenote|visio|project)\b/i.test(fullText)) {
     return 'windows-update';
   }
-  // .NET Framework / Visual C++ Redistributable → Windows Update
-  if (/\b(\.net framework|dotnet framework|visual c\+\+ (20\d{2}|redistributable)|vcredist)\b/i.test(text)) {
+  if (/\b(\.net framework|dotnet framework|visual c\+\+ (20\d{2}|redistributable)|vcredist)\b/i.test(fullText)) {
     return 'windows-update';
   }
-  if (/(intune|configuration profile|compliance policy|device management|endpoint manager|mobile device management)/i.test(text)) {
+  if (/(intune|configuration profile|compliance policy|device management|endpoint manager|mobile device management)/i.test(fullText)) {
     return 'intune-policy';
   }
-  if (/(powershell|script|remediation script|proactive remediation|bash|shell script)/i.test(text)) {
+  if (/(powershell|script|remediation script|proactive remediation|bash|shell script)/i.test(fullText)) {
     return 'script';
   }
-  if (/(identity|authentication|credential|privilege|entra|azure ad|active directory|mfa)/i.test(text)) {
+  if (/(identity|authentication|credential|privilege|entra|azure ad|active directory|mfa)/i.test(fullText)) {
     return 'identity';
   }
   return 'application';
