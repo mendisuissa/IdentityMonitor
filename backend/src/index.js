@@ -62,7 +62,7 @@ if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
 
 const SESSION_TTL_SEC = 24 * 60 * 60; // 24 hours
 app.use(session({
-  store: new FileStore({ path: sessionDir, ttl: SESSION_TTL_SEC, retries: 1, logFn: () => {} }),
+  store: new FileStore({ path: sessionDir, ttl: SESSION_TTL_SEC, retries: 5, retrySleepMs: 200, logFn: () => {} }),
   secret: process.env.SESSION_SECRET || 'priv-monitor-dev-secret',
   resave: false,
   saveUninitialized: false,

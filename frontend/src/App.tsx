@@ -398,6 +398,8 @@ function AppShell() {
             <Route path="/privacy" element={<PrivacyPage />} />
             {/* Hidden super-admin route — not in sidebar, server enforces email allowlist */}
             <Route path="/superadmin" element={<SuperAdminPage />} />
+            {/* Alias — navigating to /dashboard should render the Dashboard */}
+            <Route path="/dashboard" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>
