@@ -75,6 +75,20 @@ app.use(session({
   }
 }));
 
+// ── Global request timeout — abort any request that hasn't responded in 30s ──
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/') || req.path === '/health') {
+    const timer = setTimeout(() => {
+      if (!res.headersSent) {
+        res.status(503).json({ error: 'Request timeout', path: req.path });
+      }
+    }, 30000);
+    res.on('finish', () => clearTimeout(timer));
+    res.on('close',  () => clearTimeout(timer));
+  }
+  next();
+});
+
 // API Routes
 app.use('/api/auth',    authRoutes);
 app.use('/api/users',   usersRoutes);
@@ -169,6 +183,9 @@ app.get('/api/posture', (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// /health alias — must come BEFORE static files so SPA catch-all doesn't intercept it
+app.get('/health', (req, res) => res.redirect(307, '/api/health'));
 
 // Serve React frontend
 const publicDir = path.join(__dirname, '..', 'public');

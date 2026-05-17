@@ -265,7 +265,8 @@ router.get('/ops-dashboard', requirePermission('ops.view'), (req, res) => {
 router.get('/ops/orchestration', requirePermission('ops.view'), (req, res) => {
   const tenantId = requireAuth(req, res);
   if (!tenantId) return;
-  automationService.runAutomationSweep();
+  // Run sweep asynchronously — do NOT block the response
+  setImmediate(() => { try { automationService.runAutomationSweep(); } catch(e) {} });
   res.json(automationService.getMultiTenantOps(tenantId));
 });
 

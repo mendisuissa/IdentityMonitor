@@ -39,17 +39,25 @@ async function getOrRefreshToken(req) {
     ? `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`
     : 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
   try {
-    const resp = await fetch(tokenEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id:     process.env.CLIENT_ID,
-        client_secret: process.env.CLIENT_SECRET,
-        refresh_token: tokens.refreshToken,
-        grant_type:    'refresh_token',
-        scope:         _CA_SCOPES
-      }).toString()
-    });
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 10000);
+    let resp;
+    try {
+      resp = await fetch(tokenEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id:     process.env.CLIENT_ID,
+          client_secret: process.env.CLIENT_SECRET,
+          refresh_token: tokens.refreshToken,
+          grant_type:    'refresh_token',
+          scope:         _CA_SCOPES
+        }).toString(),
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(fetchTimeout);
+    }
     const data = await resp.json();
     if (data.error || !data.access_token) {
       console.warn('[Identity] Token refresh failed:', data.error_description || data.error);
