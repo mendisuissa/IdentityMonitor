@@ -180,8 +180,8 @@
   <h1>Identity<span>Monitor</span></h1>
   <p class="subtitle">Complete User Guide — Security Operations Platform</p>
   <div class="meta">
-    <span>📅 Updated: March 2026</span>
-    <span>🔖 Version 2.0</span>
+    <span>📅 Updated: May 2026</span>
+    <span>🔖 Version 2.1</span>
     <span>🌐 Modern Endpoint</span>
   </div>
 </div>
@@ -198,10 +198,11 @@
     <a href="#remediation"  class="toc-item"><span class="icon">🛠️</span> Remediation<span class="num">06</span></a>
     <a href="#reports"      class="toc-item"><span class="icon">📊</span> Reports<span class="num">07</span></a>
     <a href="#audit"        class="toc-item"><span class="icon">📜</span> Audit Center<span class="num">08</span></a>
-    <a href="#pim"          class="toc-item"><span class="icon">🔑</span> PIM Analysis<span class="num">09</span></a>
-    <a href="#ops"          class="toc-item"><span class="icon">🏢</span> Tenant Ops<span class="num">10</span></a>
-    <a href="#msp"          class="toc-item"><span class="icon">🌐</span> MSP Fleet<span class="num">11</span></a>
+    <a href="#ops"          class="toc-item"><span class="icon">🏢</span> Tenant Ops<span class="num">09</span></a>
+    <a href="#msp"          class="toc-item"><span class="icon">🌐</span> MSP Fleet<span class="num">10</span></a>
+    <a href="#identity"     class="toc-item"><span class="icon">🔒</span> Cond. Access<span class="num">11</span></a>
     <a href="#settings"     class="toc-item"><span class="icon">⚙️</span> Settings<span class="num">12</span></a>
+    <a href="#billing"      class="toc-item"><span class="icon">💳</span> Billing<span class="num">13</span></a>
   </div>
 </div>
 
@@ -600,56 +601,7 @@
   </ul>
 </div>
 
-<!-- ═══════════════════════════════ 09 PIM ANALYSIS ═════════════════════ -->
-<div id="pim" class="section">
-  <div class="section-header">
-    <div class="section-icon">🔑</div>
-    <div>
-      <h2>PIM Security Analysis</h2>
-      <p>Privileged Identity Management analysis — detect Permanent Admins, missing JIT, over-privileged accounts</p>
-    </div>
-    <span class="badge badge-security">Security</span>
-  </div>
-
-  <div class="screenshot-box">
-    <div class="screenshot-bar">
-      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-      <div class="url-bar">identitymonitor.modernendpoint.tech/pim</div>
-    </div>
-    <img class="screenshot-img" src="https://mendisuissa.github.io/IdentityMonitor/screenshots/pim.png" alt="PIM Analysis"
-      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-    <div class="screenshot-placeholder" style="display:none">🔑 PIM Analysis</div>
-  </div>
-
-  <div class="features-grid">
-    <div class="feature-card">
-      <h4>🎓 PIM Score</h4>
-      <p>A–F grade based on the organisation's PIM posture. D = Poor. Composed of: Permanent Roles, JIT Eligible assignments, Global Admin count, PIM Enabled status.</p>
-    </div>
-    <div class="feature-card">
-      <h4>🚨 Findings</h4>
-      <p>Specific findings with severity: "PIM Just-in-Time is not configured", "2 permanent Global Administrator assignments" — each with remediation instructions.</p>
-    </div>
-    <div class="feature-card">
-      <h4>💡 Recommendations</h4>
-      <p>Actionable recommendations with exact paths: "Enable PIM → Entra Admin Center → Identity Governance → Privileged Identity Management → Discover". Labelled Quick Win or Some effort.</p>
-    </div>
-    <div class="feature-card">
-      <h4>🛡️ Risk Labels</h4>
-      <p>Each recommendation is tagged CRITICAL / HIGH + RISK, with a clear explanation of why it matters ("JIT access eliminates 80%+ of insider threat").</p>
-    </div>
-  </div>
-
-  <ul class="actions-list">
-    <li><span class="action-icon">📋</span><div><strong>Findings</strong> — list of existing issues, each with a Remediation Path button</div></li>
-    <li><span class="action-icon">💡</span><div><strong>Recommendations</strong> — prioritised remediation steps with Quick Win marking</div></li>
-    <li><span class="action-icon">🔄</span><div><strong>Last analyzed</strong> — shows when the last analysis ran + Refresh button</div></li>
-  </ul>
-
-  <div class="warn-box">⚠️ <span><strong>PIM Score D (Poor)</strong> = all Admin assignments are Permanent with no JIT. An attacker who gains access has permanent privileges with no time limit. Enable Entra ID P2 and configure Eligible assignments.</span></div>
-</div>
-
-<!-- ═══════════════════════════════ 10 TENANT OPS ═══════════════════════ -->
+<!-- ═══════════════════════════════ 09 TENANT OPS ═══════════════════════ -->
 <div id="ops" class="section">
   <div class="section-header">
     <div class="section-icon">🏢</div>
@@ -698,7 +650,7 @@
   </ul>
 </div>
 
-<!-- ═══════════════════════════════ 11 MSP FLEET ════════════════════════ -->
+<!-- ═══════════════════════════════ 10 MSP FLEET ════════════════════════ -->
 <div id="msp" class="section">
   <div class="section-header">
     <div class="section-icon">🌐</div>
@@ -745,6 +697,57 @@
   </ul>
 
   <div class="tip-box">💡 <span>MSP Fleet is designed for Managed Service Providers managing multiple customers. Each customer connects once via Admin Consent and is then monitored automatically.</span></div>
+</div>
+
+<!-- ═══════════════════════════════ 11 COND. ACCESS ════════════════════════ -->
+<div id="identity" class="section">
+  <div class="section-header">
+    <div class="section-icon">🔒</div>
+    <div>
+      <h2>Conditional Access</h2>
+      <p>Manage CA policies, block IPs, enforce MFA, and view named locations</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/identity</div>
+    </div>
+    <img class="screenshot-img" src="https://mendisuissa.github.io/IdentityMonitor/screenshots/identity.png" alt="Conditional Access"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">🔒 Conditional Access</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>📋 Policy List</h4>
+      <p>All CA policies fetched live from Microsoft Graph. Displays policy name, state (Enabled / Disabled / Report Only), conditions summary, last modified date, and Enable / Delete actions.</p>
+    </div>
+    <div class="feature-card">
+      <h4>⚡ Quick Actions</h4>
+      <p>Pre-built CA templates: require MFA for all admins, block legacy authentication, enforce compliant devices — one-click deployment.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📍 Named Locations</h4>
+      <p>View and manage trusted IP ranges and country-based named locations used in CA conditions — without leaving the portal.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔑 Permission Requirement</h4>
+      <p>Requires <strong>Policy.ReadWrite.ConditionalAccess</strong> Graph permission. A banner reminds you if it is missing — go to Settings → re-grant admin consent.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">✅</span><div><strong>Enable</strong> — switches a Disabled or Report-Only policy to Enabled</div></li>
+    <li><span class="action-icon">🗑️</span><div><strong>Delete</strong> — permanently removes a CA policy from Entra ID</div></li>
+    <li><span class="action-icon">🔄</span><div><strong>Refresh</strong> — reloads the policy list from Microsoft Graph</div></li>
+    <li><span class="action-icon">📍</span><div><strong>Named Locations tab</strong> — switch to view and manage trusted IP ranges</div></li>
+    <li><span class="action-icon">⚡</span><div><strong>Quick Actions tab</strong> — deploy common CA templates in one click</div></li>
+  </ul>
+
+  <div class="warn-box">⚠️ <span>Enabling or deleting CA policies immediately affects authentication for all users in the tenant. Test with <strong>Report Only</strong> mode first before switching to Enabled.</span></div>
 </div>
 
 <!-- ═══════════════════════════════ 12 SETTINGS ═════════════════════════ -->
@@ -820,15 +823,63 @@
   </ul>
 </div>
 
+<!-- ═══════════════════════════════ 13 BILLING ══════════════════════════ -->
+<div id="billing" class="section">
+  <div class="section-header">
+    <div class="section-icon">💳</div>
+    <div>
+      <h2>Billing &amp; Plan</h2>
+      <p>Manage your subscription, view plan features and access the Gumroad billing portal</p>
+    </div>
+    <span class="badge badge-mgmt">Management</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/billing</div>
+    </div>
+    <img class="screenshot-img" src="https://mendisuissa.github.io/IdentityMonitor/screenshots/billing.png" alt="Billing &amp; Plan"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">💳 Billing</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>📊 Current Plan</h4>
+      <p>Shows your active plan tier (Free / Pro), subscription status (Active / Trial / Expired) and the date the plan became active.</p>
+    </div>
+    <div class="feature-card">
+      <h4>✅ Plan Features</h4>
+      <p>A full checklist of features included in your plan — so you always know exactly what is available on your tier and what requires an upgrade.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔗 Gumroad Integration</h4>
+      <p>Billing is managed via Gumroad. The "Manage on Gumroad ↗" button takes you directly to your subscription dashboard for plan changes, cancellations and receipts.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔔 Automatic Webhook Sync</h4>
+      <p>Plan status updates automatically via Gumroad Ping webhooks — no manual action needed when upgrading or after payment. Changes reflect within seconds.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔗</span><div><strong>Manage on Gumroad ↗</strong> — opens your Gumroad dashboard to upgrade, downgrade or cancel</div></li>
+    <li><span class="action-icon">❌</span><div><strong>Cancel anytime</strong> — done through Gumroad; plan remains active until the current billing period ends</div></li>
+  </ul>
+
+  <div class="tip-box">💡 <span>The <strong>Pro</strong> plan unlocks all features: MSP Fleet, auto-remediation, SIEM integration, Conditional Access management and unlimited alert retention. The <strong>Free</strong> tier provides core privileged identity monitoring at no cost.</span></div>
+</div>
+
 <!-- ═══════════════════════════════ FOOTER ══════════════════════════════ -->
 <div style="background:#161b22; border-top:1px solid #30363d; padding:40px 60px; text-align:center; color:#8b949e; font-size:13px;">
   <div style="font-size:32px; margin-bottom:12px;">🛡️</div>
   <div style="font-size:16px; font-weight:700; color:#e6edf3; margin-bottom:8px;">IdentityMonitor — Modern Endpoint</div>
-  <div>This guide covers all 12 pages of the platform. For additional support, contact the Modern Endpoint team.</div>
+  <div>This guide covers all 13 pages of the platform. For additional support, contact the Modern Endpoint team.</div>
   <div style="margin-top:16px; display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
     <a href="https://identitymonitor.modernendpoint.tech" style="color:#6366f1; text-decoration:none;">🌐 identitymonitor.modernendpoint.tech</a>
     <span>|</span>
-    <span>📅 March 2026</span>
+    <span>📅 May 2026</span>
   </div>
 </div>
 

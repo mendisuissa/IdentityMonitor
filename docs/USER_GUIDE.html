@@ -195,8 +195,8 @@
   <h1>Identity<span>Monitor</span></h1>
   <p class="subtitle">מדריך משתמש מלא — Security Operations Platform</p>
   <div class="meta">
-    <span>📅 עודכן: מרץ 2026</span>
-    <span>🔖 גרסה 2.0</span>
+    <span>📅 עודכן: מאי 2026</span>
+    <span>🔖 גרסה 2.1</span>
     <span>🌐 Modern Endpoint</span>
   </div>
 </div>
@@ -213,10 +213,11 @@
     <a href="#remediation" class="toc-item"><span class="icon">🛠️</span> Remediation<span class="num">06</span></a>
     <a href="#reports" class="toc-item"><span class="icon">📊</span> Reports<span class="num">07</span></a>
     <a href="#audit" class="toc-item"><span class="icon">📜</span> Audit Center<span class="num">08</span></a>
-    <a href="#pim" class="toc-item"><span class="icon">🔑</span> PIM Analysis<span class="num">09</span></a>
-    <a href="#ops" class="toc-item"><span class="icon">🏢</span> Tenant Ops<span class="num">10</span></a>
-    <a href="#msp" class="toc-item"><span class="icon">🌐</span> MSP Fleet<span class="num">11</span></a>
+    <a href="#ops" class="toc-item"><span class="icon">🏢</span> Tenant Ops<span class="num">09</span></a>
+    <a href="#msp" class="toc-item"><span class="icon">🌐</span> MSP Fleet<span class="num">10</span></a>
+    <a href="#identity" class="toc-item"><span class="icon">🔒</span> Cond. Access<span class="num">11</span></a>
     <a href="#settings" class="toc-item"><span class="icon">⚙️</span> Settings<span class="num">12</span></a>
+    <a href="#billing" class="toc-item"><span class="icon">💳</span> Billing<span class="num">13</span></a>
   </div>
 </div>
 
@@ -615,56 +616,7 @@
   </ul>
 </div>
 
-<!-- ═══════════════════════════════ 09 PIM ANALYSIS ══════════════════════ -->
-<div id="pim" class="section">
-  <div class="section-header">
-    <div class="section-icon">🔑</div>
-    <div>
-      <h2>PIM Security Analysis</h2>
-      <p>ניתוח Privileged Identity Management — זיהוי Permanent Admins, חסר JIT, הרשאות יתר</p>
-    </div>
-    <span class="badge badge-security">Security</span>
-  </div>
-
-  <div class="screenshot-box">
-    <div class="screenshot-bar">
-      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-      <div class="url-bar">identitymonitor.modernendpoint.tech/pim</div>
-    </div>
-    <img class="screenshot-img" src="https://mendisuissa.github.io/IdentityMonitor/screenshots/pim.png" alt="PIM Analysis"
-      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-    <div class="screenshot-placeholder" style="display:none">🔑 PIM Analysis</div>
-  </div>
-
-  <div class="features-grid">
-    <div class="feature-card">
-      <h4>🎓 PIM Score</h4>
-      <p>ציון A–F לפי מצב ה-PIM בארגון. D = Poor. מורכב מ: Permanent Roles, JIT Eligible, Global Admins, PIM Enabled status.</p>
-    </div>
-    <div class="feature-card">
-      <h4>🚨 Findings</h4>
-      <p>ממצאים ספציפיים עם חומרה: "PIM Just-in-Time is not configured", "2 permanent Global Administrator assignments" — עם הוראות תיקון.</p>
-    </div>
-    <div class="feature-card">
-      <h4>💡 Recommendations</h4>
-      <p>המלצות עם Path מדויק: "Enable PIM → Entra Admin Center → Identity Governance → Privileged Identity Management → Discover". כולל Quick Win / Some effort labeling.</p>
-    </div>
-    <div class="feature-card">
-      <h4>🛡️ Risk Labels</h4>
-      <p>כל המלצה מסומנת: CRITICAL/HIGH + RISK. כולל הסבר מדויק למה זה סיכון ("JIT access eliminates 80%+ of insider threat").</p>
-    </div>
-  </div>
-
-  <ul class="actions-list">
-    <li><span class="action-icon">📋</span><div><strong>Findings</strong> — רשימת בעיות קיימות עם לחצן Remediation Path לכל אחת</div></li>
-    <li><span class="action-icon">💡</span><div><strong>Recommendations</strong> — צעדי תיקון מדורגים לפי עדיפות עם Quick Win marking</div></li>
-    <li><span class="action-icon">🔄</span><div><strong>Last analyzed</strong> — הצגת מתי בוצע הניתוח האחרון + Refresh</div></li>
-  </ul>
-
-  <div class="warn-box">⚠️ <span><strong>PIM Score D (Poor)</strong> = כל ה-Admin assignments הם Permanent ללא JIT. תוקף שמשיג גישה → יש לו הרשאות קבועות ללא חלון זמן. יש להפעיל Entra ID P2 ולהגדיר Eligible assignments.</span></div>
-</div>
-
-<!-- ═══════════════════════════════ 10 TENANT OPS ═══════════════════════ -->
+<!-- ═══════════════════════════════ 09 TENANT OPS ═══════════════════════ -->
 <div id="ops" class="section">
   <div class="section-header">
     <div class="section-icon">🏢</div>
@@ -713,7 +665,7 @@
   </ul>
 </div>
 
-<!-- ═══════════════════════════════ 11 MSP FLEET ═════════════════════════ -->
+<!-- ═══════════════════════════════ 10 MSP FLEET ═════════════════════════ -->
 <div id="msp" class="section">
   <div class="section-header">
     <div class="section-icon">🌐</div>
@@ -760,6 +712,57 @@
   </ul>
 
   <div class="tip-box">💡 <span>MSP Fleet מיועד ל-Managed Service Providers המנהלים מספר לקוחות. כל לקוח מתחבר פעם אחת דרך Admin Consent ואז מנוטר אוטומטית.</span></div>
+</div>
+
+<!-- ═══════════════════════════════ 11 COND. ACCESS ════════════════════════ -->
+<div id="identity" class="section">
+  <div class="section-header">
+    <div class="section-icon">🔒</div>
+    <div>
+      <h2>Conditional Access</h2>
+      <p>ניהול מדיניות CA, חסימת IPs, אכיפת MFA וצפייה ב-Named Locations</p>
+    </div>
+    <span class="badge badge-security">Security</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/identity</div>
+    </div>
+    <img class="screenshot-img" src="https://mendisuissa.github.io/IdentityMonitor/screenshots/identity.png" alt="Conditional Access"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">🔒 Conditional Access</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>📋 רשימת מדיניות</h4>
+      <p>כל מדיניות ה-CA נטענת בזמן אמת מ-Microsoft Graph. מציגה שם, סטטוס (Enabled / Disabled / Report Only), תנאים, תאריך עדכון אחרון ופעולות Enable / Delete.</p>
+    </div>
+    <div class="feature-card">
+      <h4>⚡ Quick Actions</h4>
+      <p>תבניות CA מוכנות לשימוש: חייב MFA לכל אדמינים, חסים Legacy Authentication, אכוף מכשירים תואמים — הפעלה בלחיצה אחת.</p>
+    </div>
+    <div class="feature-card">
+      <h4>📍 Named Locations</h4>
+      <p>צפייה וניהול של טווחי IP מהימנים ו-Named Locations לפי מדינה, המשמשים בתנאי ה-CA — ישירות מהפורטל.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔑 דרישת הרשאה</h4>
+      <p>נדרשת הרשאת Graph <strong>Policy.ReadWrite.ConditionalAccess</strong>. באנר מזכיר אם חסרה — עבור להגדרות ובקש Admin Consent מחדש.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">✅</span><div><strong>Enable</strong> — מעביר מדיניות Disabled/Report-Only לסטטוס Enabled</div></li>
+    <li><span class="action-icon">🗑️</span><div><strong>Delete</strong> — מוחק לצמיתות מדיניות CA מ-Entra ID</div></li>
+    <li><span class="action-icon">🔄</span><div><strong>Refresh</strong> — טעינה מחדש של רשימת המדיניות מ-Microsoft Graph</div></li>
+    <li><span class="action-icon">📍</span><div><strong>Named Locations tab</strong> — מעבר לצפייה וניהול של טווחי IP מהימנים</div></li>
+    <li><span class="action-icon">⚡</span><div><strong>Quick Actions tab</strong> — פריסת תבניות CA נפוצות בלחיצה אחת</div></li>
+  </ul>
+
+  <div class="warn-box">⚠️ <span>הפעלה או מחיקה של מדיניות CA משפיעה <strong>מיידית</strong> על האותנטיקציה של כל המשתמשים בארגון. מומלץ לבדוק קודם עם מצב <strong>Report Only</strong> לפני מעבר ל-Enabled.</span></div>
 </div>
 
 <!-- ═══════════════════════════════ 12 SETTINGS ══════════════════════════ -->
@@ -835,15 +838,63 @@
   </ul>
 </div>
 
+<!-- ═══════════════════════════════ 13 BILLING ══════════════════════════ -->
+<div id="billing" class="section">
+  <div class="section-header">
+    <div class="section-icon">💳</div>
+    <div>
+      <h2>Billing &amp; Plan</h2>
+      <p>ניהול המנוי, צפייה בתכונות התוכנית וגישה לפורטל החיוב ב-Gumroad</p>
+    </div>
+    <span class="badge badge-mgmt">Management</span>
+  </div>
+
+  <div class="screenshot-box">
+    <div class="screenshot-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">identitymonitor.modernendpoint.tech/billing</div>
+    </div>
+    <img class="screenshot-img" src="https://mendisuissa.github.io/IdentityMonitor/screenshots/billing.png" alt="Billing &amp; Plan"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <div class="screenshot-placeholder" style="display:none">💳 Billing</div>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h4>📊 תוכנית נוכחית</h4>
+      <p>מציג רמת תוכנית פעילה (Free / Pro), סטטוס מנוי (Active / Trial / Expired) ותאריך תחילת התוכנית.</p>
+    </div>
+    <div class="feature-card">
+      <h4>✅ תכונות התוכנית</h4>
+      <p>רשימה מלאה של התכונות הכלולות ברמת התוכנית שלך — תמיד תדע בדיוק מה זמין ומה מחייב שדרוג.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔗 אינטגרציה עם Gumroad</h4>
+      <p>החיוב מנוהל דרך Gumroad. כפתור "Manage on Gumroad ↗" מוביל ישירות לדשבורד המנוי לשינויים, ביטול וקבלות.</p>
+    </div>
+    <div class="feature-card">
+      <h4>🔔 סנכרון אוטומטי</h4>
+      <p>סטטוס התוכנית מתעדכן אוטומטית דרך Gumroad Ping Webhooks — אין צורך בפעולה ידנית לאחר תשלום או שדרוג.</p>
+    </div>
+  </div>
+
+  <ul class="actions-list">
+    <li><span class="action-icon">🔗</span><div><strong>Manage on Gumroad ↗</strong> — פותח את דשבורד Gumroad לשדרוג, שינוי או ביטול המנוי</div></li>
+    <li><span class="action-icon">❌</span><div><strong>ביטול בכל עת</strong> — נעשה דרך Gumroad; התוכנית נשארת פעילה עד סוף תקופת החיוב</div></li>
+  </ul>
+
+  <div class="tip-box">💡 <span>תוכנית <strong>Pro</strong> פותחת את כל התכונות: MSP Fleet, Auto-Remediation, אינטגרציית SIEM, ניהול Conditional Access ו-Retention ללא הגבלה. תוכנית <strong>Free</strong> מספקת ניטור זהויות מועדפות ללא עלות.</span></div>
+</div>
+
 <!-- ═══════════════════════════════ FOOTER ══════════════════════════════ -->
 <div style="background:#161b22; border-top:1px solid #30363d; padding:40px 60px; text-align:center; color:#8b949e; font-size:13px;">
   <div style="font-size:32px; margin-bottom:12px;">🛡️</div>
   <div style="font-size:16px; font-weight:700; color:#e6edf3; margin-bottom:8px;">IdentityMonitor — Modern Endpoint</div>
-  <div>מדריך זה מכסה את כל 12 הדפים של הפלטפורמה. לתמיכה נוספת — פנה לצוות Modern Endpoint.</div>
+  <div>מדריך זה מכסה את כל 13 הדפים של הפלטפורמה. לתמיכה נוספת — פנה לצוות Modern Endpoint.</div>
   <div style="margin-top:16px; display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
     <a href="https://identitymonitor.modernendpoint.tech" style="color:#6366f1; text-decoration:none;">🌐 identitymonitor.modernendpoint.tech</a>
     <span>|</span>
-    <span>📅 מרץ 2026</span>
+    <span>📅 מאי 2026</span>
   </div>
 </div>
 
