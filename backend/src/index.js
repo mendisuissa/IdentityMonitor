@@ -6,6 +6,7 @@ const http    = require('http');
 const cors    = require('cors');
 const session = require('express-session');
 const FileStore = require('session-file-store')(session);
+const AzureTableSessionStore = require('./services/azureTableSessionStore');
 const cron    = require('node-cron');
 const path    = require('path');
 const fs      = require('fs');
@@ -62,7 +63,11 @@ if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
 
 const SESSION_TTL_SEC = 24 * 60 * 60; // 24 hours
 app.use(session({
-  store: new FileStore({ path: sessionDir, ttl: SESSION_TTL_SEC, retries: 5, retrySleepMs: 200, logFn: () => {} }),
+  // Use Azure Table Storage for sessions in production (fast, persistent across restarts).
+  // Fall back to FileStore in dev when Azure Tables is not configured.
+  store: process.env.AZURE_STORAGE_CONNECTION_STRING
+    ? new AzureTableSessionStore({ ttl: SESSION_TTL_SEC })
+    : new FileStore({ path: sessionDir, ttl: SESSION_TTL_SEC, retries: 1, logFn: () => {} }),
   secret: process.env.SESSION_SECRET || 'priv-monitor-dev-secret',
   resave: false,
   saveUninitialized: false,
