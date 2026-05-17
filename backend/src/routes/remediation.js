@@ -13,6 +13,9 @@ const {
   listTenantDeviceScripts
 } = require('../services/nativeRemediationExecutor');
 const { BUILT_IN_POLICY_TEMPLATES, getRecommendedPolicyTemplates } = require('../services/builtInPolicyTemplates');
+const { saveRemediationRecord, getRemediationHistory, getRemediationStats } = require('../services/remediationHistoryStore');
+const { sendRemediationNotification } = require('../services/emailService');
+const autoRemediationService = require('../services/autoRemediationService');
 
 const router = express.Router();
 
@@ -265,6 +268,26 @@ router.post('/execute', async (req, res) => {
     const enrichedFinding = enrichFinding(finding);
     const classification = enrichedFinding.classification || classifyFinding(enrichedFinding);
 
+    const cveId       = enrichedFinding.cveId || enrichedFinding.id || finding.cveId || finding.id || '';
+    const productName = enrichedFinding.productName || enrichedFinding.displayProductName || '';
+    const category    = classification.type || 'unknown';
+    const severity    = enrichedFinding.severity || finding.severity || '';
+
+    /** Helper: persist result to history and send email notification (fire-and-forget) */
+    function saveHistory(status, message, result) {
+      saveRemediationRecord({
+        tenantId, cveId, productName, category, severity,
+        status, message,
+        executor:    'manual',
+        triggeredBy: 'ui',
+        result,
+      }).then(record => {
+        if (record && (status === 'success' || status === 'failed')) {
+          sendRemediationNotification(record, tenantId).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
     if (plan.executor === 'webapp' || classification.type === 'application') {
       try {
         const result = await executeApplicationRemediation({ tenantId, approvalId, finding: enrichedFinding, devices, plan, options });
@@ -274,19 +297,20 @@ router.post('/execute', async (req, res) => {
         const usedChocolatey = result?.app?.source === 'chocolatey' ||
           String(result?.app?.installCommand || '').includes('choco ');
         if (usedChocolatey && result?.mode !== 'live-winget-intune') {
-          return res.json({
-            ok: true, tenantId, approvalId, forwardedTo: 'webapp',
-            result: {
-              ...result,
-              ok: false,
-              status: 'unsupported-installer',
-              message: 'Chocolatey packages are not supported for Intune deployment. ' +
-                'This vulnerability should be resolved via Windows Update or a WinGet package. ' +
-                'Check that the correct product was identified and try again.',
-            }
-          });
+          const failResult = {
+            ...result,
+            ok: false,
+            status: 'unsupported-installer',
+            message: 'Chocolatey packages are not supported for Intune deployment. ' +
+              'This vulnerability should be resolved via Windows Update or a WinGet package. ' +
+              'Check that the correct product was identified and try again.',
+          };
+          saveHistory('failed', failResult.message, failResult);
+          return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'webapp', result: failResult });
         }
 
+        const ok = result?.ok !== false && result?.status !== 'failed';
+        saveHistory(ok ? 'success' : 'failed', result?.message || '', result);
         return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'webapp', result });
       } catch (execError) {
         const webappDebug = execError?.details?.debug || null;
@@ -295,21 +319,17 @@ router.post('/execute', async (req, res) => {
           'debug:', JSON.stringify(webappDebug || {}),
           'resolution:', JSON.stringify(webappResolution || {}));
         const isNotSupported = execError?.status === 400;
-        return res.json({
-          ok: true,
-          tenantId,
-          approvalId,
-          forwardedTo: 'webapp',
-          result: {
-            supported: false,
-            status: isNotSupported ? 'unsupported-application' : 'external-error',
-            executionMode: 'guided-manual',
-            message: isNotSupported
-              ? 'No automated remediation path was found for this application. Use the bundle or manual steps below.'
-              : (execError?.message || 'The external remediation service returned an unexpected error.'),
-            debug: webappDebug,
-          }
-        });
+        const failResult = {
+          supported: false,
+          status: isNotSupported ? 'unsupported-application' : 'external-error',
+          executionMode: 'guided-manual',
+          message: isNotSupported
+            ? 'No automated remediation path was found for this application. Use the bundle or manual steps below.'
+            : (execError?.message || 'The external remediation service returned an unexpected error.'),
+          debug: webappDebug,
+        };
+        saveHistory('failed', failResult.message, failResult);
+        return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'webapp', result: failResult });
       }
     }
 
@@ -320,6 +340,8 @@ router.post('/execute', async (req, res) => {
       const affectedDeviceNames = options.affectedDeviceNames || enrichedFinding.affectedMachines || [];
 
       const result = await executeImmediateWindowsUpdate(tenantId, updateType, deviceIds, affectedDeviceNames);
+      const ok = result?.ok !== false;
+      saveHistory(ok ? 'success' : 'failed', result?.message || 'Windows Update dispatched.', result);
       return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'native', result });
     }
 
@@ -333,6 +355,8 @@ router.post('/execute', async (req, res) => {
         affectedDeviceNames: options.affectedDeviceNames || enrichedFinding.affectedMachines || []
       }
     });
+    const ok = result?.ok !== false;
+    saveHistory(ok ? 'success' : 'failed', result?.message || '', result);
     return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'native', result });
   } catch (error) {
     return res.status(error.status || 500).json({
@@ -341,6 +365,50 @@ router.post('/execute', async (req, res) => {
       details: error.details || null,
       ...(error.needsConsent ? { needsConsent: true } : {})
     });
+  }
+});
+
+// ── Remediation History ───────────────────────────────────────────────────────
+
+router.get('/history', async (req, res) => {
+  try {
+    const tenantId = getTenantIdFromRequest({ session: req.session, body: { tenantId: req.query?.tenantId || null } });
+    const limit = Math.min(Number(req.query?.limit || 200), 500);
+    const records = await getRemediationHistory(tenantId, { limit });
+    return res.json({ ok: true, tenantId, records, total: records.length });
+  } catch (error) {
+    return res.status(error.status || 500).json({ ok: false, error: error.message });
+  }
+});
+
+router.get('/history/stats', async (req, res) => {
+  try {
+    const tenantId = getTenantIdFromRequest({ session: req.session, body: { tenantId: req.query?.tenantId || null } });
+    const stats = await getRemediationStats(tenantId);
+    return res.json({ ok: true, tenantId, stats });
+  } catch (error) {
+    return res.status(error.status || 500).json({ ok: false, error: error.message });
+  }
+});
+
+// ── Auto-Remediation Control ──────────────────────────────────────────────────
+
+router.get('/auto-remediation/status', async (req, res) => {
+  return res.json({
+    ok: true,
+    enabled: autoRemediationService.isEnabled(),
+    intervalMinutes: Math.max(5, Number(process.env.AUTO_REMEDIATION_INTERVAL_MINUTES || 60)),
+    maxPerRun: Math.max(1, Math.min(Number(process.env.AUTO_REMEDIATION_MAX_PER_RUN || 10), 50)),
+  });
+});
+
+router.post('/auto-remediation/trigger', async (req, res) => {
+  try {
+    getTenantIdFromRequest(req); // auth check only — runs for all tenants
+    const summaries = await autoRemediationService.runAutoRemediation();
+    return res.json({ ok: true, summaries: summaries || [] });
+  } catch (error) {
+    return res.status(error.status || 500).json({ ok: false, error: error.message });
   }
 });
 

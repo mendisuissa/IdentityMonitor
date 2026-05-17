@@ -35,6 +35,7 @@ const telegramService = require('./services/telegramService');
 const automationService = require('./services/automationService');
 const deviceActionMonitor = require('./services/deviceActionMonitor');
 const tenantRegistry = require('./services/tenantRegistry');
+const autoRemediationService = require('./services/autoRemediationService');
 const defenderVulnerabilityRoutes = require('./routes/defenderVulnerabilities');
 const mspRoutes = require('./routes/msp');
 const identityRoutes = require('./routes/identity');
@@ -114,7 +115,12 @@ app.get('/api/health', (req, res) => {
     mockMode:      MOCK,
     version:       '2.0.0',
     activeTenants: tenantRegistry.getActiveTenants().length,
-    features:      { webhooks: !!process.env.WEBHOOK_NOTIFICATION_URL, telegram: !!process.env.TELEGRAM_BOT_TOKEN, tableStorage: !!process.env.AZURE_STORAGE_CONNECTION_STRING }
+    features:      {
+      webhooks:          !!process.env.WEBHOOK_NOTIFICATION_URL,
+      telegram:          !!process.env.TELEGRAM_BOT_TOKEN,
+      tableStorage:      !!process.env.AZURE_STORAGE_CONNECTION_STRING,
+      autoRemediation:   autoRemediationService.isEnabled(),
+    }
   });
 });
 
@@ -207,6 +213,9 @@ async function startup() {
 
   // Start background job runner (anomaly scans, webhook renewal, weekly digests)
   if (!MOCK) jobRunner.init();
+
+  // Start auto-remediation cron (runs only if AUTO_REMEDIATION_ENABLED=true)
+  autoRemediationService.start();
 }
 
 // ─── Scheduled Jobs ───────────────────────────────────────────────────────

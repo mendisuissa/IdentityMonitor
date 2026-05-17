@@ -14,9 +14,17 @@ const WHAT_WE_READ = [
   { icon: '✉️', label: 'Alert emails', desc: 'Send notifications when threats are detected' },
 ];
 
+const CONNECT_STEPS = [
+  { icon: '🔐', label: 'Verifying your Microsoft identity',   desc: 'Signing in with Entra ID' },
+  { icon: '🛡️', label: 'Granting Defender & Graph access',    desc: 'Read-only — sign-in logs, roles, audit events' },
+  { icon: '🔧', label: 'Connecting Intune remediation',       desc: 'Enables automated CVE patching via WinGet' },
+  { icon: '✅', label: 'Finalising your workspace',           desc: 'Loading tenant data and registering webhooks' },
+];
+
 export default function LoginPage({ onLogin }: Props) {
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const [connectStep, setConnectStep] = useState(0); // 0 = not started, 1-4 = animated steps
   const [error, setError] = useState('');
   const [showDetails, setShowDetails] = useState(false);
 
@@ -25,10 +33,21 @@ export default function LoginPage({ onLogin }: Props) {
     if (err) setError(decodeURIComponent(err));
   }, [searchParams]);
 
+  // Animate through steps while the browser is redirecting
+  useEffect(() => {
+    if (!loading) { setConnectStep(0); return; }
+    let step = 1;
+    setConnectStep(step);
+    const timings = [800, 1800, 3200]; // ms after loading=true to show each next step
+    const timers = timings.map((delay, i) => setTimeout(() => setConnectStep(i + 2), delay));
+    return () => timers.forEach(clearTimeout);
+  }, [loading]);
+
   const handleConnect = () => {
     setLoading(true);
     setError('');
-    window.location.href = '/api/auth/login';
+    // Small delay so the animation starts before the page navigates away
+    setTimeout(() => { window.location.href = '/api/auth/login'; }, 200);
   };
 
   return (
@@ -100,12 +119,55 @@ export default function LoginPage({ onLogin }: Props) {
             gap: 10,
             boxShadow: loading ? 'none' : '0 4px 20px rgba(232,120,74,0.35)',
             transition: 'all 0.15s',
-            marginBottom: 16,
+            marginBottom: loading ? 12 : 16,
           }}
         >
           <span style={{ fontSize: 18 }}>🪟</span>
-          <span>{loading ? 'Redirecting to Microsoft…' : 'Connect with Microsoft'}</span>
+          <span>{loading ? 'Connecting…' : 'Connect with Microsoft'}</span>
         </button>
+
+        {/* Multi-step connecting animation */}
+        {loading && (
+          <div style={{
+            background: 'rgba(232,120,74,0.06)',
+            border: '1px solid rgba(232,120,74,0.15)',
+            borderRadius: 12,
+            padding: '14px 16px',
+            marginBottom: 14,
+          }}>
+            {CONNECT_STEPS.map((s, i) => {
+              const stepNum = i + 1;
+              const done    = connectStep > stepNum;
+              const active  = connectStep === stepNum;
+              const pending = connectStep < stepNum;
+              return (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '7px 0',
+                  opacity: pending ? 0.35 : 1,
+                  transition: 'opacity 0.3s',
+                  borderBottom: i < CONNECT_STEPS.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                }}>
+                  <span style={{ fontSize: 16, width: 22, textAlign: 'center', flexShrink: 0 }}>
+                    {done ? '✅' : active ? '⟳' : s.icon}
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: done ? '#22c55e' : active ? '#E8784A' : 'rgba(241,241,243,0.5)' }}>
+                      {s.label}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'rgba(241,241,243,0.35)', marginTop: 1 }}>{s.desc}</div>
+                  </div>
+                  {active && (
+                    <span style={{ fontSize: 10, color: '#E8784A', animation: 'none' }}>…</span>
+                  )}
+                </div>
+              );
+            })}
+            <div style={{ fontSize: 11, color: 'rgba(241,241,243,0.35)', marginTop: 10, textAlign: 'center' }}>
+              Microsoft sign-in window opening… don't close this tab
+            </div>
+          </div>
+        )}
 
         {/* Error */}
         {error && (

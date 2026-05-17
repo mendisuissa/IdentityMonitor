@@ -37,6 +37,7 @@ export default function Dashboard() {
   const [scanMessage, setScanMessage] = useState('');
   const [scanRunning, setScanRunning] = useState(false);
   const [pimStats, setPimStats] = useState<{ score: number; permanentCritical: number; globalAdmins: number; pimEnabled: boolean } | null>(null);
+  const [cveStats, setCveStats] = useState<{ total: number; critical: number; high: number; medium: number; low: number; remediationStats: any } | null>(null);
 
   async function loadDashboardState() {
     const [s, a, u, h, rp] = await Promise.all([
@@ -51,6 +52,22 @@ export default function Dashboard() {
     setUsers(u as PrivilegedUser[]);
     setHealth(h as Health);
     if (rp) setPosture(rp as RiskPosture);
+    // Load CVE stats in background — non-blocking
+    Promise.all([
+      api.getDefenderVulnerabilities(0).catch(() => null),
+      api.getRemediationStats().catch(() => null),
+    ]).then(([vulns, remStats]: any[]) => {
+      const items: any[] = Array.isArray(vulns?.items) ? vulns.items : [];
+      const bySev = (sev: string) => items.filter((x: any) => String(x.severity || '').toLowerCase() === sev).length;
+      setCveStats({
+        total:    items.length,
+        critical: bySev('critical'),
+        high:     bySev('high'),
+        medium:   bySev('medium'),
+        low:      bySev('low'),
+        remediationStats: remStats?.stats || null,
+      });
+    }).catch(() => {});
     // Load PIM stats in background — non-blocking
     api.getPimAnalysis().then((pim: any) => {
       if (pim?.stats) setPimStats({
@@ -146,10 +163,11 @@ export default function Dashboard() {
   }, [telemetryIncomplete, stats, posture, riskUsers]);
 
   const trustSignals = [
-    { label: 'Graph API',             ok: health?.status === 'ok',               detail: health?.status === 'ok' ? 'Healthy connection' : 'Health probe failed' },
-    { label: 'Webhook ingestion',     ok: !!health?.features?.webhooks,           detail: health?.features?.webhooks ? 'Live detection path available' : 'Not configured' },
-    { label: 'Alert delivery',        ok: !!health?.features?.telegram,           detail: health?.features?.telegram ? 'Telegram enabled' : 'No fast-response channel' },
-    { label: 'Persistent telemetry',  ok: !!health?.features?.tableStorage,       detail: health?.features?.tableStorage ? 'Azure Tables active' : 'Temporary storage only' },
+    { label: 'Graph API',             ok: health?.status === 'ok',                       detail: health?.status === 'ok' ? 'Healthy connection' : 'Health probe failed' },
+    { label: 'Webhook ingestion',     ok: !!health?.features?.webhooks,                   detail: health?.features?.webhooks ? 'Live detection path available' : 'Not configured' },
+    { label: 'Alert delivery',        ok: !!health?.features?.telegram,                   detail: health?.features?.telegram ? 'Telegram enabled' : 'No fast-response channel' },
+    { label: 'Persistent telemetry',  ok: !!health?.features?.tableStorage,               detail: health?.features?.tableStorage ? 'Azure Tables active' : 'Temporary storage only' },
+    { label: 'Auto-Remediation',      ok: !!(health as any)?.features?.autoRemediation,   detail: (health as any)?.features?.autoRemediation ? 'Cron active — CVEs remediating automatically' : 'Disabled (AUTO_REMEDIATION_ENABLED=true to enable)' },
   ];
 
   if (loading) return <div className="loading-state"><div className="loading-spinner" /><div className="loading-text">Fetching privileged identity telemetry...</div></div>;
@@ -334,6 +352,43 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* ── CVE Exposure Summary ── */}
+      {cveStats && cveStats.total > 0 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">🛡️ CVE Exposure</div>
+              <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>Live vulnerability data from Microsoft Defender TVM</div>
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={() => navigate('/remediation')}>Remediate →</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginTop: 12 }}>
+            {[
+              { label: 'Total CVEs',  value: cveStats.total,    color: 'var(--text-primary)' },
+              { label: '🔴 Critical', value: cveStats.critical, color: '#ff3b3b' },
+              { label: '🟠 High',     value: cveStats.high,     color: '#ff6b35' },
+              { label: '🟡 Medium',   value: cveStats.medium,   color: '#f5a623' },
+              { label: '🔵 Low',      value: cveStats.low,      color: '#4a90d9' },
+            ].map(s => (
+              <div key={s.label} style={{ textAlign: 'center', padding: '10px 8px', borderRadius: 8, background: 'var(--surface-alt, rgba(255,255,255,0.03))', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          {cveStats.remediationStats && (
+            <div style={{ display: 'flex', gap: 20, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+              <span>📜 {cveStats.remediationStats.total} remediation actions</span>
+              <span>✅ {cveStats.remediationStats.byStatus?.success || 0} successful</span>
+              <span>❌ {cveStats.remediationStats.byStatus?.failed || 0} failed</span>
+              {cveStats.remediationStats.lastRunAt && (
+                <span>Last action: {new Date(cveStats.remediationStats.lastRunAt).toLocaleString()}</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Recent Threats + Trend ── */}
       <div className="two-col" style={{ marginBottom: 20 }}>

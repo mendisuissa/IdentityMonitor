@@ -155,4 +155,82 @@ async function sendUserSecurityNotice(user, alert, tenantId) {
   });
 }
 
-module.exports = { sendAdminAlert, sendUserSecurityNotice };
+// ─── Remediation notification email ──────────────────────────────────────
+
+function buildRemediationHtml(record) {
+  const statusColor  = record.status === 'success' ? '#3fb950' : record.status === 'failed' ? '#f85149' : '#8b949e';
+  const statusLabel  = (record.status || 'unknown').toUpperCase();
+  const statusEmoji  = record.status === 'success' ? '✅' : record.status === 'failed' ? '❌' : '⏭';
+  const triggerLabel = record.triggeredBy === 'cron' || record.triggeredBy === 'auto-cron' ? '🤖 Auto-Remediation (cron)' : '👤 Manual (admin)';
+
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#0d1117;font-family:'Segoe UI',Arial,sans-serif;">
+  <div style="max-width:600px;margin:0 auto;background:#0d1117;border:1px solid #30363d;border-radius:8px;overflow:hidden;">
+
+    <div style="background:${statusColor};padding:20px 24px;">
+      <div style="font-size:12px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">
+        IdentityMonitor · Vulnerability Remediation
+      </div>
+      <div style="font-size:22px;font-weight:700;color:#fff;">
+        ${statusEmoji} ${statusLabel} — ${record.cveId || 'Remediation Action'}
+      </div>
+    </div>
+
+    <div style="padding:24px;border-bottom:1px solid #30363d;">
+      <table style="width:100%;border-collapse:collapse;">
+        ${buildDetailRow('CVE ID',      record.cveId       || '—')}
+        ${buildDetailRow('Product',     record.productName || '—')}
+        ${buildDetailRow('Category',    record.category    || '—')}
+        ${buildDetailRow('Severity',    (record.severity   || '—').toUpperCase())}
+        ${buildDetailRow('Status',      statusLabel)}
+        ${buildDetailRow('Triggered by', triggerLabel)}
+        ${buildDetailRow('Executed at',  record.executedAt ? new Date(record.executedAt).toLocaleString('en-GB') : '—')}
+      </table>
+    </div>
+
+    ${record.message ? `
+    <div style="padding:20px 24px;border-bottom:1px solid #30363d;">
+      <div style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Result</div>
+      <div style="background:#161b22;border-left:3px solid ${statusColor};padding:12px 16px;border-radius:0 6px 6px 0;color:#e6edf3;font-size:14px;">${record.message}</div>
+    </div>` : ''}
+
+    <div style="padding:16px 24px;text-align:center;">
+      <div style="font-size:12px;color:#8b949e;">
+        Modern Endpoint — IdentityMonitor<br>
+        Automated vulnerability management
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * Send an email notification after a remediation action (success or failure).
+ * @param {object} record   — remediation record from history store
+ * @param {string} tenantId — used to send via Graph on behalf of the tenant
+ */
+async function sendRemediationNotification(record, tenantId) {
+  const recipient = process.env.ALERT_ADMIN_EMAIL;
+  if (!recipient) return; // email not configured — silent skip
+  if (!tenantId)  return;
+
+  const statusEmoji = record.status === 'success' ? '✅' : record.status === 'failed' ? '❌' : '⏭';
+  const trigger     = record.triggeredBy === 'cron' || record.triggeredBy === 'auto-cron' ? '[Auto]' : '[Manual]';
+
+  try {
+    await graphService.sendAlertEmail(tenantId, {
+      to:      recipient,
+      subject: `${statusEmoji} ${trigger} Remediation ${record.status?.toUpperCase()} — ${record.cveId || 'CVE'} · ${record.productName || record.category}`,
+      body:    buildRemediationHtml(record),
+    });
+  } catch (err) {
+    // Non-fatal — log and continue
+    console.warn('[Email] sendRemediationNotification failed:', err.message);
+  }
+}
+
+module.exports = { sendAdminAlert, sendUserSecurityNotice, sendRemediationNotification };

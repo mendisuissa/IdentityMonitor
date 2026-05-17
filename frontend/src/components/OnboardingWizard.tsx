@@ -19,7 +19,7 @@ interface PostureData {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 function privilegedCount(posture: PostureData | null): number {
   if (!posture) return 0;
@@ -111,7 +111,11 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
   const [postureError, setPostureError] = useState('');
   const postureCheckedRef = useRef(false);
 
-  // ── Step 3: Telegram ──
+  // ── Step 3: Remediation service (webapp consent) ──
+  const [onboardingStatus, setOnboardingStatus] = useState<any>(null);
+  const onboardingStatusLoadedRef = useRef(false);
+
+  // ── Step 4: Telegram ──
   const [telegramToken, setTelegramToken] = useState('');
   const [telegramChatId, setTelegramChatId] = useState('');
   const [telegramSaving, setTelegramSaving] = useState(false);
@@ -120,7 +124,7 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
   const [telegramMsg, setTelegramMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const telegramLoadedRef = useRef(false);
 
-  // ── Step 4: Admins ──
+  // ── Step 5: Admins ──
   const [admins, setAdmins] = useState<any[]>([]);
   const [adminEmail, setAdminEmail] = useState('');
   const [adminRole, setAdminRole] = useState<'owner' | 'admin' | 'analyst'>('admin');
@@ -129,7 +133,7 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
   const [adminSkipped, setAdminSkipped] = useState(false);
   const adminsLoadedRef = useRef(false);
 
-  // ── Step 5: First Scan ──
+  // ── Step 6: First Scan ──
   const [scanRunning, setScanRunning] = useState(false);
   const [scanResult, setScanResult] = useState<{ newAlerts: number } | null>(null);
   const [scanError, setScanError] = useState('');
@@ -163,9 +167,17 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
     runPermissionsCheck();
   };
 
-  // ── Step 3: pre-fill Telegram settings ──────────────────────────────────────
+  // ── Step 3: load onboarding status (webapp consent) ─────────────────────────
   useEffect(() => {
-    if (step === 3 && !telegramLoadedRef.current) {
+    if (step === 3 && !onboardingStatusLoadedRef.current) {
+      onboardingStatusLoadedRef.current = true;
+      api.getOnboardingStatus().then(setOnboardingStatus).catch(() => {});
+    }
+  }, [step]);
+
+  // ── Step 4: pre-fill Telegram settings ──────────────────────────────────────
+  useEffect(() => {
+    if (step === 4 && !telegramLoadedRef.current) {
       telegramLoadedRef.current = true;
       api.getTelegramSettings()
         .then((d: any) => {
@@ -198,9 +210,9 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
     }
   };
 
-  // ── Step 4: load admins ──────────────────────────────────────────────────────
+  // ── Step 5: load admins ──────────────────────────────────────────────────────
   useEffect(() => {
-    if (step === 4 && !adminsLoadedRef.current) {
+    if (step === 5 && !adminsLoadedRef.current) {
       adminsLoadedRef.current = true;
       api.getAdmins()
         .then((d: any) => setAdmins(Array.isArray(d) ? d : d?.admins || []))
@@ -229,9 +241,9 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
     }
   };
 
-  // ── Step 5: auto-run first scan ──────────────────────────────────────────────
+  // ── Step 6: auto-run first scan ──────────────────────────────────────────────
   useEffect(() => {
-    if (step === 5 && !scanFiredRef.current) {
+    if (step === 6 && !scanFiredRef.current) {
       scanFiredRef.current = true;
       setScanRunning(true);
       setScanError('');
@@ -266,10 +278,13 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
     posture.health?.signInLogsAvailable === true &&
     privilegedCount(posture) > 0;
 
-  // Step 3 readiness
-  const telegramReady = telegramTested || telegramSkipped;
+  // Step 3 readiness — webapp consent
+  const webappReady = !onboardingStatus?.webappClientId || !!onboardingStatus?.webappConsent;
 
   // Step 4 readiness
+  const telegramReady = telegramTested || telegramSkipped;
+
+  // Step 5 readiness
   const adminsReady = admins.length > 0 || adminSkipped;
 
   // ── Shared input style ───────────────────────────────────────────────────────
@@ -504,8 +519,68 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
               </div>
             )}
 
-            {/* ════════════════════════════════ STEP 3 — Telegram ═════════════════════════════ */}
+            {/* ════════════════════════════════ STEP 3 — Remediation Service ════════════════ */}
             {step === 3 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flex: 1 }}>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>
+                    🔧 Intune Remediation Service
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 5 }}>
+                    Connect the external remediation engine to enable WinGet app deployments and automated CVE patching via Intune.
+                  </div>
+                </div>
+
+                {onboardingStatus?.webappConsent ? (
+                  <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 20 }}>✅</span>
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#22c55e', fontSize: 14 }}>Remediation service connected</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Admin consent was granted — WinGet and Windows Update remediations are enabled.</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : onboardingStatus?.webappClientId ? (
+                  <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(232,120,74,0.07)', border: '1px solid rgba(232,120,74,0.2)' }}>
+                    <div style={{ fontWeight: 700, color: '#E8784A', fontSize: 14, marginBottom: 6 }}>⚠️ Admin consent not yet granted</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+                      A <strong>Global Administrator</strong> must grant consent for the Intune remediation service.
+                      This is a one-time step — click below to open the Microsoft consent page.
+                    </div>
+                    <a
+                      href="/api/auth/webapp-consent-redirect"
+                      className="btn btn-primary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '10px 18px' }}
+                    >
+                      🪟 Grant Remediation Consent
+                    </a>
+                  </div>
+                ) : (
+                  <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>ℹ️ Not configured</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                      The remediation service (WEBAPP_CLIENT_ID) is not configured on this instance.
+                      Identity monitoring and CVE visibility work without it — automated patching requires it.
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>
+                  <button className="btn btn-secondary btn-sm" onClick={goBack}>← Back</button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={goNext}
+                    style={{ marginLeft: 'auto' }}
+                  >
+                    {webappReady ? 'Continue →' : 'Skip for now →'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ════════════════════════════════ STEP 4 — Telegram ═════════════════════════════ */}
+            {step === 4 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flex: 1 }}>
                 <div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>
@@ -607,8 +682,8 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
               </div>
             )}
 
-            {/* ════════════════════════════════ STEP 4 — Admin Email ══════════════════════════ */}
-            {step === 4 && (
+            {/* ════════════════════════════════ STEP 5 — Admin Email ══════════════════════════ */}
+            {step === 5 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flex: 1 }}>
                 <div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>
@@ -758,8 +833,8 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
               </div>
             )}
 
-            {/* ════════════════════════════════ STEP 5 — First Scan ═══════════════════════════ */}
-            {step === 5 && (
+            {/* ════════════════════════════════ STEP 6 — First Scan ═══════════════════════════ */}
+            {step === 6 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20, flex: 1, alignItems: 'center', textAlign: 'center' }}>
                 <div style={{ marginTop: 8 }}>
                   <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>

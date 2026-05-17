@@ -50,7 +50,7 @@ type Recommendation = {
   fixingKbId?: string;
 };
 
-type MainTab = 'vulnerabilities' | 'recommendations';
+type MainTab = 'vulnerabilities' | 'recommendations' | 'history' | 'auto';
 type DetailTab = 'details' | 'devices' | 'plan';
 
 type Props = { tenantId?: string; tenantName?: string };
@@ -797,6 +797,15 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [loadingRecs, setLoadingRecs] = useState(false);
   const [recsError, setRecsError] = useState('');
   const [selectedRecIndex, setSelectedRecIndex] = useState<number | null>(null);
+  // History tab
+  const [historyRecords, setHistoryRecords] = useState<any[]>([]);
+  const [historyStats, setHistoryStats] = useState<any>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  // Auto-remediation tab
+  const [autoStatus, setAutoStatus] = useState<any>(null);
+  const [autoTriggering, setAutoTriggering] = useState(false);
+  const [autoTriggerResult, setAutoTriggerResult] = useState<any>(null);
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [affectedMachines, setAffectedMachines] = useState<string[]>([]);
   const [affectedMachinesError, setAffectedMachinesError] = useState('');
@@ -916,6 +925,37 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         setRecsError(err?.message || 'Failed to load recommendations.');
       })
       .finally(() => { if (mounted) setLoadingRecs(false); });
+    return () => { mounted = false; };
+  }, [mainTab]);
+
+  useEffect(() => {
+    if (mainTab !== 'history') return;
+    let mounted = true;
+    setLoadingHistory(true);
+    setHistoryError('');
+    Promise.all([
+      api.getRemediationHistory({ limit: 200 }),
+      api.getRemediationStats(),
+    ])
+      .then(([histRes, statsRes]: any[]) => {
+        if (!mounted) return;
+        setHistoryRecords(Array.isArray(histRes?.records) ? histRes.records : []);
+        setHistoryStats(statsRes?.stats || null);
+      })
+      .catch((err: any) => {
+        if (!mounted) return;
+        setHistoryError(err?.message || 'Failed to load history.');
+      })
+      .finally(() => { if (mounted) setLoadingHistory(false); });
+    return () => { mounted = false; };
+  }, [mainTab]);
+
+  useEffect(() => {
+    if (mainTab !== 'auto') return;
+    let mounted = true;
+    api.getAutoRemediationStatus()
+      .then((res: any) => { if (mounted) setAutoStatus(res); })
+      .catch(() => {});
     return () => { mounted = false; };
   }, [mainTab]);
 
@@ -1255,6 +1295,12 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         <button className={mainTab === 'recommendations' ? 'active' : ''} onClick={() => setMainTab('recommendations')}>
           Security Recommendations {recommendations.length > 0 ? `· ${recommendations.length}` : ''}
         </button>
+        <button className={mainTab === 'history' ? 'active' : ''} onClick={() => setMainTab('history')}>
+          📜 History {historyRecords.length > 0 ? `· ${historyRecords.length}` : ''}
+        </button>
+        <button className={mainTab === 'auto' ? 'active' : ''} onClick={() => setMainTab('auto')}>
+          🤖 Auto-Remediation {autoStatus?.enabled ? '· ON' : ''}
+        </button>
       </div>
 
       {needsAdminConsent && (
@@ -1404,6 +1450,212 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
               </tbody>
             </table>
           )}
+        </section>
+      )}
+
+      {/* ── History Tab ───────────────────────────────────────────────────── */}
+      {mainTab === 'history' && (
+        <section className="remediation-list-card" style={{ padding: '20px 24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+            <div>
+              <h3 style={{ margin: 0 }}>Remediation History</h3>
+              <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                All manual and automatic remediation actions recorded for this tenant.
+              </p>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={() => {
+              setHistoryRecords([]); setHistoryStats(null);
+              setLoadingHistory(true); setHistoryError('');
+              Promise.all([api.getRemediationHistory({ limit: 200 }), api.getRemediationStats()])
+                .then(([h, s]: any[]) => { setHistoryRecords(Array.isArray(h?.records) ? h.records : []); setHistoryStats(s?.stats || null); })
+                .catch((e: any) => setHistoryError(e?.message || 'Failed.'))
+                .finally(() => setLoadingHistory(false));
+            }}>⟳ Refresh</button>
+          </div>
+
+          {historyStats && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+              {[
+                { label: 'Total actions', value: historyStats.total, color: 'var(--text-primary)' },
+                { label: '✅ Success', value: historyStats.byStatus?.success || 0, color: '#22c55e' },
+                { label: '❌ Failed', value: historyStats.byStatus?.failed || 0, color: '#ef4444' },
+                { label: '⏭ Skipped', value: (historyStats.byStatus?.skipped || 0) + (historyStats.byStatus?.unsupported || 0), color: '#94a3b8' },
+              ].map(s => (
+                <div key={s.label} className="remediation-stat-card" style={{ padding: '14px 16px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: s.color }}>{s.value}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {loadingHistory && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Loading history…</div>}
+          {historyError && <div style={{ color: '#ef4444', padding: 12 }}>{historyError}</div>}
+
+          {!loadingHistory && !historyError && historyRecords.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>📜</div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>No remediation history yet</div>
+              <div style={{ fontSize: 13 }}>Actions taken in the Vulnerabilities tab or by Auto-Remediation will appear here.</div>
+            </div>
+          )}
+
+          {!loadingHistory && historyRecords.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--navy-border)', textAlign: 'left' }}>
+                    {['Time', 'CVE / ID', 'Product', 'Category', 'Severity', 'Status', 'Executor', 'Message'].map(h => (
+                      <th key={h} style={{ padding: '8px 10px', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyRecords.map((r: any, i: number) => {
+                    const statusColor = r.status === 'success' ? '#22c55e' : r.status === 'failed' ? '#ef4444' : '#94a3b8';
+                    return (
+                      <tr key={r.id || i} style={{ borderBottom: '1px solid var(--navy-border)', verticalAlign: 'top' }}>
+                        <td style={{ padding: '8px 10px', color: 'var(--text-muted)', whiteSpace: 'nowrap', fontSize: 11 }}>
+                          {r.executedAt ? new Date(r.executedAt).toLocaleString() : '—'}
+                        </td>
+                        <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap' }}>
+                          {r.cveId || '—'}
+                        </td>
+                        <td style={{ padding: '8px 10px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {r.productName || '—'}
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <span className="role-tag" style={{ textTransform: 'capitalize' }}>{r.category || '—'}</span>
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          {r.severity ? <span className={`status-badge ${r.severity.toLowerCase()}`}>{r.severity}</span> : '—'}
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <span style={{ color: statusColor, fontWeight: 600, textTransform: 'capitalize' }}>{r.status || '—'}</span>
+                        </td>
+                        <td style={{ padding: '8px 10px', color: 'var(--text-muted)', fontSize: 11 }}>
+                          {r.triggeredBy === 'cron' ? '🤖 auto' : '👤 manual'}
+                        </td>
+                        <td style={{ padding: '8px 10px', color: 'var(--text-muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {r.message || '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ── Auto-Remediation Tab ───────────────────────────────────────────── */}
+      {mainTab === 'auto' && (
+        <section className="remediation-list-card" style={{ padding: '24px 28px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+            <div>
+              <h3 style={{ margin: 0 }}>🤖 Auto-Remediation</h3>
+              <p style={{ margin: '6px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                Automatically remediates CVEs on a schedule — WinGet apps and Windows Updates are deployed to all devices without manual intervention.
+              </p>
+            </div>
+            <button
+              className="btn btn-primary"
+              disabled={autoTriggering}
+              onClick={async () => {
+                setAutoTriggering(true);
+                setAutoTriggerResult(null);
+                try {
+                  const res = await api.triggerAutoRemediation();
+                  setAutoTriggerResult({ ok: true, summaries: res.summaries || [] });
+                } catch (e: any) {
+                  setAutoTriggerResult({ ok: false, error: e?.message || 'Failed to trigger.' });
+                } finally {
+                  setAutoTriggering(false);
+                }
+              }}
+            >
+              {autoTriggering ? <><span className="spin">⟳</span> Running…</> : '▶ Run Now'}
+            </button>
+          </div>
+
+          {/* Status card */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+            <div className="remediation-stat-card" style={{ padding: '16px 18px' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Status</div>
+              <div style={{ fontWeight: 700, fontSize: 16, color: autoStatus?.enabled ? '#22c55e' : '#94a3b8' }}>
+                {autoStatus?.enabled ? '● Active' : '○ Disabled'}
+              </div>
+            </div>
+            <div className="remediation-stat-card" style={{ padding: '16px 18px' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Run interval</div>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>
+                {autoStatus ? `Every ${autoStatus.intervalMinutes} min` : '—'}
+              </div>
+            </div>
+            <div className="remediation-stat-card" style={{ padding: '16px 18px' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Max CVEs / run</div>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>{autoStatus?.maxPerRun ?? '—'}</div>
+            </div>
+          </div>
+
+          {/* Enable instructions */}
+          {autoStatus && !autoStatus.enabled && (
+            <div className="detail-banner" style={{ marginBottom: 20 }}>
+              <strong>Auto-Remediation is currently disabled.</strong>
+              <p style={{ margin: '6px 0 0', fontSize: 13 }}>
+                To enable it, set <code>AUTO_REMEDIATION_ENABLED=true</code> in your backend environment variables, then restart the server.
+                You can also configure <code>AUTO_REMEDIATION_INTERVAL_MINUTES</code> (default: 60) and <code>AUTO_REMEDIATION_MAX_PER_RUN</code> (default: 10, max: 50).
+              </p>
+            </div>
+          )}
+
+          {/* Manual trigger result */}
+          {autoTriggerResult && (
+            <div className={`detail-summary-block ${autoTriggerResult.ok ? 'success-block' : ''}`}
+              style={{ marginBottom: 20, borderLeft: `3px solid ${autoTriggerResult.ok ? '#22c55e' : '#ef4444'}` }}>
+              {autoTriggerResult.ok ? (
+                <>
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>✅ Run completed</div>
+                  {autoTriggerResult.summaries?.map((s: any, i: number) => (
+                    <div key={i} style={{ fontSize: 13, marginBottom: 4 }}>
+                      <strong>{s.tenantId?.substring(0, 8)}…</strong> — ✅ {s.success} success, ❌ {s.failed} failed, ⏭ {s.skipped} skipped
+                      {s.error && <span style={{ color: '#ef4444', marginLeft: 8 }}>{s.error}</span>}
+                    </div>
+                  ))}
+                  {autoTriggerResult.summaries?.length === 0 && (
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No active tenants found to process.</div>
+                  )}
+                </>
+              ) : (
+                <div style={{ color: '#ef4444', fontWeight: 600 }}>❌ {autoTriggerResult.error}</div>
+              )}
+            </div>
+          )}
+
+          {/* What gets auto-remediated */}
+          <div className="card-block" style={{ marginTop: 8 }}>
+            <h4 style={{ margin: '0 0 14px' }}>What gets auto-remediated</h4>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {[
+                { icon: '📦', label: 'WinGet Applications', desc: 'Third-party apps (Chrome, Firefox, 7-Zip, Acrobat…) are updated via Intune WinGet deployment to All Devices.', supported: true },
+                { icon: '🪟', label: 'Windows Updates', desc: 'OS security patches are deployed via Windows Update for Business expedite policy through Intune.', supported: true },
+                { icon: '🐧', label: 'Linux / macOS / iOS', desc: 'Detected as unsupported platform — logged and skipped. Manual remediation instructions are generated.', supported: false },
+                { icon: '🔒', label: 'Identity / Conditional Access', desc: 'Require manual review by a security administrator. Auto-remediation is not performed.', supported: false },
+              ].map(item => (
+                <div key={item.label} style={{ display: 'flex', gap: 14, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 10, background: 'var(--navy-800)', border: '1px solid var(--navy-border)' }}>
+                  <span style={{ fontSize: 20, lineHeight: 1.3 }}>{item.icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{item.label}</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>{item.desc}</div>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: item.supported ? '#22c55e' : '#94a3b8', whiteSpace: 'nowrap' }}>
+                    {item.supported ? '✅ Auto' : '⏭ Skip'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
       )}
 

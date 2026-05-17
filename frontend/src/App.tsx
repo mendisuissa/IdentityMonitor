@@ -21,6 +21,7 @@ import SuperAdminPage from './components/SuperAdminPage';
 import PricingPage from './components/PricingPage';
 import BillingPage from './components/BillingPage';
 import OnboardingWizard from './components/OnboardingWizard';
+import WelcomeModal from './components/WelcomeModal';
 import TermsPage from './components/TermsPage';
 import PrivacyPage from './components/PrivacyPage';
 import LandingPage from './components/LandingPage';
@@ -241,7 +242,23 @@ function AppShell() {
   const [inbox, setInbox] = useState<any[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeWebappConnected, setWelcomeWebappConnected] = useState(false);
   const navigate = useNavigate();
+
+  // Detect first-login and webapp-connected URL params set by the backend
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const firstLogin      = sp.get('first_login') === '1';
+    const webappConnected = sp.get('webapp_connected') === '1';
+    if (firstLogin || webappConnected) {
+      setWelcomeWebappConnected(webappConnected);
+      setShowWelcome(true);
+      // Clean up URL params without a full reload
+      const clean = window.location.pathname;
+      window.history.replaceState({}, '', clean);
+    }
+  }, []);
 
   useEffect(() => {
     fetch('/api/health', { credentials: 'include' })
@@ -309,8 +326,15 @@ function AppShell() {
 
   return (
     <div className="app">
+      {/* First-login welcome modal — shown once when ?first_login=1 or ?webapp_connected=1 */}
+      {showWelcome && (
+        <WelcomeModal
+          webappConnected={welcomeWebappConnected}
+          onClose={() => { setShowWelcome(false); setShowWizard(false); }}
+        />
+      )}
       {/* Onboarding wizard — shown to new tenants until wizard is completed */}
-      {showWizard && user && (
+      {!showWelcome && showWizard && user && (
         <OnboardingWizard
           tenantId={user.tenantId}
           tenantName={user.tenantName || user.userEmail}
@@ -367,6 +391,7 @@ function AppShell() {
             <Route path="/remediation" element={<RemediationPage />} />
             <Route path="/identity" element={<ConditionalAccessPage />} />
             <Route path="/ca" element={<Navigate to="/identity" replace />} />
+            <Route path="/conditional-access" element={<Navigate to="/identity" replace />} />
             <Route path="/billing" element={<BillingPage />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/terms"   element={<TermsPage />} />

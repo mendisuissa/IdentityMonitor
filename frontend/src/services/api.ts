@@ -543,6 +543,23 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  getRemediationHistory: (params?: { limit?: number }) => {
+    const q = toQuery(params);
+    return apiFetch<any>(`/remediation/history${q ? `?${q}` : ''}`);
+  },
+
+  getRemediationStats: () =>
+    apiFetch<any>('/remediation/history/stats'),
+
+  getOnboardingStatus: () =>
+    apiFetch<any>('/auth/onboarding-status'),
+
+  getAutoRemediationStatus: () =>
+    apiFetch<any>('/remediation/auto-remediation/status'),
+
+  triggerAutoRemediation: () =>
+    apiFetch<any>('/remediation/auto-remediation/trigger', { method: 'POST' }),
+
   notifyAdmin: (alertId: string) =>
     apiFetch<any>(`/alerts/${alertId}/notify-admin`, { method: 'POST' }),
 

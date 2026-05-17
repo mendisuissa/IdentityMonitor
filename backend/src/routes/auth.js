@@ -258,11 +258,14 @@ router.get('/callback', async (req, res) => {
         const webappConsentCallbackUri = base + '/api/auth/webapp-consent/callback';
         const consentUrl = 'https://login.microsoftonline.com/' + tenantId +
           '/adminconsent?client_id=' + WEBAPP_CLIENT_ID +
-          '&redirect_uri=' + encodeURIComponent(webappConsentCallbackUri);
+          '&redirect_uri=' + encodeURIComponent(webappConsentCallbackUri) +
+          '&state=' + encodeURIComponent(JSON.stringify({ isNewTenant }));
         return res.redirect(consentUrl);
       }
 
-      res.redirect(FRONTEND_URL);
+      // Append ?first_login=1 for brand-new tenants so the frontend shows the welcome screen
+      const suffix = isNewTenant ? '?first_login=1' : '';
+      res.redirect(FRONTEND_URL + suffix);
     });
 
   } catch (err) {
@@ -400,6 +403,20 @@ router.get('/admin-consent/callback', async (req, res) => {
   }
 });
 
+// GET /api/auth/webapp-consent-redirect — initiates webapp consent from within the app (wizard)
+router.get('/webapp-consent-redirect', (req, res) => {
+  const tenantId = req.session?.tenant?.tenantId;
+  if (!WEBAPP_CLIENT_ID) return res.redirect(FRONTEND_URL + '?webapp_consent=error&reason=not_configured');
+  if (!tenantId)        return res.redirect(FRONTEND_URL + '/login?error=not_authenticated');
+
+  const base = process.env.API_BASE_URL || (req.protocol + '://' + req.get('host'));
+  const webappConsentCallbackUri = base + '/api/auth/webapp-consent/callback';
+  const consentUrl = 'https://login.microsoftonline.com/' + tenantId +
+    '/adminconsent?client_id=' + WEBAPP_CLIENT_ID +
+    '&redirect_uri=' + encodeURIComponent(webappConsentCallbackUri);
+  return res.redirect(consentUrl);
+});
+
 // GET /api/auth/webapp-consent/callback
 // Microsoft redirects here after the customer grants Intune consent to the webapp.
 // We record the grant and send them to the dashboard — fully transparent.
@@ -412,6 +429,12 @@ router.get('/webapp-consent/callback', async (req, res) => {
   }
 
   const tenantId = String(tenant || req.session?.tenant?.tenantId || '').trim();
+  let isNewTenant = false;
+  try {
+    const stateData = req.query.state ? JSON.parse(decodeURIComponent(String(req.query.state))) : {};
+    isNewTenant = !!stateData.isNewTenant;
+  } catch (_) {}
+
   if (String(admin_consent).toLowerCase() === 'true' && tenantId) {
     try {
       await markWebappConsent(tenantId);
@@ -419,6 +442,8 @@ router.get('/webapp-consent/callback', async (req, res) => {
     } catch (err) {
       console.warn('[Auth] markWebappConsent failed (non-fatal):', err.message);
     }
+    const suffix = isNewTenant ? '?first_login=1&webapp_connected=1' : '?webapp_connected=1';
+    return res.redirect(FRONTEND_URL + suffix);
   }
 
   res.redirect(FRONTEND_URL);
@@ -464,6 +489,33 @@ function escMd(str) {
   if (!str) return '';
   return String(str).replace(/[_*[\]()~`>#+=|{}.!\\-]/g, '\\$&');
 }
+
+// GET /api/auth/onboarding-status — returns what's been set up for this tenant
+router.get('/onboarding-status', async (req, res) => {
+  const tenantId = req.session?.tenant?.tenantId;
+  if (!tenantId) return res.status(401).json({ ok: false, error: 'Not authenticated' });
+
+  let webappConsent = false;
+  try {
+    const integration = await getTenantIntegration(tenantId).catch(() => null);
+    webappConsent = !!integration?.webappConsentGrantedAt;
+  } catch (_) {}
+
+  const settings = (() => {
+    try { return require('../services/settingsService').getSettings(tenantId); } catch (_) { return {}; }
+  })();
+
+  return res.json({
+    ok:               true,
+    tenantId,
+    defenderConsent:  true, // granted during login flow
+    webappConsent,
+    webappClientId:   !!WEBAPP_CLIENT_ID,
+    telegramEnabled:  !!(settings?.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN),
+    adminEmailSet:    !!(settings?.alertAdminEmail || process.env.ALERT_ADMIN_EMAIL),
+    autoRemediation:  process.env.AUTO_REMEDIATION_ENABLED === 'true',
+  });
+});
 
 // GET /api/auth/access
 router.get('/access', (req, res) => {
