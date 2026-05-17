@@ -5,12 +5,12 @@ const alertsStore    = require('../services/alertsStore');
 const settingsService = require('../services/settingsService');
 
 // GET /api/msp/tenants
-router.get('/tenants', (req, res) => {
+router.get('/tenants', async (req, res) => {
   if (process.env.MOCK_MODE === 'true') {
     return res.json(getMockTenants());
   }
   try {
-    const tenants = tenantRegistry.getAllTenants();
+    const tenants = await tenantRegistry.getAllTenants();
     const summary = tenants.map(t => {
       try {
         const alerts    = alertsStore.getAll(t.tenantId);

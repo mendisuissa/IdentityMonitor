@@ -19,17 +19,35 @@ const CACHE_MAX  = 2000;       // max entries per tenant in memory
 const CACHE_TTL  = 5 * 60 * 1000; // 5-min TTL before re-reading from disk
 const _cacheTime = new Map(); // tenantId → timestamp of last disk-read
 
+// _ensureCache — never does disk I/O on the request path.
+// Cache is pre-populated at startup via warmCache(tenantId).
+// If somehow a tenant wasn't warmed, we just serve an empty array
+// (better than blocking the event loop with a synchronous SMB read).
 function _ensureCache(tenantId) {
-  const age = Date.now() - (_cacheTime.get(tenantId) || 0);
-  if (_memCache.has(tenantId) && age < CACHE_TTL) return;
-  // Read from disk (synchronous but only once per 5 min)
-  const filePath = path.join(AUDIT_DIR, tenantId + '.jsonl');
-  if (!fs.existsSync(filePath)) { _memCache.set(tenantId, []); _cacheTime.set(tenantId, Date.now()); return; }
-  try {
-    const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-    _memCache.set(tenantId, lines.slice(-CACHE_MAX)); // keep newest CACHE_MAX
+  if (!_memCache.has(tenantId)) {
+    _memCache.set(tenantId, []);
     _cacheTime.set(tenantId, Date.now());
-  } catch { _memCache.set(tenantId, []); _cacheTime.set(tenantId, Date.now()); }
+  }
+}
+
+// warmCache — async (non-blocking) — call from startup for each known tenant.
+// Reads the JSONL file asynchronously so it never freezes the event loop.
+async function warmCache(tenantId) {
+  if (!tenantId) return;
+  const filePath = path.join(AUDIT_DIR, tenantId + '.jsonl');
+  try {
+    await fs.promises.access(filePath);
+    const content = await fs.promises.readFile(filePath, 'utf8');
+    const lines = content.split('\n').filter(Boolean)
+      .map(l => { try { return JSON.parse(l); } catch { return null; } })
+      .filter(Boolean);
+    _memCache.set(tenantId, lines.slice(-CACHE_MAX));
+    _cacheTime.set(tenantId, Date.now());
+  } catch {
+    // File doesn't exist or can't be read — start with empty cache
+    _memCache.set(tenantId, []);
+    _cacheTime.set(tenantId, Date.now());
+  }
 }
 
 const ACTIONS = {
@@ -107,4 +125,4 @@ function getStats(tenantId) {
   };
 }
 
-module.exports = { log, getLog, getStats, ACTIONS };
+module.exports = { log, getLog, getStats, warmCache, ACTIONS };

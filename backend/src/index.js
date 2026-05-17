@@ -27,6 +27,7 @@ const weeklyDigest  = require('./services/weeklyDigest');
 const workflowStore = require('./services/workflowStore');
 const alertsStore   = require('./services/alertsStore');
 
+const auditLog        = require('./services/auditLog');
 const anomalyService  = require('./services/anomalyService');
 const wsService       = require('./services/wsService');
 const jobRunner       = require('./services/jobRunner');
@@ -228,6 +229,7 @@ async function startup() {
     for (const tenantId of tenantIds) {
       await alertsStore.loadFromAzure(tenantId);
       await workflowStore.warmCache(tenantId);
+      await auditLog.warmCache(tenantId);
     }
   } catch (err) {
     console.warn('[Startup] warmCache error:', err.message);
