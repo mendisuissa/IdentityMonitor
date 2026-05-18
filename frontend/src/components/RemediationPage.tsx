@@ -744,6 +744,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         grid-template-columns:1fr 1fr;
       }
     }
+    @keyframes spin { to { transform: rotate(360deg); } }
     @media (max-width: 760px){
       .remediation-hero,
       .filters-headline,
@@ -823,6 +824,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [intuneScripts, setIntuneScripts] = useState<{ id: string; displayName: string }[]>([]);
   const [selectedIntuneScript, setSelectedIntuneScript] = useState('');
   const [executionNotes, setExecutionNotes] = useState('');
+  const [rescanLoading, setRescanLoading] = useState(false);
+  const [cacheRefreshedAt, setCacheRefreshedAt] = useState<string | null>(null);
+  const [scopeDetails, setScopeDetails] = useState<any>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -835,7 +839,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       try {
         const [config, result] = await Promise.all([
           api.getDefenderTenantConfig(),
-          api.getDefenderVulnerabilities(500)  // load top 500; specific CVEs fetched on-demand via direct lookup
+          api.getDefenderVulnerabilities(500)
         ]);
         if (!mounted) return;
         const items = Array.isArray(result?.items) ? result.items : [];
@@ -844,6 +848,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         setAdminConsentUrl(config?.adminConsentUrl || '');
         setFindings(items);
         setSelectedIndex(0);
+        if (result?.cacheRefreshedAt) setCacheRefreshedAt(result.cacheRefreshedAt);
       } catch (err: any) {
         if (!mounted) return;
         setError(getFriendlyErrorMessage(err));
@@ -857,8 +862,28 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       }
     }
     loadFindings();
+    // Fetch scope details in parallel (non-blocking)
+    api.getDefenderScopes().then((s: any) => { if (mounted) setScopeDetails(s); }).catch(() => {});
     return () => { mounted = false; };
   }, [tenantId]);
+
+  const handleRescan = async () => {
+    setRescanLoading(true);
+    setError('');
+    setTechnicalError('');
+    try {
+      const result = await api.getDefenderVulnerabilities(500, { refresh: true });
+      const items = Array.isArray(result?.items) ? result.items : [];
+      setFindings(items);
+      setSelectedIndex(0);
+      if (result?.cacheRefreshedAt) setCacheRefreshedAt(result.cacheRefreshedAt);
+    } catch (err: any) {
+      setError(getFriendlyErrorMessage(err));
+      setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : (err?.message || ''));
+    } finally {
+      setRescanLoading(false);
+    }
+  };
 
   const filteredFindings = useMemo(() => {
     return findings.filter((f) => {
@@ -1277,7 +1302,20 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             <div>Active tenant: <strong>{tenantName || tenantId || 'Current connected tenant'}</strong></div>
             {tenantConfig ? <div>Defender: <strong>{tenantConfig.defenderEnabled ? 'Enabled' : 'Disabled'}</strong></div> : null}
             <div>Showing: <strong>{shownFindings} of {totalFindings}</strong></div>
+            {cacheRefreshedAt && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Last scan: {new Date(cacheRefreshedAt).toLocaleString()}</div>}
           </div>
+        </div>
+        <div className="remediation-hero-actions">
+          <button
+            className="btn btn-secondary"
+            onClick={handleRescan}
+            disabled={rescanLoading || loadingFindings}
+            style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+            title="Force a fresh pull from Microsoft Defender (bypasses 5-min cache)"
+          >
+            <span style={{ display: 'inline-block', animation: rescanLoading ? 'spin 1s linear infinite' : 'none' }}>⟳</span>
+            {rescanLoading ? 'Scanning…' : 'Re-scan CVEs'}
+          </button>
         </div>
       </section>
 
@@ -1307,7 +1345,26 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         <section className="remediation-banner warning">
           <div>
             <strong>Defender access needs admin consent.</strong>
-            <div>This customer tenant must complete Defender admin consent before the app can read live vulnerability data.</div>
+            <div style={{ marginTop: 4 }}>This customer tenant must complete Defender admin consent before the app can read live vulnerability data.</div>
+            {scopeDetails?.defender?.roles && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Required Defender permissions</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {scopeDetails.defender.roles.map((r: any) => (
+                    <div key={r.role} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                      <span style={{ color: r.status === 'missing' ? '#f87171' : '#fbbf24', fontSize: 15, flexShrink: 0 }}>
+                        {r.status === 'missing' ? '✗' : '?'}
+                      </span>
+                      <code style={{ background: 'rgba(255,255,255,0.06)', padding: '1px 6px', borderRadius: 4, fontSize: 12 }}>{r.role}</code>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>— {r.description}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                  Granted via: <code style={{ background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 4 }}>https://api.securitycenter.microsoft.com/.default</code>
+                </div>
+              </div>
+            )}
           </div>
           <div className="remediation-banner-actions">
             {adminConsentUrl ? <a className="btn btn-primary" href={adminConsentUrl}>Grant Defender admin consent</a> : null}

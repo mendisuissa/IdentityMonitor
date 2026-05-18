@@ -110,6 +110,7 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
   const [postureLoading, setPostureLoading] = useState(false);
   const [postureError, setPostureError] = useState('');
   const postureCheckedRef = useRef(false);
+  const [defenderScope, setDefenderScope] = useState<any>(null);
 
   // ── Step 3: Remediation service (webapp consent) ──
   const [onboardingStatus, setOnboardingStatus] = useState<any>(null);
@@ -153,8 +154,13 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
     setPostureError('');
     setPosture(null);
     try {
-      const data = await api.getPosture();
-      setPosture(data);
+      const [data, scopes] = await Promise.allSettled([
+        api.getPosture(),
+        api.getDefenderScopes(),
+      ]);
+      if (data.status === 'fulfilled') setPosture(data.value);
+      else throw data.reason;
+      if (scopes.status === 'fulfilled') setDefenderScope(scopes.value);
     } catch (e: any) {
       setPostureError(e?.message || 'Failed to check permissions');
     } finally {
@@ -456,7 +462,32 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
                     label="Privileged users found"
                     sub={!postureLoading && posture ? `${privilegedCount(posture)} privileged account${privilegedCount(posture) !== 1 ? 's' : ''} detected` : undefined}
                   />
+                  <CheckRow
+                    ok={postureLoading ? null : defenderScope ? defenderScope.liveAccessOk : null}
+                    label="Defender for Endpoint API"
+                    sub={
+                      postureLoading ? undefined :
+                      defenderScope?.liveAccessOk ? 'Vulnerability data accessible' :
+                      defenderScope?.requiresAdminConsent ? 'Admin consent needed — grant below' :
+                      defenderScope?.configured === false ? 'Not configured (optional)' :
+                      defenderScope?.error ? 'Access check failed' : undefined
+                    }
+                  />
                 </div>
+
+                {/* Defender consent prompt */}
+                {!postureLoading && defenderScope?.requiresAdminConsent && !defenderScope?.liveAccessOk && (
+                  <div style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.22)', fontSize: 13 }}>
+                    <div style={{ fontWeight: 700, color: '#fbbf24', marginBottom: 4 }}>⚠️ Defender admin consent missing</div>
+                    <div style={{ color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.55 }}>
+                      A Global Administrator must grant consent so the app can read CVE vulnerability data from Microsoft Defender for Endpoint.
+                      Required roles: <code style={{ background: 'rgba(255,255,255,0.07)', padding: '1px 5px', borderRadius: 3, fontSize: 12 }}>Vulnerability.Read.All</code>, <code style={{ background: 'rgba(255,255,255,0.07)', padding: '1px 5px', borderRadius: 3, fontSize: 12 }}>Machine.Read.All</code>.
+                    </div>
+                    <a href={defenderScope.adminConsentUrl || '/api/auth/admin-consent'} className="btn btn-secondary" style={{ fontSize: 12, padding: '7px 14px' }}>
+                      Grant Defender Consent →
+                    </a>
+                  </div>
+                )}
 
                 {/* Error / warning */}
                 {postureError && (

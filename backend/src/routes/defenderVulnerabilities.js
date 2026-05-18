@@ -109,6 +109,86 @@ router.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'defender-vulnerability-ingest-multi-tenant' });
 });
 
+// GET /api/defender/scopes — required scopes + live access check
+router.get('/scopes', async (req, res) => {
+  const tenantId = resolveActiveTenantId(req);
+  if (!tenantId) return res.status(401).json({ ok: false, error: 'Not authenticated' });
+
+  const REQUIRED_DEFENDER_ROLES = [
+    { role: 'Vulnerability.Read.All',  description: 'Read CVE findings from Threat & Vulnerability Management' },
+    { role: 'Machine.Read.All',        description: 'Read device identities and machine assignments' },
+    { role: 'Ti.Read.All',             description: 'Read threat intelligence data for findings' },
+  ];
+
+  const REQUIRED_GRAPH_SCOPES = [
+    { scope: 'AuditLog.Read.All',                             required: true,  description: 'Read sign-in logs and audit events' },
+    { scope: 'Directory.Read.All',                            required: true,  description: 'Read users, groups, and directory objects' },
+    { scope: 'User.Read.All',                                 required: true,  description: 'Read all user profiles' },
+    { scope: 'RoleManagement.Read.Directory',                 required: true,  description: 'Read privileged role assignments' },
+    { scope: 'Policy.Read.ConditionalAccess',                 required: true,  description: 'Read Conditional Access policies' },
+    { scope: 'DeviceManagementScripts.ReadWrite.All',         required: false, description: 'Deploy Intune remediation scripts' },
+    { scope: 'DeviceManagementManagedDevices.ReadWrite.All',  required: false, description: 'Trigger device actions via Intune' },
+    { scope: 'Mail.Send',                                     required: false, description: 'Send alert notification emails' },
+  ];
+
+  let configured   = false;
+  let liveAccessOk = false;
+  let defenderError = null;
+  let requiresAdminConsent = false;
+  let consentGrantedAt = null;
+
+  try {
+    const { getTenantIntegration } = require('../services/tenantIntegrationStore');
+    const { readVulnerabilityCache, listTenantVulnerabilities } = require('../services/tenantDefenderClient');
+
+    const integration = await getTenantIntegration(tenantId);
+    configured = !!integration;
+    consentGrantedAt = integration?.consentGrantedAt || null;
+
+    // Cache hit → access was OK at last fetch; skip live call to keep this fast
+    const cacheEntry = readVulnerabilityCache(tenantId);
+    if (cacheEntry) {
+      liveAccessOk = true;
+    } else {
+      // No cache: try a lightweight check (will use cache internally if warm)
+      await listTenantVulnerabilities(tenantId, 1);
+      liveAccessOk = true;
+    }
+  } catch (err) {
+    defenderError = err.message || String(err);
+    const low = defenderError.toLowerCase();
+    requiresAdminConsent =
+      low.includes('missing application roles') ||
+      low.includes('adminconsent') ||
+      low.includes('not configured') ||
+      low.includes('missing for this') ||
+      low.includes('missing credentials');
+  }
+
+  res.json({
+    ok: true,
+    tenantId,
+    configured,
+    liveAccessOk,
+    consentGrantedAt,
+    requiresAdminConsent: !liveAccessOk && requiresAdminConsent,
+    adminConsentUrl: !liveAccessOk ? buildAdminConsentUrl(req, tenantId) : null,
+    error: defenderError,
+    defender: {
+      scope: 'https://api.securitycenter.microsoft.com/.default',
+      grantedVia: 'Admin consent on the shared Defender app registration',
+      roles: REQUIRED_DEFENDER_ROLES.map(r => ({
+        ...r,
+        status: liveAccessOk ? 'granted' : requiresAdminConsent ? 'missing' : 'unknown',
+      })),
+    },
+    graph: {
+      grantedVia: 'Admin consent during initial tenant sign-in',
+      scopes: REQUIRED_GRAPH_SCOPES,
+    },
+  });
+});
+
 router.get('/tenant/config', async (req, res) => {
   try {
     const tenantId = resolveActiveTenantId(req);
