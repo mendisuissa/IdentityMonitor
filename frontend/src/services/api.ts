@@ -563,6 +563,9 @@ export const api = {
   triggerAutoRemediation: () =>
     apiFetch<any>('/remediation/auto-remediation/trigger', { method: 'POST' }),
 
+  pollAutoRemediationJob: (jobId: string) =>
+    apiFetch<any>(`/remediation/auto-remediation/job/${jobId}`),
+
   notifyAdmin: (alertId: string) =>
     apiFetch<any>(`/alerts/${alertId}/notify-admin`, { method: 'POST' }),
 

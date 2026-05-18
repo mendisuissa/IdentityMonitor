@@ -19,6 +19,13 @@ const autoRemediationService = require('../services/autoRemediationService');
 
 const router = express.Router();
 
+// ── In-memory job store for async auto-remediation runs ──────────────────────
+// Key: jobId (string)  Value: { status: 'running'|'completed'|'error', summaries?, error? }
+const _autoRemJobs = new Map();
+function _cleanupJob(jobId) {
+  setTimeout(() => _autoRemJobs.delete(jobId), 15 * 60 * 1000); // expire after 15 min
+}
+
 function getTenantIdFromRequest(req) {
   const sessionTenantId = req.session?.tenant?.tenantId || null;
   const requestedTenantId = req.body?.tenantId || null;
@@ -407,16 +414,39 @@ router.get('/auto-remediation/status', async (req, res) => {
   });
 });
 
+// Fire-and-forget: return a jobId immediately, run in background.
+// Azure App Service has a 230s gateway timeout so we cannot await the full run.
 router.post('/auto-remediation/trigger', async (req, res) => {
   try {
     const tenantId = getTenantIdFromRequest(req);
-    // Use runForTenant so manual trigger always runs for the authenticated tenant,
-    // bypassing the global _running lock (which cron may hold).
-    const summaries = await autoRemediationService.runForTenant(tenantId);
-    res.json({ ok: true, summaries: summaries || [] });
+    const jobId = `${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
+    _autoRemJobs.set(jobId, { status: 'running' });
+
+    // Start the run in the background — do NOT await
+    autoRemediationService.runForTenant(tenantId)
+      .then(summaries => {
+        _autoRemJobs.set(jobId, { status: 'completed', summaries: summaries || [] });
+        _cleanupJob(jobId);
+      })
+      .catch(err => {
+        _autoRemJobs.set(jobId, { status: 'error', error: err.message || 'Run failed.' });
+        _cleanupJob(jobId);
+      });
+
+    res.json({ ok: true, jobId, status: 'running' });
   } catch (error) {
     return res.status(error.status || 500).json({ ok: false, error: error.message });
   }
+});
+
+// Poll endpoint — frontend calls this every 2s until status !== 'running'
+router.get('/auto-remediation/job/:jobId', async (req, res) => {
+  const job = _autoRemJobs.get(req.params.jobId);
+  if (!job) {
+    // Job expired or unknown — treat as still running (rare edge case)
+    return res.json({ status: 'running' });
+  }
+  res.json(job);
 });
 
 module.exports = router;

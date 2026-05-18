@@ -1672,11 +1672,39 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                 setAutoTriggering(true);
                 setAutoTriggerResult(null);
                 try {
-                  const res = await api.triggerAutoRemediation();
-                  setAutoTriggerResult({ ok: true, summaries: res.summaries || [] });
+                  const trigger = await api.triggerAutoRemediation();
+                  if (!trigger.ok || !trigger.jobId) {
+                    setAutoTriggerResult({ ok: false, error: trigger.error || 'Failed to start.' });
+                    return;
+                  }
+                  // Poll until the background job completes (Azure gateway timeout = 230s)
+                  const jobId = trigger.jobId;
+                  const maxWaitMs = 5 * 60 * 1000;
+                  const pollIntervalMs = 2500;
+                  const deadline = Date.now() + maxWaitMs;
+                  const poll = async (): Promise<void> => {
+                    try {
+                      const job = await api.pollAutoRemediationJob(jobId);
+                      if (job.status === 'completed') {
+                        setAutoTriggerResult({ ok: true, summaries: job.summaries || [] });
+                        setAutoTriggering(false);
+                      } else if (job.status === 'error') {
+                        setAutoTriggerResult({ ok: false, error: job.error || 'Run failed.' });
+                        setAutoTriggering(false);
+                      } else if (Date.now() < deadline) {
+                        setTimeout(poll, pollIntervalMs);
+                      } else {
+                        setAutoTriggerResult({ ok: false, error: 'Timed out waiting for results.' });
+                        setAutoTriggering(false);
+                      }
+                    } catch {
+                      setAutoTriggerResult({ ok: false, error: 'Lost connection while polling.' });
+                      setAutoTriggering(false);
+                    }
+                  };
+                  setTimeout(poll, pollIntervalMs);
                 } catch (e: any) {
                   setAutoTriggerResult({ ok: false, error: e?.message || 'Failed to trigger.' });
-                } finally {
                   setAutoTriggering(false);
                 }
               }}
