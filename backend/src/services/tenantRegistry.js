@@ -104,6 +104,7 @@ async function getAllTenants() {
 /** Returns unique tenant IDs found in settings/audit/workflow directories */
 function getAllTenantIds() {
   return Array.from(new Set([
+    ..._tenants.keys(),                    // in-memory (logged-in sessions)
     ...collectIdsFromDir(DIRS.settings),
     ...collectIdsFromDir(DIRS.audit),
     ...collectIdsFromDir(DIRS.workflows)
