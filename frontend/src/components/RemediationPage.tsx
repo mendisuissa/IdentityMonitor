@@ -850,6 +850,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [autoStatus, setAutoStatus] = useState<any>(null);
   const [autoTriggering, setAutoTriggering] = useState(false);
   const [autoTriggerResult, setAutoTriggerResult] = useState<any>(null);
+  // Ref to cancel an in-flight polling loop (prevents duplicate loops on re-click / remount)
+  const cancelPollRef = React.useRef<(() => void) | null>(null);
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [affectedMachines, setAffectedMachines] = useState<string[]>([]);
   const [affectedMachinesError, setAffectedMachinesError] = useState('');
@@ -1669,6 +1671,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
               className="btn btn-primary"
               disabled={autoTriggering}
               onClick={async () => {
+                // Cancel any previous poll loop before starting a new one
+                if (cancelPollRef.current) { cancelPollRef.current(); cancelPollRef.current = null; }
+
                 setAutoTriggering(true);
                 setAutoTriggerResult(null);
                 try {
@@ -1678,32 +1683,42 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                     setAutoTriggering(false);
                     return;
                   }
-                  // Poll until the background job completes (Azure gateway timeout = 230s)
+
+                  // Set up a cancellable polling loop
                   const jobId = trigger.jobId;
-                  const maxWaitMs = 5 * 60 * 1000;
+                  const maxWaitMs = 4 * 60 * 1000;
                   const pollIntervalMs = 2500;
                   const deadline = Date.now() + maxWaitMs;
+                  let cancelled = false;
+                  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+                  cancelPollRef.current = () => { cancelled = true; if (timeoutId) clearTimeout(timeoutId); };
+
+                  const done = (result: any) => {
+                    cancelled = true;
+                    cancelPollRef.current = null;
+                    setAutoTriggerResult(result);
+                    setAutoTriggering(false);
+                  };
+
                   const poll = async (): Promise<void> => {
+                    if (cancelled) return;
                     try {
                       const job = await api.pollAutoRemediationJob(jobId);
+                      if (cancelled) return;
                       if (job.status === 'completed') {
-                        setAutoTriggerResult({ ok: true, summaries: job.summaries || [] });
-                        setAutoTriggering(false);
+                        done({ ok: true, summaries: job.summaries || [] });
                       } else if (job.status === 'error') {
-                        setAutoTriggerResult({ ok: false, error: job.error || 'Run failed.' });
-                        setAutoTriggering(false);
+                        done({ ok: false, error: job.error || 'Run failed.' });
                       } else if (Date.now() < deadline) {
-                        setTimeout(poll, pollIntervalMs);
+                        timeoutId = setTimeout(poll, pollIntervalMs);
                       } else {
-                        setAutoTriggerResult({ ok: false, error: 'Timed out waiting for results.' });
-                        setAutoTriggering(false);
+                        done({ ok: false, error: 'Timed out waiting for results. Check History tab.' });
                       }
                     } catch (_e) {
-                      setAutoTriggerResult({ ok: false, error: 'Lost connection while polling.' });
-                      setAutoTriggering(false);
+                      done({ ok: false, error: 'Lost connection while polling.' });
                     }
                   };
-                  setTimeout(poll, pollIntervalMs);
+                  timeoutId = setTimeout(poll, pollIntervalMs);
                 } catch (e: any) {
                   setAutoTriggerResult({ ok: false, error: e?.message || 'Failed to trigger.' });
                   setAutoTriggering(false);
