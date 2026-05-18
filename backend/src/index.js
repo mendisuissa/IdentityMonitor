@@ -169,7 +169,7 @@ app.get('/api/posture', (req, res) => {
           firstScanDone:      onboarding.firstScanDone      || !!tenantHealth.lastSuccessfulScan,
           alertChannelTested: onboarding.alertChannelTested || !!tenantHealth.mailDeliveryOk,
           webhookActive:      onboarding.webhookActive      || !!tenantHealth.webhookActive,
-          workHoursSet:       onboarding.workHoursSet       || !!(settings.businessHours?.some(h => h.enabled))
+          workHoursSet:       onboarding.workHoursSet       || !!(Array.isArray(settings.businessHours) ? settings.businessHours.some(h => h.enabled) : settings.businessHours?.startHour != null)
         },
         health: {
           graphPermissionsOk:   tenantHealth.graphPermissionsOk  ?? null,
