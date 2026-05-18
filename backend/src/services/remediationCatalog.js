@@ -58,46 +58,59 @@ function classifyFinding(finding = {}) {
 
   const text = [category, productName, publisher, description, recommendation].join(' ');
 
-  const windowsUpdateHints = [
-    'windows update', 'security update', 'feature update', 'quality update', 'kb', 'cumulative update',
-    'windows component', 'operating system', 'windows server', 'windows 10', 'windows 11', 'monthly rollup',
-    'telephony service', 'kernel', 'rpc', 'smb', 'hyper-v', 'privilege escalation'
+  // Windows OS / platform hints — checked ONLY against productName+publisher (not description),
+  // because CVE descriptions for Chrome, .NET, OpenSSL etc. often mention "kernel", "SMB", "KB"
+  // which would otherwise mis-classify third-party apps as windows-update.
+  const windowsUpdateProductHints = [
+    'windows update', 'cumulative update', 'quality update', 'feature update', 'monthly rollup',
+    'windows component', 'windows server', 'windows 10', 'windows 11',
+    'telephony service', 'win32k', 'hyper-v', 'ntfs', 'print spooler',
+    'task scheduler', 'net logon', 'cryptographic services',
+  ];
+  // Secondary hints checked against full text (including description) but only for non-app CVEs
+  const windowsUpdateDescHints = [
+    'security update for microsoft windows', 'kb\\d{6,}',
   ];
   const intuneHints = ['intune', 'configuration profile', 'compliance policy', 'device policy', 'settings catalog'];
-  const scriptHints = ['script', 'powershell', 'remediation script', 'proactive remediation', 'detection script'];
-  const identityHints = ['identity', 'conditional access', 'entra', 'azure ad', 'authentication', 'mfa'];
+  const scriptHints = ['remediation script', 'proactive remediation', 'detection script'];
+  const identityHints = ['conditional access', 'entra id', 'azure ad', 'mfa bypass'];
   const appHints = [
-    'chrome', 'chromium', 'firefox', 'edge', 'webview',
-    '7-zip', '7zip', 'notepad++', 'notepad',
-    'acrobat', 'adobe',
-    'office', 'word', 'excel', 'outlook', 'powerpoint', 'onenote',
-    'vlc', 'java', 'browser', 'runtime',
-    'mongodb', 'openssl',
-    'teams', 'zoom', 'slack', 'skype', 'webex',
+    'chrome', 'chromium', 'firefox', 'webview',
+    '7-zip', '7zip', 'notepad++',
+    'acrobat', 'adobe reader',
+    'vlc', 'java', 'openssl', 'mongodb',
+    'teams', 'zoom', 'slack', 'skype', 'webex', 'discord',
     'visual studio code', 'vscode',
-    '.net', 'dotnet', 'asp.net', '.net framework', '.net runtime',
     'python', 'git', 'nodejs', 'node.js',
     'winrar', 'winzip',
     'putty', 'filezilla', 'citrix',
     'dropbox', 'wireshark', 'libreoffice', 'thunderbird',
-    'keepass', 'bitwarden', 'lastpass',
-    'oracle', 'mysql', 'postgresql',
-    'vmware', 'virtualbox',
+    'keepass', 'bitwarden', 'lastpass', '1password',
+    'mysql', 'postgresql',
+    'vmware', 'virtualbox', 'docker',
+    'curl', 'openssh', 'winscp',
+    'opera', 'brave',
+    'postman', 'insomnia',
+    'malwarebytes', 'ccleaner',
   ];
 
   if (category === 'unsupported-platform') {
     return { type: 'unsupported-platform', family: 'non-windows' };
   }
 
-  if (windowsUpdateHints.some((hint) => text.includes(hint)) || category === 'windows-update') {
-    return { type: 'windows-update', family: 'platform' };
-  }
-
-  // Known third-party applications take priority over script/intune hints,
-  // because Defender recommendations for apps often mention "proactive remediation"
-  // which would otherwise mis-classify an app finding as 'script'.
+  // ── Application check FIRST — prevents description keywords from overriding
+  // a correct 'application' classification that inferCategory already computed.
+  // Known third-party apps also take priority over all other heuristics.
   if (category === 'application' || appHints.some((hint) => productName.includes(hint))) {
     return { type: 'application', family: 'software' };
+  }
+
+  // ── Windows Update — product-name based (reliable) or explicit category tag ──
+  if (
+    windowsUpdateProductHints.some((hint) => (productName + ' ' + publisher).includes(hint)) ||
+    category === 'windows-update'
+  ) {
+    return { type: 'windows-update', family: 'platform' };
   }
 
   if (intuneHints.some((hint) => text.includes(hint)) || category === 'intune-policy') {

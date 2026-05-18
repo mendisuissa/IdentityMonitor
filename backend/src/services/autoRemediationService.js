@@ -40,7 +40,8 @@ function sevRank(s) { return SEV_ORDER[String(s || '').toLowerCase()] ?? 4; }
 
 // ── Per-tenant remediation ────────────────────────────────────────────────────
 
-async function remediateTenant(tenantId) {
+async function remediateTenant(tenantId, options = {}) {
+  const forceRemediate = options.forceRemediate === true;
   const summary = {
     tenantId,
     total:       0,
@@ -110,8 +111,8 @@ async function remediateTenant(tenantId) {
       continue;
     }
 
-    // ── 2. Already fixed recently — skip (guard: empty cveId would match every record) ─
-    if (cveId) {
+    // ── 2. Already fixed recently — skip (bypassed when forceRemediate=true) ──
+    if (cveId && !forceRemediate) {
       const recent = await getRecentSuccessForCve(tenantId, cveId, 24).catch(() => null);
       if (recent) {
         console.log(`[AutoRemediation] ${tenantId} ${cveId} — skipped (fixed within 24h)`);
@@ -326,10 +327,11 @@ async function runAutoRemediation() {
 }
 
 // ── Manual trigger — runs for a single tenant, bypasses _running lock ────────
-async function runForTenant(tenantId) {
+async function runForTenant(tenantId, options = {}) {
   if (!tenantId) throw new Error('tenantId is required');
-  console.log(`[AutoRemediation] Manual trigger for tenant ${tenantId}`);
-  const summary = await remediateTenant(tenantId);
+  const forceRemediate = options.forceRemediate !== false; // default true for manual triggers
+  console.log(`[AutoRemediation] Manual trigger for tenant ${tenantId} forceRemediate=${forceRemediate}`);
+  const summary = await remediateTenant(tenantId, { forceRemediate });
   return [summary];
 }
 
