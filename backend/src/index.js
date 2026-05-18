@@ -82,13 +82,16 @@ app.use(session({
 }));
 
 // ── Global request timeout — abort any request that hasn't responded in 30s ──
+// Exception: auto-remediation trigger can take several minutes (up to maxRun × API time)
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/') || req.path === '/health') {
+    const isLongRunning = req.path.includes('/auto-remediation/trigger');
+    const timeoutMs = isLongRunning ? 5 * 60 * 1000 : 30000;
     const timer = setTimeout(() => {
       if (!res.headersSent) {
         res.status(503).json({ error: 'Request timeout', path: req.path });
       }
-    }, 30000);
+    }, timeoutMs);
     res.on('finish', () => clearTimeout(timer));
     res.on('close',  () => clearTimeout(timer));
   }

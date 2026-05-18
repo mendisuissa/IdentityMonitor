@@ -248,7 +248,7 @@ async function remediateTenant(tenantId, options = {}) {
     }
 
     // Small pause between CVEs to avoid hammering APIs
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 500));
   }
 
   return summary;
