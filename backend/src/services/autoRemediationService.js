@@ -259,7 +259,15 @@ async function runAutoRemediation() {
   const startedAt = new Date().toISOString();
   console.log(`[AutoRemediation] Run started at ${startedAt}`);
 
-  const tenantIds = tenantRegistry.getAllTenantIds();
+  // Use async getAllTenants() so Azure-persisted profiles survive backend restarts.
+  // Fall back to sync getAllTenantIds() if async lookup fails.
+  let tenantIds;
+  try {
+    const tenants = await tenantRegistry.getAllTenants();
+    tenantIds = tenants.map(t => t.tenantId).filter(Boolean);
+  } catch (_) {
+    tenantIds = tenantRegistry.getAllTenantIds();
+  }
   if (!tenantIds.length) {
     console.log('[AutoRemediation] No active tenants — nothing to do.');
     _running = false;

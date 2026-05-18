@@ -769,6 +769,49 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         align-items:flex-start;
       }
     }
+
+    /* ── Loading indicator bar ── */
+    @keyframes rem-shimmer{
+      0%{background-position:200% center}
+      100%{background-position:-200% center}
+    }
+    .remediation-loading-bar{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:10px 18px;
+      border-radius:10px;
+      background:rgba(99,102,241,0.08);
+      border:1px solid rgba(99,102,241,0.2);
+      font-size:13px;
+      color:var(--text-secondary);
+    }
+    .remediation-loading-bar .rem-spinner{
+      width:14px;
+      height:14px;
+      border:2px solid rgba(99,102,241,0.25);
+      border-top-color:#6366f1;
+      border-radius:50%;
+      animation:spin 0.75s linear infinite;
+      flex-shrink:0;
+    }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+    .remediation-loading-bar .rem-track{
+      flex:1;
+      height:3px;
+      border-radius:2px;
+      background:rgba(99,102,241,0.12);
+      overflow:hidden;
+    }
+    .remediation-loading-bar .rem-track::after{
+      content:'';
+      display:block;
+      height:100%;
+      width:40%;
+      background:linear-gradient(90deg,transparent,#6366f1,transparent);
+      background-size:200% auto;
+      animation:rem-shimmer 1.4s linear infinite;
+    }
   `;
 
   const [findings, setFindings] = useState<Finding[]>([]);
@@ -1316,6 +1359,14 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           </button>
         </div>
       </section>
+
+      {loadingFindings && (
+        <div className="remediation-loading-bar">
+          <span className="rem-spinner" />
+          <span>Fetching vulnerability data from Microsoft Defender…</span>
+          <span className="rem-track" />
+        </div>
+      )}
 
       <section className="remediation-stats-grid">
         <div className="remediation-stat-card"><span>Findings in scope</span><strong>{shownFindings}</strong></div>

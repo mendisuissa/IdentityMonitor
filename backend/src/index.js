@@ -95,6 +95,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// Re-populate tenant registry from session after backend restarts.
+// Sessions survive via FileStore/Azure but _tenants is in-memory — this bridges the gap.
+app.use((req, res, next) => {
+  if (req.session?.tenant?.tenantId) {
+    tenantRegistry.registerTenant(req.session.tenant);
+  }
+  next();
+});
+
 // API Routes
 app.use('/api/auth',    authRoutes);
 app.use('/api/users',   usersRoutes);

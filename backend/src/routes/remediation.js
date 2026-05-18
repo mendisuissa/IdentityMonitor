@@ -410,10 +410,8 @@ router.get('/auto-remediation/status', async (req, res) => {
 router.post('/auto-remediation/trigger', async (req, res) => {
   try {
     getTenantIdFromRequest(req); // auth check only — runs for all tenants
-    res.json({ ok: true, message: 'Auto-remediation started', async: true });
-    autoRemediationService.runAutoRemediation().catch(err =>
-      console.error('[AutoRemediation] Trigger error:', err.message)
-    );
+    const summaries = await autoRemediationService.runAutoRemediation();
+    res.json({ ok: true, summaries: summaries || [] });
   } catch (error) {
     return res.status(error.status || 500).json({ ok: false, error: error.message });
   }
