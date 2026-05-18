@@ -2097,3 +2097,469 @@ body {
   .rem-tabs { overflow: auto; }
   .remediation-hero h1 { font-size: 26px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   SENTINEL v3 — Precision Security Interface
+   All selectors verified against actual component class names
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 1. Palette shift: deeper, cooler, more cybersecurity ── */
+:root {
+  --navy-950: #07080F;
+  --navy-900: #0B0D18;
+  --navy-800: rgba(255,255,255,0.035);
+  --navy-border: rgba(255,255,255,0.07);
+  --navy-border-light: rgba(255,255,255,0.13);
+
+  --text-primary: #F2EEF8;
+  --text-secondary: #7E788F;
+  --text-muted:   #3D3950;
+
+  --indigo:      #E8784A;
+  --indigo-glow: rgba(232,120,74,0.20);
+  --violet:      #F5A462;
+
+  --transition: 160ms ease;
+  --shadow-card: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04);
+  --shadow-hover: 0 8px 28px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.07);
+}
+
+/* ── 2. Body: blue-tinted texture, distinct from other products ── */
+body {
+  background:
+    radial-gradient(ellipse 70% 40% at 0% 0%,   rgba(60,80,160,0.06) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 90%, rgba(232,120,74,0.05) 0%, transparent 55%),
+    var(--navy-950);
+}
+
+/* ── 3. Scrollbar ── */
+::-webkit-scrollbar        { width: 5px; height: 5px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.08); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); }
+
+/* ── 4. Sidebar: deep navy with gradient and glass ── */
+.sidebar {
+  background:
+    linear-gradient(180deg, #0D1022 0%, #090C18 100%);
+  border-right: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+}
+
+/* ── 5. Logo icon: pulsing glow ── */
+@keyframes icon-pulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(232,120,74,0.40); }
+  50%       { box-shadow: 0 0 24px rgba(232,120,74,0.65); }
+}
+.logo-icon {
+  border-radius: 10px;
+  background: linear-gradient(135deg, #E8784A 0%, #F5A462 100%);
+  animation: icon-pulse 3s ease-in-out infinite;
+}
+
+/* ── 6. Logo text: gradient ── */
+.logo-text {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  background: linear-gradient(135deg, #F2EEF8 30%, #B0A8C8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── 7. Nav items: refined active state ── */
+.nav-item {
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  border-left: 2px solid transparent;
+  transition: all 140ms ease;
+}
+.nav-item:hover {
+  background: rgba(255,255,255,0.045);
+  color: var(--text-primary);
+}
+.nav-item.active {
+  background: linear-gradient(90deg, rgba(232,120,74,0.16) 0%, rgba(232,120,74,0.04) 100%);
+  border-left: 2px solid #E8784A;
+  color: #F2EEF8;
+  font-weight: 600;
+}
+
+/* ── 8. Main content area ── */
+.main-content {
+  padding: 32px 40px;
+}
+
+/* ── 9. Page header: bold typography ── */
+.page-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+}
+.page-subtitle {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+  letter-spacing: 0.01em;
+}
+
+/* ── 10. Cards: deeper, layered with inset glow ── */
+.card {
+  background: rgba(255,255,255,0.028);
+  border: 1px solid rgba(255,255,255,0.065);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 200ms ease, border-color 200ms ease, transform 200ms ease;
+}
+.card:hover {
+  border-color: rgba(255,255,255,0.11);
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
+  background: rgba(255,255,255,0.038);
+}
+.card-header {
+  border-bottom: 1px solid rgba(255,255,255,0.055);
+}
+.card-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.1px;
+}
+.card-title-dot {
+  animation: icon-pulse 2.5s ease-in-out infinite;
+}
+
+/* ── 11. Stat cards: dominant numbers, crisp glows ── */
+.stats-grid {
+  gap: 14px;
+}
+.stat-card {
+  background: rgba(255,255,255,0.032);
+  border: 1px solid rgba(255,255,255,0.065);
+  border-radius: 13px;
+  box-shadow: var(--shadow-card);
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
+  border-color: rgba(255,255,255,0.11);
+}
+
+/* Wider gradient top bar with glow blur */
+.stat-card::before {
+  height: 2px;
+  border-radius: 14px 14px 0 0;
+}
+.stat-card.critical::before {
+  background: linear-gradient(90deg, #FF4455, rgba(255,68,85,0.3));
+  box-shadow: 0 0 16px rgba(255,68,85,0.6);
+}
+.stat-card.high::before {
+  background: linear-gradient(90deg, #FF8533, rgba(255,133,51,0.3));
+  box-shadow: 0 0 16px rgba(255,133,51,0.55);
+}
+.stat-card.amber::before {
+  background: linear-gradient(90deg, #F5A623, rgba(245,166,35,0.3));
+  box-shadow: 0 0 16px rgba(245,166,35,0.5);
+}
+.stat-card.medium::before {
+  background: linear-gradient(90deg, #FFB700, rgba(255,183,0,0.3));
+  box-shadow: 0 0 16px rgba(255,183,0,0.5);
+}
+.stat-card.clean::before {
+  background: linear-gradient(90deg, #00C98B, rgba(0,201,139,0.3));
+  box-shadow: 0 0 16px rgba(0,201,139,0.5);
+}
+.stat-card.neutral::before {
+  background: linear-gradient(90deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05));
+}
+
+/* Bigger, bolder stat numbers with tabular rendering */
+.stat-value {
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -1.5px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 5px;
+}
+.stat-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+
+/* ── 12. Severity badges: crisp with glow ── */
+.severity-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  padding: 3px 9px;
+}
+.severity-badge.critical {
+  background: rgba(255,68,85,0.10);
+  color: #FF6070;
+  border-color: rgba(255,68,85,0.28);
+  box-shadow: 0 0 8px rgba(255,68,85,0.14);
+}
+.severity-badge.high {
+  background: rgba(255,133,51,0.10);
+  color: #FF9555;
+  border-color: rgba(255,133,51,0.28);
+  box-shadow: 0 0 8px rgba(255,133,51,0.14);
+}
+.severity-badge.medium {
+  background: rgba(255,183,0,0.10);
+  color: #FFC933;
+  border-color: rgba(255,183,0,0.28);
+  box-shadow: 0 0 8px rgba(255,183,0,0.12);
+}
+.severity-badge.low {
+  background: rgba(74,140,255,0.10);
+  color: #6DA0FF;
+  border-color: rgba(74,140,255,0.28);
+  box-shadow: 0 0 8px rgba(74,140,255,0.12);
+}
+
+/* ── 13. Tables: precision data grid ── */
+.data-table th {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.data-table td {
+  padding: 11px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.data-table tbody tr:hover {
+  background: rgba(255,255,255,0.03);
+}
+.data-table tbody tr:nth-child(even) {
+  background: rgba(255,255,255,0.012);
+}
+.data-table tbody tr:nth-child(even):hover {
+  background: rgba(255,255,255,0.03);
+}
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+/* ── 14. Buttons: powerful primary, refined ghost ── */
+.btn {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 8px;
+  transition: all 150ms ease;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #E8784A 0%, #D4633A 100%);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 3px 12px rgba(232,120,74,0.40), inset 0 1px 0 rgba(255,255,255,0.14);
+  color: white;
+  font-weight: 700;
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #F08455 0%, #E8784A 100%);
+  box-shadow: 0 6px 20px rgba(232,120,74,0.55), inset 0 1px 0 rgba(255,255,255,0.18);
+  transform: translateY(-1px);
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(232,120,74,0.35);
+}
+.btn-ghost {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: var(--text-secondary);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.18);
+  color: var(--text-primary);
+}
+.btn-danger {
+  background: rgba(255,68,85,0.08);
+  border: 1px solid rgba(255,68,85,0.22);
+  color: #FF6070;
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(255,68,85,0.15);
+  border-color: rgba(255,68,85,0.35);
+}
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+
+/* ── 15. Filters & inputs: elevated look ── */
+.filter-select,
+.filter-input {
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+.filter-select:focus,
+.filter-input:focus {
+  border-color: rgba(232,120,74,0.6);
+  box-shadow: 0 0 0 3px rgba(232,120,74,0.10);
+  background: rgba(255,255,255,0.05);
+  outline: none;
+}
+.input:focus {
+  border-color: rgba(232,120,74,0.6);
+  box-shadow: 0 0 0 3px rgba(232,120,74,0.10);
+}
+
+/* ── 16. Loading spinner: smooth cubic-bezier ── */
+@keyframes spin-smooth {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255,255,255,0.06);
+  border-top-color: var(--indigo);
+  border-right-color: rgba(232,120,74,0.4);
+  animation: spin-smooth 0.65s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+}
+
+/* ── 17. Empty state: readable ── */
+.empty-state { opacity: 1; }
+.empty-icon  { font-size: 36px; opacity: 0.25; }
+.empty-text  { font-size: 13px; color: var(--text-muted); }
+
+/* ── 18. Role tags: distinctive purple treatment ── */
+.role-tag {
+  background: rgba(155,138,251,0.08);
+  color: #BEB4FF;
+  border: 1px solid rgba(155,138,251,0.18);
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+}
+
+/* ── 19. Risk dots: stronger glow on critical/high ── */
+.risk-dot.critical { box-shadow: 0 0 8px rgba(255,68,85,0.8); }
+.risk-dot.high     { box-shadow: 0 0 8px rgba(255,133,51,0.7); }
+.risk-dot.clean    { box-shadow: 0 0 8px rgba(0,201,139,0.6); }
+
+/* ── 20. Health pills ── */
+.health-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.health-pill.ok   { background: rgba(0,201,139,0.08); border-color: rgba(0,201,139,0.2); color: #00C98B; }
+.health-pill.warn { background: rgba(255,183,0,0.08); border-color: rgba(255,183,0,0.2); color: #FFB700; }
+
+/* ── 21. Selection color ── */
+::selection {
+  background: rgba(232,120,74,0.25);
+  color: #F2EEF8;
+}
+
+/* ── 22. Focus ring ── */
+*:focus-visible {
+  outline: 2px solid rgba(232,120,74,0.7);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── 23. Sidebar nav scan button ── */
+.btn-scan {
+  background: linear-gradient(135deg, #E8784A 0%, #D4633A 100%);
+  box-shadow: 0 3px 14px rgba(232,120,74,0.45), inset 0 1px 0 rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.btn-scan:hover:not(:disabled) {
+  box-shadow: 0 6px 22px rgba(232,120,74,0.60), inset 0 1px 0 rgba(255,255,255,0.18);
+  transform: translateY(-1px);
+}
+
+/* ── 24. Alert row severity borders: more visible ── */
+.alert-row-critical { border-left: 3px solid #FF4455; background: rgba(255,68,85,0.025); }
+.alert-row-high     { border-left: 3px solid #FF8533; background: rgba(255,133,51,0.02); }
+.alert-row-medium   { border-left: 3px solid #FFB700; }
+.alert-row-low      { border-left: 3px solid #4A8CFF; }
+
+/* ── 25. Login page: deeper gradient ── */
+.login-page {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 20%, rgba(60,80,160,0.08) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(232,120,74,0.07) 0%, transparent 55%),
+    var(--navy-950);
+}
+
+/* ── 26. Navbar glass ── */
+.navbar {
+  background: rgba(7,8,15,0.92);
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ── 27. Sidebar footer: subtle top separator ── */
+.sidebar-footer {
+  border-top: 1px solid rgba(255,255,255,0.055);
+  background: rgba(0,0,0,0.15);
+}
+
+/* ── 28. Nav badge: stronger ── */
+.nav-badge {
+  background: #FF4455;
+  box-shadow: 0 0 8px rgba(255,68,85,0.5);
+  font-size: 9px;
+}
+
+/* ── 29. Two-col layout gap ── */
+.two-col { gap: 16px; }
+
+/* ── 30. Callout panel: accent left border ── */
+.callout-panel {
+  border-left: 3px solid var(--indigo);
+  background: rgba(232,120,74,0.05);
+  border-radius: 0 10px 10px 0;
+  padding: 14px 18px;
+}
+
+/* ── 31. Timeline dots: glow ── */
+.timeline-dot {
+  box-shadow: 0 0 8px currentColor;
+}
+
+/* ── 32. Modal overlay: deeper blur ── */
+.modal-overlay {
+  background: rgba(7,8,15,0.80);
+  backdrop-filter: blur(8px);
+}
+.modal-card {
+  background: #0D0F1C;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.7);
+  border-radius: 16px;
+}
