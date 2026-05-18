@@ -114,12 +114,21 @@ function normalizeDefenderUrl(pathOrUrl) {
   return `${DEFENDER_API_BASE}${pathOrUrl}`;
 }
 
+const DEFENDER_REQUEST_TIMEOUT_MS = Number(process.env.DEFENDER_REQUEST_TIMEOUT_MS || 25000);
+
+function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEFENDER_REQUEST_TIMEOUT_MS);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
 async function defenderGet(config, pathOrUrl) {
   const cacheKey = getCacheKey(config);
   let token = await getAccessToken(config);
   const url = normalizeDefenderUrl(pathOrUrl);
 
-  let response = await fetch(url, {
+  let response = await fetchWithTimeout(url, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -137,7 +146,7 @@ async function defenderGet(config, pathOrUrl) {
     tokenCache.delete(cacheKey);
     token = await getAccessToken(config);
 
-    response = await fetch(url, {
+    response = await fetchWithTimeout(url, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${token}`,
