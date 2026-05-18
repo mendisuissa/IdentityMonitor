@@ -1725,7 +1725,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                   <div style={{ fontWeight: 700, marginBottom: 8 }}>✅ Run completed</div>
                   {autoTriggerResult.summaries?.map((s: any, i: number) => (
                     <div key={i} style={{ fontSize: 13, marginBottom: 4 }}>
-                      <strong>{s.tenantId?.substring(0, 8)}…</strong> — ✅ {s.success} success, ❌ {s.failed} failed, ⏭ {s.skipped} skipped
+                      <strong>{s.tenantId?.substring(0, 8)}…</strong> — ✅ {s.success} success, ❌ {s.failed} failed, ⏭ {s.skipped} skipped{s.unsupported > 0 ? `, 🚫 ${s.unsupported} unsupported platform` : ''}
                       {s.error && <span style={{ color: '#ef4444', marginLeft: 8 }}>{s.error}</span>}
                     </div>
                   ))}

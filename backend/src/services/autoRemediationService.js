@@ -92,6 +92,8 @@ async function remediateTenant(tenantId) {
 
     summary.total++;
 
+    console.log(`[AutoRemediation] ${tenantId} ${cveId || '(no-id)'} product="${enriched.productName || vuln.productName || ''}" sev=${vuln.severity} → category=${category}`);
+
     // ── 1. Unsupported platform — just record, no action ─────────────────────
     if (category === 'unsupported-platform') {
       summary.unsupported++;
@@ -112,6 +114,7 @@ async function remediateTenant(tenantId) {
     if (cveId) {
       const recent = await getRecentSuccessForCve(tenantId, cveId, 24).catch(() => null);
       if (recent) {
+        console.log(`[AutoRemediation] ${tenantId} ${cveId} — skipped (fixed within 24h)`);
         summary.skipped++;
         continue;
       }

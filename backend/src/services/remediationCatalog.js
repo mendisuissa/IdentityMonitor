@@ -75,6 +75,7 @@ function classifyFinding(finding = {}) {
     'mongodb', 'openssl',
     'teams', 'zoom', 'slack', 'skype', 'webex',
     'visual studio code', 'vscode',
+    '.net', 'dotnet', 'asp.net', '.net framework', '.net runtime',
     'python', 'git', 'nodejs', 'node.js',
     'winrar', 'winzip',
     'putty', 'filezilla', 'citrix',
