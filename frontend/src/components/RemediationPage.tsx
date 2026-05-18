@@ -35,9 +35,6 @@ type Finding = {
   displayPublisher?: string;
   displayCategoryLabel?: string;
   classification?: { type?: string; family?: string };
-  suggestedWingetId?: string | null;
-  fixVersion?: string | null;
-  remediationConfidence?: 'high' | 'medium' | 'low';
 };
 
 type Recommendation = {
@@ -50,7 +47,7 @@ type Recommendation = {
   fixingKbId?: string;
 };
 
-type MainTab = 'vulnerabilities' | 'recommendations' | 'history' | 'auto';
+type MainTab = 'vulnerabilities' | 'recommendations';
 type DetailTab = 'details' | 'devices' | 'plan';
 
 type Props = { tenantId?: string; tenantName?: string };
@@ -171,34 +168,53 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       gap:16px;
     }
     .remediation-shell *{ box-sizing:border-box; }
-    .remediation-hero,
+
+    /* ── Shared card base ── */
     .remediation-banner,
     .remediation-filters,
     .remediation-list-card,
     .remediation-detail-card,
-    .remediation-stat-card,
     .card-block{
-      background:var(--navy-900);
-      border:1px solid var(--navy-border);
-      border-radius:18px;
-      box-shadow:0 4px 24px rgba(0,0,0,.22);
+      background:rgba(255,255,255,0.028);
+      border:1px solid rgba(255,255,255,0.065);
+      border-radius:14px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.04);
     }
+
+    /* ── Hero ── */
     .remediation-hero{
       display:flex;
       justify-content:space-between;
       gap:20px;
-      padding:22px 20px;
+      padding:24px 28px;
       align-items:flex-start;
+      background:rgba(255,255,255,0.028);
+      border:1px solid rgba(255,255,255,0.065);
+      border-radius:14px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.5);
+      position:relative;
+      overflow:hidden;
+    }
+    .remediation-hero::before{
+      content:'';
+      position:absolute;
+      top:0;left:0;right:0;
+      height:2px;
+      background:linear-gradient(90deg,#E8784A 0%,rgba(232,120,74,0.2) 100%);
     }
     .remediation-breadcrumb{
-      color:var(--text-accent);
-      font-size:12px;
-      font-weight:700;
-      margin-bottom:8px;
+      font-size:10.5px;
+      font-weight:600;
+      text-transform:uppercase;
+      letter-spacing:0.8px;
+      color:var(--text-muted);
+      margin-bottom:10px;
     }
     .remediation-hero h1{
-      margin:0 0 8px;
-      font-size:22px;
+      margin:0 0 6px;
+      font-size:26px;
+      font-weight:800;
+      letter-spacing:-0.5px;
       line-height:1.15;
       color:var(--text-primary);
     }
@@ -218,46 +234,67 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     .remediation-hero-actions{ display:flex; align-items:flex-start; }
     .btn{
       border:none;
-      border-radius:12px;
-      padding:10px 16px;
+      border-radius:8px;
+      padding:9px 16px;
       font-weight:700;
+      font-size:12.5px;
+      font-family:var(--font-sans);
       cursor:pointer;
-      transition:.18s ease;
+      transition:all 150ms ease;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      letter-spacing:0.01em;
     }
-    .btn:hover{ transform:translateY(-1px); }
-    .btn:disabled{ opacity:.55; cursor:not-allowed; transform:none; }
+    .btn:hover:not(:disabled){ transform:translateY(-1px); }
+    .btn:disabled{ opacity:.5; cursor:not-allowed; transform:none; }
     .btn-primary{
-      background:var(--amber-500);
-      color:#111827;
+      background:linear-gradient(135deg,#E8784A 0%,#D4633A 100%);
+      color:white;
+      border:1px solid rgba(255,255,255,0.12);
+      box-shadow:0 3px 12px rgba(232,120,74,0.4),inset 0 1px 0 rgba(255,255,255,0.14);
+    }
+    .btn-primary:hover:not(:disabled){
+      box-shadow:0 6px 20px rgba(232,120,74,0.55),inset 0 1px 0 rgba(255,255,255,0.18);
     }
     .btn-secondary{
-      background:var(--navy-700);
+      background:rgba(255,255,255,0.05);
+      color:var(--text-secondary);
+      border:1px solid rgba(255,255,255,0.10);
+    }
+    .btn-secondary:hover:not(:disabled){
+      background:rgba(255,255,255,0.09);
+      border-color:rgba(255,255,255,0.18);
       color:var(--text-primary);
-      border:1px solid var(--navy-border-light);
     }
     .remediation-main-tabs{
       display:flex;
-      gap:4px;
-      border-bottom:2px solid var(--navy-border);
-      padding:0 4px;
+      gap:2px;
+      border-bottom:1px solid rgba(255,255,255,0.07);
+      padding:0;
     }
     .remediation-main-tabs button{
       background:none;
       border:none;
       border-bottom:2px solid transparent;
-      margin-bottom:-2px;
-      padding:10px 18px;
-      font-size:14px;
+      margin-bottom:-1px;
+      padding:11px 20px;
+      font-size:13.5px;
       font-weight:600;
       color:var(--text-secondary);
       cursor:pointer;
       border-radius:6px 6px 0 0;
-      transition:color .15s,border-color .15s;
+      transition:color .15s,border-color .15s,background .15s;
+      font-family:var(--font-sans);
+      letter-spacing:0.01em;
     }
-    .remediation-main-tabs button:hover{ color:var(--text-primary); }
+    .remediation-main-tabs button:hover{
+      color:var(--text-primary);
+      background:rgba(255,255,255,0.035);
+    }
     .remediation-main-tabs button.active{
-      color:var(--text-accent,#f97316);
-      border-bottom-color:var(--text-accent,#f97316);
+      color:#E8784A;
+      border-bottom-color:#E8784A;
     }
     .rec-table{ width:100%; border-collapse:collapse; font-size:13px; }
     .rec-table th{
@@ -280,26 +317,80 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       gap:14px;
     }
     .remediation-stat-card{
-      padding:16px 18px;
-      min-height:84px;
+      padding:20px 20px 18px;
+      min-height:96px;
       display:flex;
       flex-direction:column;
       justify-content:space-between;
+      background:rgba(255,255,255,0.032);
+      border:1px solid rgba(255,255,255,0.065);
+      border-radius:13px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.5);
+      position:relative;
+      overflow:hidden;
+      transition:transform 200ms ease,box-shadow 200ms ease;
+    }
+    .remediation-stat-card:hover{
+      transform:translateY(-2px);
+      box-shadow:0 8px 28px rgba(0,0,0,0.6);
+    }
+    .remediation-stat-card::before{
+      content:'';
+      position:absolute;
+      top:0;left:0;right:0;
+      height:2px;
+    }
+    .remediation-stat-card:nth-child(1)::before{
+      background:linear-gradient(90deg,#4A8CFF,rgba(74,140,255,0.25));
+      box-shadow:0 0 14px rgba(74,140,255,0.5);
+    }
+    .remediation-stat-card:nth-child(2)::before{
+      background:linear-gradient(90deg,#E8784A,rgba(232,120,74,0.25));
+      box-shadow:0 0 14px rgba(232,120,74,0.5);
+    }
+    .remediation-stat-card:nth-child(3)::before{
+      background:linear-gradient(90deg,#F5A623,rgba(245,166,35,0.25));
+      box-shadow:0 0 14px rgba(245,166,35,0.45);
+    }
+    .remediation-stat-card:nth-child(4)::before{
+      background:linear-gradient(90deg,#FF4455,rgba(255,68,85,0.25));
+      box-shadow:0 0 14px rgba(255,68,85,0.5);
     }
     .remediation-stat-card span{
       color:var(--text-secondary);
-      font-size:13px;
+      font-size:11.5px;
+      font-weight:500;
+      letter-spacing:0.02em;
     }
     .remediation-stat-card strong{
-      font-size:20px;
-      color:var(--text-primary);
+      font-size:36px;
+      font-weight:800;
+      letter-spacing:-1.5px;
+      font-variant-numeric:tabular-nums;
+      line-height:1;
     }
+    .remediation-stat-card:nth-child(1) strong{ color:#6AA4FF; }
+    .remediation-stat-card:nth-child(2) strong{ color:#E8784A; }
+    .remediation-stat-card:nth-child(3) strong{ color:#F5A623; }
+    .remediation-stat-card:nth-child(4) strong{ color:#FF6070; }
     .remediation-banner{
-      padding:16px 18px;
+      padding:16px 20px;
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
     }
-    .remediation-banner.warning{ border-color:rgba(245,158,11,.35); }
-    .remediation-banner.success{ border-color:rgba(16,185,129,.35); }
-    .remediation-banner.danger{ border-color:rgba(239,68,68,.35); }
+    .remediation-banner.warning{
+      background:rgba(245,158,11,0.06);
+      border-color:rgba(245,158,11,0.28);
+    }
+    .remediation-banner.success{
+      background:rgba(16,185,129,0.06);
+      border-color:rgba(16,185,129,0.28);
+    }
+    .remediation-banner.danger{
+      background:rgba(239,68,68,0.06);
+      border-color:rgba(239,68,68,0.28);
+    }
     .remediation-banner-actions{ margin-top:12px; }
     .remediation-banner details{ margin-top:10px; }
     .remediation-banner pre,
@@ -316,26 +407,26 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       font-size:12px;
     }
     .remediation-filters{
-      padding:16px;
+      padding:16px 20px;
       display:flex;
       flex-direction:column;
-      gap:14px;
+      gap:12px;
     }
     .filters-headline{
       display:flex;
       justify-content:space-between;
-      align-items:flex-start;
+      align-items:center;
       gap:16px;
     }
     .filters-headline h3{
-      margin:0 0 4px;
-      color:var(--text-primary);
-      font-size:18px;
-    }
-    .filters-headline p{
       margin:0;
       color:var(--text-secondary);
+      font-size:12px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:0.8px;
     }
+    .filters-headline p{ display:none; }
     .filters-inline{
       display:flex;
       flex-wrap:wrap;
@@ -383,7 +474,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       align-items:start;
     }
     .remediation-list-card{
-      padding:16px;
+      padding:18px;
       position:sticky;
       top:16px;
       min-height:560px;
@@ -409,22 +500,24 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     .finding-card{
       width:100%;
       text-align:left;
-      padding:14px;
-      background:var(--navy-800);
-      border:1px solid var(--navy-border);
-      border-radius:16px;
+      padding:13px 14px;
+      background:rgba(255,255,255,0.025);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:11px;
       color:var(--text-primary);
       cursor:pointer;
-      transition:.18s ease;
+      transition:all 150ms ease;
     }
     .finding-card:hover{
-      border-color:var(--navy-border-light);
+      border-color:rgba(255,255,255,0.11);
+      background:rgba(255,255,255,0.04);
       transform:translateY(-1px);
+      box-shadow:0 4px 12px rgba(0,0,0,0.4);
     }
     .finding-card.active{
-      border-color:var(--indigo);
-      box-shadow:0 0 0 1px var(--indigo-glow) inset;
-      background:var(--navy-700);
+      border-color:#E8784A;
+      background:rgba(232,120,74,0.07);
+      box-shadow:0 0 0 1px rgba(232,120,74,0.15) inset,0 4px 16px rgba(0,0,0,0.4);
     }
     .finding-card-topline,
     .finding-card-footer{
@@ -497,13 +590,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       color:#ff91a4;
       border:1px solid rgba(239,68,68,.28);
     }
-    .status-badge.platform{
-      background:rgba(100,116,139,.15);
-      color:#94a3b8;
-      border:1px solid rgba(100,116,139,.28);
-    }
     .remediation-detail-card{
-      padding:18px;
+      padding:22px 24px;
       min-height:720px;
     }
     .detail-header{
@@ -744,7 +832,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         grid-template-columns:1fr 1fr;
       }
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
     @media (max-width: 760px){
       .remediation-hero,
       .filters-headline,
@@ -797,16 +884,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
   const [recsError, setRecsError] = useState('');
-  const [selectedRecIndex, setSelectedRecIndex] = useState<number | null>(null);
-  // History tab
-  const [historyRecords, setHistoryRecords] = useState<any[]>([]);
-  const [historyStats, setHistoryStats] = useState<any>(null);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const [historyError, setHistoryError] = useState('');
-  // Auto-remediation tab
-  const [autoStatus, setAutoStatus] = useState<any>(null);
-  const [autoTriggering, setAutoTriggering] = useState(false);
-  const [autoTriggerResult, setAutoTriggerResult] = useState<any>(null);
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [affectedMachines, setAffectedMachines] = useState<string[]>([]);
   const [affectedMachinesError, setAffectedMachinesError] = useState('');
@@ -824,9 +901,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [intuneScripts, setIntuneScripts] = useState<{ id: string; displayName: string }[]>([]);
   const [selectedIntuneScript, setSelectedIntuneScript] = useState('');
   const [executionNotes, setExecutionNotes] = useState('');
-  const [rescanLoading, setRescanLoading] = useState(false);
-  const [cacheRefreshedAt, setCacheRefreshedAt] = useState<string | null>(null);
-  const [scopeDetails, setScopeDetails] = useState<any>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -839,7 +913,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       try {
         const [config, result] = await Promise.all([
           api.getDefenderTenantConfig(),
-          api.getDefenderVulnerabilities(500)
+          api.getDefenderVulnerabilities(500)  // load top 500; specific CVEs fetched on-demand via direct lookup
         ]);
         if (!mounted) return;
         const items = Array.isArray(result?.items) ? result.items : [];
@@ -848,7 +922,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         setAdminConsentUrl(config?.adminConsentUrl || '');
         setFindings(items);
         setSelectedIndex(0);
-        if (result?.cacheRefreshedAt) setCacheRefreshedAt(result.cacheRefreshedAt);
       } catch (err: any) {
         if (!mounted) return;
         setError(getFriendlyErrorMessage(err));
@@ -862,28 +935,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       }
     }
     loadFindings();
-    // Fetch scope details in parallel (non-blocking)
-    api.getDefenderScopes().then((s: any) => { if (mounted) setScopeDetails(s); }).catch(() => {});
     return () => { mounted = false; };
   }, [tenantId]);
-
-  const handleRescan = async () => {
-    setRescanLoading(true);
-    setError('');
-    setTechnicalError('');
-    try {
-      const result = await api.getDefenderVulnerabilities(500, { refresh: true });
-      const items = Array.isArray(result?.items) ? result.items : [];
-      setFindings(items);
-      setSelectedIndex(0);
-      if (result?.cacheRefreshedAt) setCacheRefreshedAt(result.cacheRefreshedAt);
-    } catch (err: any) {
-      setError(getFriendlyErrorMessage(err));
-      setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : (err?.message || ''));
-    } finally {
-      setRescanLoading(false);
-    }
-  };
 
   const filteredFindings = useMemo(() => {
     return findings.filter((f) => {
@@ -900,12 +953,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       if (filterPublisher && !publisher.includes(filterPublisher.toLowerCase())) return false;
       if (filterCategory && !category.includes(filterCategory.toLowerCase())) return false;
       if (filterSeverity && severity !== filterSeverity.toLowerCase()) return false;
-      // "Remediation required only" — hide CVEs that are explicitly marked as already remediated/fixed.
-      // We cannot check for 'remediationrequired' equality because Defender often returns null/Active.
-      if (remediationRequiredOnly) {
-        const s = String(f.status || '').toLowerCase();
-        if (s === 'remediated' || s === 'fixed' || s === 'closed') return false;
-      }
+      if (remediationRequiredOnly && String(f.status || '').toLowerCase() !== 'remediationrequired') return false;
       if (exposedDevicesOnly && (f.affectedMachineCount ?? 0) <= 0) return false;
       return true;
     });
@@ -950,35 +998,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         setRecsError(err?.message || 'Failed to load recommendations.');
       })
       .finally(() => { if (mounted) setLoadingRecs(false); });
-    return () => { mounted = false; };
-  }, [mainTab]);
-
-  useEffect(() => {
-    if (mainTab !== 'history') return;
-    let mounted = true;
-    setLoadingHistory(true);
-    setHistoryError('');
-    // Single call — backend now returns records + stats together to avoid two Azure round-trips
-    api.getRemediationHistory({ limit: 200 })
-      .then((res: any) => {
-        if (!mounted) return;
-        setHistoryRecords(Array.isArray(res?.records) ? res.records : []);
-        setHistoryStats(res?.stats || null);
-      })
-      .catch((err: any) => {
-        if (!mounted) return;
-        setHistoryError(err?.message || 'Failed to load history.');
-      })
-      .finally(() => { if (mounted) setLoadingHistory(false); });
-    return () => { mounted = false; };
-  }, [mainTab]);
-
-  useEffect(() => {
-    if (mainTab !== 'auto') return;
-    let mounted = true;
-    api.getAutoRemediationStatus()
-      .then((res: any) => { if (mounted) setAutoStatus(res); })
-      .catch(() => {});
     return () => { mounted = false; };
   }, [mainTab]);
 
@@ -1130,22 +1149,11 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       const names = (classificationType === 'script' || classificationType === 'windows-update')
         ? await ensureAffectedMachinesLoaded()
         : affectedMachines;
-
-      // Always enrich CVE findings to get suggestedWingetId, productName, publisher, affected machines.
-      let enrichedFinding = { ...selectedFinding };
-      const cveId = selectedFinding.cveId || selectedFinding.id || '';
-      if (cveId.toUpperCase().startsWith('CVE-')) {
-        try {
-          const enrichRes = await api.enrichDefenderVulnerability(cveId);
-          if (enrichRes?.finding) enrichedFinding = { ...enrichedFinding, ...enrichRes.finding };
-        } catch (_) { /* enrichment is best-effort */ }
-      }
-
       const result = await api.planRemediation({
         tenantId,
         finding: {
-          ...enrichedFinding,
-          affectedMachines: names.length ? names : (enrichedFinding.affectedMachines || []),
+          ...selectedFinding,
+          affectedMachines: names.length ? names : (selectedFinding.affectedMachines || []),
         },
         options: {
           updateType,
@@ -1155,7 +1163,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           affectedDeviceNames: names,
         },
       });
-      setPlanResult({ ...result, enrichedFinding: enrichedFinding });
+      setPlanResult(result);
       setActiveTab('plan');
     } catch (err: any) {
       setError(err?.message || 'Planning failed.');
@@ -1184,17 +1192,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         return;
       }
     }
-    const resolvedFinding = planResult?.enrichedFinding || selectedFinding;
-
-    // Block execution if we cannot confidently identify the target product for software CVEs
-    if (isWebapp && resolvedFinding.remediationConfidence === 'low' && !resolvedFinding.suggestedWingetId) {
-      setError(
-        'Cannot execute automatically: the target product for this CVE could not be identified. ' +
-        'Check the CVE description and set the product manually, or remediate via Windows Update.'
-      );
-      return;
-    }
-
     setExecuting(true);
     setError('');
     setTechnicalError('');
@@ -1204,7 +1201,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         approvalId: 'apr-ui-001',
         devices: deviceIds,
         finding: {
-          ...resolvedFinding,
+          ...selectedFinding,
           affectedMachines: resolvedNames,
         },
         plan: planResult.plan,
@@ -1214,8 +1211,6 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           deviceIds,
           targetDeviceIds: deviceIds,
           affectedDeviceNames: resolvedNames,
-          deployToAllDevices: isWebapp && !resolvedNames.length && !deviceIds.length,
-          suggestedWingetId: resolvedFinding.suggestedWingetId || undefined,
           policyTarget,
           scriptName: getEffectiveScriptName(),
           notes: executionNotes,
@@ -1277,8 +1272,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setFilterPublisher('');
     setFilterCategory('');
     setFilterSeverity('');
-    setRemediationRequiredOnly(false);
-    setExposedDevicesOnly(false);
+    setRemediationRequiredOnly(true);
+    setExposedDevicesOnly(true);
   };
 
   const totalFindings = findings.length;
@@ -1293,27 +1288,14 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       <div className="remediation-shell">
       <section className="remediation-hero">
         <div>
-          <div className="remediation-breadcrumb">Defender-informed remediation workspace</div>
+          <div className="remediation-breadcrumb">Microsoft Defender · Vulnerability Management</div>
           <h1>Vulnerability Remediation</h1>
-          <p>Plan and execute remediation paths for software and platform exposure with a product view that is closer to Defender.</p>
+          <p>Plan and execute remediation for software exposure and CVEs surfaced by Defender — revoke, patch, or push policy in one step.</p>
           <div className="remediation-tenant-line">
             <div>Active tenant: <strong>{tenantName || tenantId || 'Current connected tenant'}</strong></div>
             {tenantConfig ? <div>Defender: <strong>{tenantConfig.defenderEnabled ? 'Enabled' : 'Disabled'}</strong></div> : null}
             <div>Showing: <strong>{shownFindings} of {totalFindings}</strong></div>
-            {cacheRefreshedAt && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Last scan: {new Date(cacheRefreshedAt).toLocaleString()}</div>}
           </div>
-        </div>
-        <div className="remediation-hero-actions">
-          <button
-            className="btn btn-secondary"
-            onClick={handleRescan}
-            disabled={rescanLoading || loadingFindings}
-            style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
-            title="Force a fresh pull from Microsoft Defender (bypasses 5-min cache)"
-          >
-            <span style={{ display: 'inline-block', animation: rescanLoading ? 'spin 1s linear infinite' : 'none' }}>⟳</span>
-            {rescanLoading ? 'Scanning…' : 'Re-scan CVEs'}
-          </button>
         </div>
       </section>
 
@@ -1331,38 +1313,13 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         <button className={mainTab === 'recommendations' ? 'active' : ''} onClick={() => setMainTab('recommendations')}>
           Security Recommendations {recommendations.length > 0 ? `· ${recommendations.length}` : ''}
         </button>
-        <button className={mainTab === 'history' ? 'active' : ''} onClick={() => setMainTab('history')}>
-          📜 History {historyRecords.length > 0 ? `· ${historyRecords.length}` : ''}
-        </button>
-        <button className={mainTab === 'auto' ? 'active' : ''} onClick={() => setMainTab('auto')}>
-          🤖 Auto-Remediation {autoStatus?.enabled ? '· ON' : ''}
-        </button>
       </div>
 
       {needsAdminConsent && (
         <section className="remediation-banner warning">
           <div>
             <strong>Defender access needs admin consent.</strong>
-            <div style={{ marginTop: 4 }}>This customer tenant must complete Defender admin consent before the app can read live vulnerability data.</div>
-            {scopeDetails?.defender?.roles && (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Required Defender permissions</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {scopeDetails.defender.roles.map((r: any) => (
-                    <div key={r.role} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                      <span style={{ color: r.status === 'missing' ? '#f87171' : '#fbbf24', fontSize: 15, flexShrink: 0 }}>
-                        {r.status === 'missing' ? '✗' : '?'}
-                      </span>
-                      <code style={{ background: 'rgba(255,255,255,0.06)', padding: '1px 6px', borderRadius: 4, fontSize: 12 }}>{r.role}</code>
-                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>— {r.description}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                  Granted via: <code style={{ background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 4 }}>https://api.securitycenter.microsoft.com/.default</code>
-                </div>
-              </div>
-            )}
+            <div>This customer tenant must complete Defender admin consent before the app can read live vulnerability data.</div>
           </div>
           <div className="remediation-banner-actions">
             {adminConsentUrl ? <a className="btn btn-primary" href={adminConsentUrl}>Grant Defender admin consent</a> : null}
@@ -1389,7 +1346,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         </section>
       )}
 
-      {error && mainTab === 'vulnerabilities' && (
+      {error && (
         <section className="remediation-banner danger">
           <div>
             <strong>Unable to load remediation data</strong>
@@ -1401,31 +1358,10 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
       {mainTab === 'recommendations' && (
         <section className="remediation-list-card" style={{padding:'20px 24px'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
-            <div>
-              <h3 style={{margin:'0 0 4px'}}>Security Recommendations</h3>
-              <p style={{margin:0,color:'var(--text-secondary)',fontSize:13}}>
-                Configuration-level hardening actions from Defender TVM. Click any row for details and deployment options.
-              </p>
-            </div>
-            {recommendations.length > 0 && (
-              <button className="btn btn-secondary" style={{flexShrink:0,marginLeft:16}} onClick={() => {
-                const rows = [['Recommendation','Product','Publisher','Category','ID']];
-                recommendations.forEach(r => rows.push([
-                  r.recommendationName || '',
-                  r.productName || '',
-                  r.publisher || '',
-                  r.category || 'ASR / Config',
-                  r.id || '',
-                ]));
-                const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
-                a.download = 'security-recommendations.csv';
-                a.click();
-              }}>Export CSV</button>
-            )}
-          </div>
+          <h3 style={{margin:'0 0 4px'}}>Security Recommendations</h3>
+          <p style={{margin:'0 0 18px',color:'var(--text-secondary)',fontSize:13}}>
+            Configuration-level recommendations from Defender TVM — not CVEs, but hardening actions that reduce attack surface.
+          </p>
           {loadingRecs && <div style={{padding:32,textAlign:'center',color:'var(--text-secondary)'}}>Loading recommendations…</div>}
           {recsError && <div style={{padding:16,color:'var(--danger,#ef4444)'}}>{recsError}</div>}
           {!loadingRecs && !recsError && recommendations.length === 0 && (
@@ -1439,287 +1375,30 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                   <th>Product</th>
                   <th>Publisher</th>
                   <th>Category</th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                {recommendations.map((rec, i) => {
-                  const isOpen = selectedRecIndex === i;
-                  const defenderUrl = rec.id
-                    ? `https://security.microsoft.com/security-recommendations?id=${encodeURIComponent(rec.id)}`
-                    : 'https://security.microsoft.com/security-recommendations';
-                  return (
-                    <React.Fragment key={rec.id || i}>
-                      <tr
-                        style={{cursor:'pointer'}}
-                        onClick={() => setSelectedRecIndex(isOpen ? null : i)}
-                      >
-                        <td>
-                          <div className="rec-name">{rec.recommendationName || rec.id || '—'}</div>
-                          {rec.description && <div className="rec-product">{rec.description}</div>}
-                        </td>
-                        <td><div className="rec-product">{rec.productName || '—'}</div></td>
-                        <td><div className="rec-product">{rec.publisher || '—'}</div></td>
-                        <td>{rec.category ? <span className="rec-badge">{rec.category}</span> : <span className="rec-badge">ASR / Config</span>}</td>
-                        <td style={{textAlign:'right',color:'var(--text-secondary)',fontSize:18}}>{isOpen ? '▲' : '▼'}</td>
-                      </tr>
-                      {isOpen && (
-                        <tr>
-                          <td colSpan={5} style={{padding:0}}>
-                            <div style={{background:'rgba(99,102,241,.06)',border:'1px solid rgba(99,102,241,.2)',borderRadius:10,margin:'4px 0 8px',padding:'16px 20px',display:'flex',flexDirection:'column',gap:12}}>
-                              <div style={{display:'flex',gap:24,flexWrap:'wrap'}}>
-                                <div style={{flex:1,minWidth:220}}>
-                                  <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',color:'var(--text-secondary)',marginBottom:6}}>Deployment methods</div>
-                                  <ul style={{margin:0,paddingLeft:18,fontSize:13,lineHeight:1.7,color:'var(--text-primary)'}}>
-                                    <li><strong>Intune</strong> — Endpoint Security → Attack Surface Reduction policy</li>
-                                    <li><strong>Group Policy</strong> — Computer Config → Admin Templates → Windows Defender</li>
-                                    <li><strong>MDM</strong> — ./Vendor/MSFT/Policy/Config/Defender/AttackSurfaceReductionRules</li>
-                                  </ul>
-                                </div>
-                                <div style={{flex:1,minWidth:200}}>
-                                  <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',color:'var(--text-secondary)',marginBottom:6}}>Recommended mode</div>
-                                  <div style={{fontSize:13,color:'var(--text-primary)',lineHeight:1.6}}>
-                                    Start in <strong>Audit</strong> mode to review impact, then switch to <strong>Block</strong> mode once validated.
-                                  </div>
-                                  {rec.fixingKbId && (
-                                    <div style={{marginTop:8,fontSize:13}}>
-                                      KB: <a href={`https://support.microsoft.com/kb/${rec.fixingKbId}`} target="_blank" rel="noreferrer" style={{color:'var(--text-accent)'}}>
-                                        {rec.fixingKbId}
-                                      </a>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              <div style={{display:'flex',gap:10,paddingTop:4}}>
-                                <a href={defenderUrl} target="_blank" rel="noreferrer" className="btn btn-primary" style={{fontSize:13,padding:'7px 16px'}}>
-                                  Open in Defender →
-                                </a>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
+                {recommendations.map((rec, i) => (
+                  <tr key={rec.id || i}>
+                    <td>
+                      <div className="rec-name">{rec.recommendationName || rec.id || '—'}</div>
+                      {rec.description && <div className="rec-product">{rec.description}</div>}
+                      {rec.fixingKbId && <div className="rec-product">KB: {rec.fixingKbId}</div>}
+                    </td>
+                    <td><div className="rec-product">{rec.productName || '—'}</div></td>
+                    <td><div className="rec-product">{rec.publisher || '—'}</div></td>
+                    <td>{rec.category ? <span className="rec-badge">{rec.category}</span> : <span style={{color:'var(--text-secondary)'}}>ASR / Config</span>}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
         </section>
       )}
 
-      {/* ── History Tab ───────────────────────────────────────────────────── */}
-      {mainTab === 'history' && (
-        <section className="remediation-list-card" style={{ padding: '20px 24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-            <div>
-              <h3 style={{ margin: 0 }}>Remediation History</h3>
-              <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
-                All manual and automatic remediation actions recorded for this tenant.
-              </p>
-            </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => {
-              setHistoryRecords([]); setHistoryStats(null);
-              setLoadingHistory(true); setHistoryError('');
-              Promise.all([api.getRemediationHistory({ limit: 200 }), api.getRemediationStats()])
-                .then(([h, s]: any[]) => { setHistoryRecords(Array.isArray(h?.records) ? h.records : []); setHistoryStats(s?.stats || null); })
-                .catch((e: any) => setHistoryError(e?.message || 'Failed.'))
-                .finally(() => setLoadingHistory(false));
-            }}>⟳ Refresh</button>
-          </div>
-
-          {historyStats && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-              {[
-                { label: 'Total actions', value: historyStats.total, color: 'var(--text-primary)' },
-                { label: '✅ Success', value: historyStats.byStatus?.success || 0, color: '#22c55e' },
-                { label: '❌ Failed', value: historyStats.byStatus?.failed || 0, color: '#ef4444' },
-                { label: '⏭ Skipped', value: (historyStats.byStatus?.skipped || 0) + (historyStats.byStatus?.unsupported || 0), color: '#94a3b8' },
-              ].map(s => (
-                <div key={s.label} className="remediation-stat-card" style={{ padding: '14px 16px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 26, fontWeight: 700, color: s.color }}>{s.value}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {loadingHistory && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Loading history…</div>}
-          {historyError && <div style={{ color: '#ef4444', padding: 12 }}>{historyError}</div>}
-
-          {!loadingHistory && !historyError && historyRecords.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)' }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>📜</div>
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>No remediation history yet</div>
-              <div style={{ fontSize: 13 }}>Actions taken in the Vulnerabilities tab or by Auto-Remediation will appear here.</div>
-            </div>
-          )}
-
-          {!loadingHistory && historyRecords.length > 0 && (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--navy-border)', textAlign: 'left' }}>
-                    {['Time', 'CVE / ID', 'Product', 'Category', 'Severity', 'Status', 'Executor', 'Message'].map(h => (
-                      <th key={h} style={{ padding: '8px 10px', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {historyRecords.map((r: any, i: number) => {
-                    const statusColor = r.status === 'success' ? '#22c55e' : r.status === 'failed' ? '#ef4444' : '#94a3b8';
-                    return (
-                      <tr key={r.id || i} style={{ borderBottom: '1px solid var(--navy-border)', verticalAlign: 'top' }}>
-                        <td style={{ padding: '8px 10px', color: 'var(--text-muted)', whiteSpace: 'nowrap', fontSize: 11 }}>
-                          {r.executedAt ? new Date(r.executedAt).toLocaleString() : '—'}
-                        </td>
-                        <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap' }}>
-                          {r.cveId || '—'}
-                        </td>
-                        <td style={{ padding: '8px 10px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {r.productName || '—'}
-                        </td>
-                        <td style={{ padding: '8px 10px' }}>
-                          <span className="role-tag" style={{ textTransform: 'capitalize' }}>{r.category || '—'}</span>
-                        </td>
-                        <td style={{ padding: '8px 10px' }}>
-                          {r.severity ? <span className={`status-badge ${r.severity.toLowerCase()}`}>{r.severity}</span> : '—'}
-                        </td>
-                        <td style={{ padding: '8px 10px' }}>
-                          <span style={{ color: statusColor, fontWeight: 600, textTransform: 'capitalize' }}>{r.status || '—'}</span>
-                        </td>
-                        <td style={{ padding: '8px 10px', color: 'var(--text-muted)', fontSize: 11 }}>
-                          {r.triggeredBy === 'cron' ? '🤖 auto' : '👤 manual'}
-                        </td>
-                        <td style={{ padding: '8px 10px', color: 'var(--text-muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {r.message || '—'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* ── Auto-Remediation Tab ───────────────────────────────────────────── */}
-      {mainTab === 'auto' && (
-        <section className="remediation-list-card" style={{ padding: '24px 28px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
-            <div>
-              <h3 style={{ margin: 0 }}>🤖 Auto-Remediation</h3>
-              <p style={{ margin: '6px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
-                Automatically remediates CVEs on a schedule — WinGet apps and Windows Updates are deployed to all devices without manual intervention.
-              </p>
-            </div>
-            <button
-              className="btn btn-primary"
-              disabled={autoTriggering}
-              onClick={async () => {
-                setAutoTriggering(true);
-                setAutoTriggerResult(null);
-                try {
-                  const res = await api.triggerAutoRemediation();
-                  setAutoTriggerResult({ ok: true, summaries: res.summaries || [] });
-                } catch (e: any) {
-                  setAutoTriggerResult({ ok: false, error: e?.message || 'Failed to trigger.' });
-                } finally {
-                  setAutoTriggering(false);
-                }
-              }}
-            >
-              {autoTriggering ? <><span className="spin">⟳</span> Running…</> : '▶ Run Now'}
-            </button>
-          </div>
-
-          {/* Status card */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-            <div className="remediation-stat-card" style={{ padding: '16px 18px' }}>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Status</div>
-              <div style={{ fontWeight: 700, fontSize: 16, color: autoStatus?.enabled ? '#22c55e' : '#94a3b8' }}>
-                {autoStatus?.enabled ? '● Active' : '○ Disabled'}
-              </div>
-            </div>
-            <div className="remediation-stat-card" style={{ padding: '16px 18px' }}>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Run interval</div>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>
-                {autoStatus ? `Every ${autoStatus.intervalMinutes} min` : '—'}
-              </div>
-            </div>
-            <div className="remediation-stat-card" style={{ padding: '16px 18px' }}>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Max CVEs / run</div>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>{autoStatus?.maxPerRun ?? '—'}</div>
-            </div>
-          </div>
-
-          {/* Enable instructions */}
-          {autoStatus && !autoStatus.enabled && (
-            <div className="detail-banner" style={{ marginBottom: 20 }}>
-              <strong>Auto-Remediation is currently disabled.</strong>
-              <p style={{ margin: '6px 0 0', fontSize: 13 }}>
-                To enable it, set <code>AUTO_REMEDIATION_ENABLED=true</code> in your backend environment variables, then restart the server.
-                You can also configure <code>AUTO_REMEDIATION_INTERVAL_MINUTES</code> (default: 60) and <code>AUTO_REMEDIATION_MAX_PER_RUN</code> (default: 10, max: 50).
-              </p>
-            </div>
-          )}
-
-          {/* Manual trigger result */}
-          {autoTriggerResult && (
-            <div className={`detail-summary-block ${autoTriggerResult.ok ? 'success-block' : ''}`}
-              style={{ marginBottom: 20, borderLeft: `3px solid ${autoTriggerResult.ok ? '#22c55e' : '#ef4444'}` }}>
-              {autoTriggerResult.ok ? (
-                <>
-                  <div style={{ fontWeight: 700, marginBottom: 8 }}>✅ Run completed</div>
-                  {autoTriggerResult.summaries?.map((s: any, i: number) => (
-                    <div key={i} style={{ fontSize: 13, marginBottom: 4 }}>
-                      <strong>{s.tenantId?.substring(0, 8)}…</strong> — ✅ {s.success} success, ❌ {s.failed} failed, ⏭ {s.skipped} skipped
-                      {s.error && <span style={{ color: '#ef4444', marginLeft: 8 }}>{s.error}</span>}
-                    </div>
-                  ))}
-                  {autoTriggerResult.summaries?.length === 0 && (
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No active tenants found to process.</div>
-                  )}
-                </>
-              ) : (
-                <div style={{ color: '#ef4444', fontWeight: 600 }}>❌ {autoTriggerResult.error}</div>
-              )}
-            </div>
-          )}
-
-          {/* What gets auto-remediated */}
-          <div className="card-block" style={{ marginTop: 8 }}>
-            <h4 style={{ margin: '0 0 14px' }}>What gets auto-remediated</h4>
-            <div style={{ display: 'grid', gap: 10 }}>
-              {[
-                { icon: '📦', label: 'WinGet Applications', desc: 'Third-party apps (Chrome, Firefox, 7-Zip, Acrobat…) are updated via Intune WinGet deployment to All Devices.', supported: true },
-                { icon: '🪟', label: 'Windows Updates', desc: 'OS security patches are deployed via Windows Update for Business expedite policy through Intune.', supported: true },
-                { icon: '🐧', label: 'Linux / macOS / iOS', desc: 'Detected as unsupported platform — logged and skipped. Manual remediation instructions are generated.', supported: false },
-                { icon: '🔒', label: 'Identity / Conditional Access', desc: 'Require manual review by a security administrator. Auto-remediation is not performed.', supported: false },
-              ].map(item => (
-                <div key={item.label} style={{ display: 'flex', gap: 14, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 10, background: 'var(--navy-800)', border: '1px solid var(--navy-border)' }}>
-                  <span style={{ fontSize: 20, lineHeight: 1.3 }}>{item.icon}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{item.label}</div>
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>{item.desc}</div>
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: item.supported ? '#22c55e' : '#94a3b8', whiteSpace: 'nowrap' }}>
-                    {item.supported ? '✅ Auto' : '⏭ Skip'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
       {mainTab === 'vulnerabilities' && (<><section className="remediation-filters">
         <div className="filters-headline">
-          <div>
-            <h3>Refine the Defender view</h3>
-            <p>Keep the fast filters, but stay in the cleaner tabbed layout.</p>
-          </div>
+          <h3>Filters</h3>
           <button className="btn btn-secondary" onClick={clearFilters}>Clear filters</button>
         </div>
         <div className="filters-inline toggles">
@@ -1766,10 +1445,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                   <div className="finding-card-meta">{getDisplayPublisher(finding)} &nbsp; {getDisplayCategory(finding)}</div>
                   <div className="finding-card-footer">
                     <span>{finding.status || 'Unknown status'}</span>
-                    {getDisplayCategory(finding).includes('unsupported')
-                      ? <span className="status-badge platform">non-Windows</span>
-                      : <span>{count} exposed device{count === 1 ? '' : 's'}</span>
-                    }
+                    <span>{count} exposed device{count === 1 ? '' : 's'}</span>
                   </div>
                 </button>
               );
@@ -1798,17 +1474,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                 <button className={activeTab === 'plan' ? 'active' : ''} onClick={() => setActiveTab('plan')}>Remediation plan</button>
               </div>
 
-              {getDisplayCategory(selectedFinding).includes('unsupported')
-                ? <div className="detail-banner warning" style={{marginTop:12}}>
-                    <strong>⚠️ Non-Windows platform — automated remediation not available</strong>
-                    <div style={{marginTop:4,fontSize:13}}>
-                      This CVE affects a non-Windows platform ({getDisplayProduct(selectedFinding)}).
-                      Intune WinGet deployment only supports Windows applications.
-                      Use the <strong>Remediation plan</strong> tab for platform-specific manual steps.
-                    </div>
-                  </div>
-                : <div className="detail-banner">The vulnerability data shown here is sourced from your connected Defender tenant and mapped into a remediation workflow.</div>
-              }
+              <div className="detail-banner">The vulnerability data shown here is sourced from your connected Defender tenant and mapped into a remediation workflow.</div>
 
               {activeTab === 'details' && (
                 <section className="detail-section card-block">
@@ -2096,16 +1762,13 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                       )}
 
                       <div className="plan-actions-row">
-                        {/* Don't show refresh/execute for unsupported platforms */}
-                        {planResult.plan.executor !== 'none' && (
-                          <button className="btn btn-secondary" onClick={handlePlan} disabled={planning}>{planning ? 'Refreshing…' : 'Refresh plan'}</button>
-                        )}
-                        {/* Webapp: show Execute when connected */}
+                        <button className="btn btn-secondary" onClick={handlePlan} disabled={planning}>{planning ? 'Refreshing…' : 'Refresh plan'}</button>
+                        {/* Webapp: show Execute when connected (webapp will attempt deep resolution on execute) */}
                         {isWebappExecutor && planResult.plan.external?.connected && planResult.plan.executionMode !== 'guided-manual' && (
                           <button className="btn btn-primary" onClick={handleExecute} disabled={executing}>{executing ? 'Executing…' : 'Execute remediation'}</button>
                         )}
-                        {/* Native executors */}
-                        {!isWebappExecutor && planResult.plan.autoRemediate !== false && planResult.plan.executionMode !== 'guided-manual' && planResult.plan.executor !== 'none' && (
+                        {/* Native executors: use autoRemediate + executionMode guards */}
+                        {!isWebappExecutor && planResult.plan.autoRemediate !== false && planResult.plan.executionMode !== 'guided-manual' && (
                           <button className="btn btn-primary" onClick={handleExecute} disabled={executing}>{executing ? 'Executing…' : 'Execute remediation'}</button>
                         )}
                       </div>
