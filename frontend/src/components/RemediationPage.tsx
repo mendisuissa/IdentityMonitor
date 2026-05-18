@@ -1675,6 +1675,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                   const trigger = await api.triggerAutoRemediation();
                   if (!trigger.ok || !trigger.jobId) {
                     setAutoTriggerResult({ ok: false, error: trigger.error || 'Failed to start.' });
+                    setAutoTriggering(false);
                     return;
                   }
                   // Poll until the background job completes (Azure gateway timeout = 230s)
@@ -1697,7 +1698,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                         setAutoTriggerResult({ ok: false, error: 'Timed out waiting for results.' });
                         setAutoTriggering(false);
                       }
-                    } catch {
+                    } catch (_e) {
                       setAutoTriggerResult({ ok: false, error: 'Lost connection while polling.' });
                       setAutoTriggering(false);
                     }
