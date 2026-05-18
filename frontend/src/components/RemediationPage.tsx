@@ -37,6 +37,17 @@ type Finding = {
   classification?: { type?: string; family?: string };
 };
 
+type Recommendation = {
+  id?: string;
+  recommendationName?: string;
+  productName?: string;
+  publisher?: string;
+  description?: string;
+  category?: string;
+  fixingKbId?: string;
+};
+
+type MainTab = 'vulnerabilities' | 'recommendations';
 type DetailTab = 'details' | 'devices' | 'plan';
 
 type Props = { tenantId?: string; tenantName?: string };
@@ -157,34 +168,53 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       gap:16px;
     }
     .remediation-shell *{ box-sizing:border-box; }
-    .remediation-hero,
+
+    /* ── Shared card base ── */
     .remediation-banner,
     .remediation-filters,
     .remediation-list-card,
     .remediation-detail-card,
-    .remediation-stat-card,
     .card-block{
-      background:var(--navy-900);
-      border:1px solid var(--navy-border);
-      border-radius:18px;
-      box-shadow:0 4px 24px rgba(0,0,0,.22);
+      background:rgba(255,255,255,0.028);
+      border:1px solid rgba(255,255,255,0.065);
+      border-radius:14px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.04);
     }
+
+    /* ── Hero ── */
     .remediation-hero{
       display:flex;
       justify-content:space-between;
       gap:20px;
-      padding:22px 20px;
+      padding:24px 28px;
       align-items:flex-start;
+      background:rgba(255,255,255,0.028);
+      border:1px solid rgba(255,255,255,0.065);
+      border-radius:14px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.5);
+      position:relative;
+      overflow:hidden;
+    }
+    .remediation-hero::before{
+      content:'';
+      position:absolute;
+      top:0;left:0;right:0;
+      height:2px;
+      background:linear-gradient(90deg,#E8784A 0%,rgba(232,120,74,0.2) 100%);
     }
     .remediation-breadcrumb{
-      color:var(--text-accent);
-      font-size:12px;
-      font-weight:700;
-      margin-bottom:8px;
+      font-size:10.5px;
+      font-weight:600;
+      text-transform:uppercase;
+      letter-spacing:0.8px;
+      color:var(--text-muted);
+      margin-bottom:10px;
     }
     .remediation-hero h1{
-      margin:0 0 8px;
-      font-size:22px;
+      margin:0 0 6px;
+      font-size:26px;
+      font-weight:800;
+      letter-spacing:-0.5px;
       line-height:1.15;
       color:var(--text-primary);
     }
@@ -204,22 +234,82 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     .remediation-hero-actions{ display:flex; align-items:flex-start; }
     .btn{
       border:none;
-      border-radius:12px;
-      padding:10px 16px;
+      border-radius:8px;
+      padding:9px 16px;
       font-weight:700;
+      font-size:12.5px;
+      font-family:var(--font-sans);
       cursor:pointer;
-      transition:.18s ease;
+      transition:all 150ms ease;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      letter-spacing:0.01em;
     }
-    .btn:hover{ transform:translateY(-1px); }
-    .btn:disabled{ opacity:.55; cursor:not-allowed; transform:none; }
+    .btn:hover:not(:disabled){ transform:translateY(-1px); }
+    .btn:disabled{ opacity:.5; cursor:not-allowed; transform:none; }
     .btn-primary{
-      background:var(--amber-500);
-      color:#111827;
+      background:linear-gradient(135deg,#E8784A 0%,#D4633A 100%);
+      color:white;
+      border:1px solid rgba(255,255,255,0.12);
+      box-shadow:0 3px 12px rgba(232,120,74,0.4),inset 0 1px 0 rgba(255,255,255,0.14);
+    }
+    .btn-primary:hover:not(:disabled){
+      box-shadow:0 6px 20px rgba(232,120,74,0.55),inset 0 1px 0 rgba(255,255,255,0.18);
     }
     .btn-secondary{
-      background:var(--navy-700);
+      background:rgba(255,255,255,0.05);
+      color:var(--text-secondary);
+      border:1px solid rgba(255,255,255,0.10);
+    }
+    .btn-secondary:hover:not(:disabled){
+      background:rgba(255,255,255,0.09);
+      border-color:rgba(255,255,255,0.18);
       color:var(--text-primary);
-      border:1px solid var(--navy-border-light);
+    }
+    .remediation-main-tabs{
+      display:flex;
+      gap:2px;
+      border-bottom:1px solid rgba(255,255,255,0.07);
+      padding:0;
+    }
+    .remediation-main-tabs button{
+      background:none;
+      border:none;
+      border-bottom:2px solid transparent;
+      margin-bottom:-1px;
+      padding:11px 20px;
+      font-size:13.5px;
+      font-weight:600;
+      color:var(--text-secondary);
+      cursor:pointer;
+      border-radius:6px 6px 0 0;
+      transition:color .15s,border-color .15s,background .15s;
+      font-family:var(--font-sans);
+      letter-spacing:0.01em;
+    }
+    .remediation-main-tabs button:hover{
+      color:var(--text-primary);
+      background:rgba(255,255,255,0.035);
+    }
+    .remediation-main-tabs button.active{
+      color:#E8784A;
+      border-bottom-color:#E8784A;
+    }
+    .rec-table{ width:100%; border-collapse:collapse; font-size:13px; }
+    .rec-table th{
+      text-align:left; padding:10px 14px; font-size:11px; font-weight:700;
+      text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary);
+      border-bottom:1px solid var(--navy-border);
+    }
+    .rec-table td{ padding:12px 14px; border-bottom:1px solid var(--navy-border,rgba(255,255,255,.07)); vertical-align:top; }
+    .rec-table tr:last-child td{ border-bottom:none; }
+    .rec-table tr:hover td{ background:rgba(255,255,255,.03); }
+    .rec-name{ font-weight:600; color:var(--text-primary); line-height:1.4; }
+    .rec-product{ font-size:12px; color:var(--text-secondary); margin-top:2px; }
+    .rec-badge{
+      display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px;
+      font-weight:700; background:rgba(99,102,241,.15); color:#818cf8;
     }
     .remediation-stats-grid{
       display:grid;
@@ -227,26 +317,80 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       gap:14px;
     }
     .remediation-stat-card{
-      padding:16px 18px;
-      min-height:84px;
+      padding:20px 20px 18px;
+      min-height:96px;
       display:flex;
       flex-direction:column;
       justify-content:space-between;
+      background:rgba(255,255,255,0.032);
+      border:1px solid rgba(255,255,255,0.065);
+      border-radius:13px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.5);
+      position:relative;
+      overflow:hidden;
+      transition:transform 200ms ease,box-shadow 200ms ease;
+    }
+    .remediation-stat-card:hover{
+      transform:translateY(-2px);
+      box-shadow:0 8px 28px rgba(0,0,0,0.6);
+    }
+    .remediation-stat-card::before{
+      content:'';
+      position:absolute;
+      top:0;left:0;right:0;
+      height:2px;
+    }
+    .remediation-stat-card:nth-child(1)::before{
+      background:linear-gradient(90deg,#4A8CFF,rgba(74,140,255,0.25));
+      box-shadow:0 0 14px rgba(74,140,255,0.5);
+    }
+    .remediation-stat-card:nth-child(2)::before{
+      background:linear-gradient(90deg,#E8784A,rgba(232,120,74,0.25));
+      box-shadow:0 0 14px rgba(232,120,74,0.5);
+    }
+    .remediation-stat-card:nth-child(3)::before{
+      background:linear-gradient(90deg,#F5A623,rgba(245,166,35,0.25));
+      box-shadow:0 0 14px rgba(245,166,35,0.45);
+    }
+    .remediation-stat-card:nth-child(4)::before{
+      background:linear-gradient(90deg,#FF4455,rgba(255,68,85,0.25));
+      box-shadow:0 0 14px rgba(255,68,85,0.5);
     }
     .remediation-stat-card span{
       color:var(--text-secondary);
-      font-size:13px;
+      font-size:11.5px;
+      font-weight:500;
+      letter-spacing:0.02em;
     }
     .remediation-stat-card strong{
-      font-size:20px;
-      color:var(--text-primary);
+      font-size:36px;
+      font-weight:800;
+      letter-spacing:-1.5px;
+      font-variant-numeric:tabular-nums;
+      line-height:1;
     }
+    .remediation-stat-card:nth-child(1) strong{ color:#6AA4FF; }
+    .remediation-stat-card:nth-child(2) strong{ color:#E8784A; }
+    .remediation-stat-card:nth-child(3) strong{ color:#F5A623; }
+    .remediation-stat-card:nth-child(4) strong{ color:#FF6070; }
     .remediation-banner{
-      padding:16px 18px;
+      padding:16px 20px;
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
     }
-    .remediation-banner.warning{ border-color:rgba(245,158,11,.35); }
-    .remediation-banner.success{ border-color:rgba(16,185,129,.35); }
-    .remediation-banner.danger{ border-color:rgba(239,68,68,.35); }
+    .remediation-banner.warning{
+      background:rgba(245,158,11,0.06);
+      border-color:rgba(245,158,11,0.28);
+    }
+    .remediation-banner.success{
+      background:rgba(16,185,129,0.06);
+      border-color:rgba(16,185,129,0.28);
+    }
+    .remediation-banner.danger{
+      background:rgba(239,68,68,0.06);
+      border-color:rgba(239,68,68,0.28);
+    }
     .remediation-banner-actions{ margin-top:12px; }
     .remediation-banner details{ margin-top:10px; }
     .remediation-banner pre,
@@ -263,26 +407,26 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       font-size:12px;
     }
     .remediation-filters{
-      padding:16px;
+      padding:16px 20px;
       display:flex;
       flex-direction:column;
-      gap:14px;
+      gap:12px;
     }
     .filters-headline{
       display:flex;
       justify-content:space-between;
-      align-items:flex-start;
+      align-items:center;
       gap:16px;
     }
     .filters-headline h3{
-      margin:0 0 4px;
-      color:var(--text-primary);
-      font-size:18px;
-    }
-    .filters-headline p{
       margin:0;
       color:var(--text-secondary);
+      font-size:12px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:0.8px;
     }
+    .filters-headline p{ display:none; }
     .filters-inline{
       display:flex;
       flex-wrap:wrap;
@@ -330,7 +474,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       align-items:start;
     }
     .remediation-list-card{
-      padding:16px;
+      padding:18px;
       position:sticky;
       top:16px;
       min-height:560px;
@@ -356,22 +500,24 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     .finding-card{
       width:100%;
       text-align:left;
-      padding:14px;
-      background:var(--navy-800);
-      border:1px solid var(--navy-border);
-      border-radius:16px;
+      padding:13px 14px;
+      background:rgba(255,255,255,0.025);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:11px;
       color:var(--text-primary);
       cursor:pointer;
-      transition:.18s ease;
+      transition:all 150ms ease;
     }
     .finding-card:hover{
-      border-color:var(--navy-border-light);
+      border-color:rgba(255,255,255,0.11);
+      background:rgba(255,255,255,0.04);
       transform:translateY(-1px);
+      box-shadow:0 4px 12px rgba(0,0,0,0.4);
     }
     .finding-card.active{
-      border-color:var(--indigo);
-      box-shadow:0 0 0 1px var(--indigo-glow) inset;
-      background:var(--navy-700);
+      border-color:#E8784A;
+      background:rgba(232,120,74,0.07);
+      box-shadow:0 0 0 1px rgba(232,120,74,0.15) inset,0 4px 16px rgba(0,0,0,0.4);
     }
     .finding-card-topline,
     .finding-card-footer{
@@ -445,7 +591,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       border:1px solid rgba(239,68,68,.28);
     }
     .remediation-detail-card{
-      padding:18px;
+      padding:22px 24px;
       min-height:720px;
     }
     .detail-header{
@@ -732,8 +878,12 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [filterPublisher, setFilterPublisher] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
-  const [remediationRequiredOnly, setRemediationRequiredOnly] = useState(true);
-  const [exposedDevicesOnly, setExposedDevicesOnly] = useState(true);
+  const [remediationRequiredOnly, setRemediationRequiredOnly] = useState(false);
+  const [exposedDevicesOnly, setExposedDevicesOnly] = useState(false);
+  const [mainTab, setMainTab] = useState<MainTab>('vulnerabilities');
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [loadingRecs, setLoadingRecs] = useState(false);
+  const [recsError, setRecsError] = useState('');
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [affectedMachines, setAffectedMachines] = useState<string[]>([]);
   const [affectedMachinesError, setAffectedMachinesError] = useState('');
@@ -832,6 +982,24 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       .catch(() => {/* not found — filter will just show 0 results */});
     return () => { mounted = false; };
   }, [filterCve, findings.length]);
+
+  useEffect(() => {
+    if (mainTab !== 'recommendations' || recommendations.length > 0) return;
+    let mounted = true;
+    setLoadingRecs(true);
+    setRecsError('');
+    api.getDefenderRecommendations(0)
+      .then((res: any) => {
+        if (!mounted) return;
+        setRecommendations(Array.isArray(res?.items) ? res.items : []);
+      })
+      .catch((err: any) => {
+        if (!mounted) return;
+        setRecsError(err?.message || 'Failed to load recommendations.');
+      })
+      .finally(() => { if (mounted) setLoadingRecs(false); });
+    return () => { mounted = false; };
+  }, [mainTab]);
 
   const selectedFinding = useMemo(() => filteredFindings[selectedIndex] || null, [filteredFindings, selectedIndex]);
   const selectedExecutor = planResult?.plan?.executor || null;
@@ -1120,9 +1288,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       <div className="remediation-shell">
       <section className="remediation-hero">
         <div>
-          <div className="remediation-breadcrumb">Defender-informed remediation workspace</div>
+          <div className="remediation-breadcrumb">Microsoft Defender · Vulnerability Management</div>
           <h1>Vulnerability Remediation</h1>
-          <p>Plan and execute remediation paths for software and platform exposure with a product view that is closer to Defender.</p>
+          <p>Plan and execute remediation for software exposure and CVEs surfaced by Defender — revoke, patch, or push policy in one step.</p>
           <div className="remediation-tenant-line">
             <div>Active tenant: <strong>{tenantName || tenantId || 'Current connected tenant'}</strong></div>
             {tenantConfig ? <div>Defender: <strong>{tenantConfig.defenderEnabled ? 'Enabled' : 'Disabled'}</strong></div> : null}
@@ -1137,6 +1305,15 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         <div className="remediation-stat-card"><span>Exposed devices</span><strong>{exposedCount}</strong></div>
         <div className="remediation-stat-card"><span>High / Critical</span><strong>{highOrCriticalCount}</strong></div>
       </section>
+
+      <div className="remediation-main-tabs">
+        <button className={mainTab === 'vulnerabilities' ? 'active' : ''} onClick={() => setMainTab('vulnerabilities')}>
+          Vulnerabilities (CVEs) {findings.length > 0 ? `· ${findings.length}` : ''}
+        </button>
+        <button className={mainTab === 'recommendations' ? 'active' : ''} onClick={() => setMainTab('recommendations')}>
+          Security Recommendations {recommendations.length > 0 ? `· ${recommendations.length}` : ''}
+        </button>
+      </div>
 
       {needsAdminConsent && (
         <section className="remediation-banner warning">
@@ -1179,12 +1356,49 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         </section>
       )}
 
-      <section className="remediation-filters">
+      {mainTab === 'recommendations' && (
+        <section className="remediation-list-card" style={{padding:'20px 24px'}}>
+          <h3 style={{margin:'0 0 4px'}}>Security Recommendations</h3>
+          <p style={{margin:'0 0 18px',color:'var(--text-secondary)',fontSize:13}}>
+            Configuration-level recommendations from Defender TVM — not CVEs, but hardening actions that reduce attack surface.
+          </p>
+          {loadingRecs && <div style={{padding:32,textAlign:'center',color:'var(--text-secondary)'}}>Loading recommendations…</div>}
+          {recsError && <div style={{padding:16,color:'var(--danger,#ef4444)'}}>{recsError}</div>}
+          {!loadingRecs && !recsError && recommendations.length === 0 && (
+            <div style={{padding:32,textAlign:'center',color:'var(--text-secondary)'}}>No recommendations found for this tenant.</div>
+          )}
+          {!loadingRecs && recommendations.length > 0 && (
+            <table className="rec-table">
+              <thead>
+                <tr>
+                  <th>Recommendation</th>
+                  <th>Product</th>
+                  <th>Publisher</th>
+                  <th>Category</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recommendations.map((rec, i) => (
+                  <tr key={rec.id || i}>
+                    <td>
+                      <div className="rec-name">{rec.recommendationName || rec.id || '—'}</div>
+                      {rec.description && <div className="rec-product">{rec.description}</div>}
+                      {rec.fixingKbId && <div className="rec-product">KB: {rec.fixingKbId}</div>}
+                    </td>
+                    <td><div className="rec-product">{rec.productName || '—'}</div></td>
+                    <td><div className="rec-product">{rec.publisher || '—'}</div></td>
+                    <td>{rec.category ? <span className="rec-badge">{rec.category}</span> : <span style={{color:'var(--text-secondary)'}}>ASR / Config</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
+
+      {mainTab === 'vulnerabilities' && (<><section className="remediation-filters">
         <div className="filters-headline">
-          <div>
-            <h3>Refine the Defender view</h3>
-            <p>Keep the fast filters, but stay in the cleaner tabbed layout.</p>
-          </div>
+          <h3>Filters</h3>
           <button className="btn btn-secondary" onClick={clearFilters}>Clear filters</button>
         </div>
         <div className="filters-inline toggles">
@@ -1598,7 +1812,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             </>
           )}
         </article>
-      </section>
+      </section></>)}
     </div>
     </>
   );
