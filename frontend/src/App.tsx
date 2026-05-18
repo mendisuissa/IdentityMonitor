@@ -378,6 +378,7 @@ function AppShell() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/users" element={<UsersPage />} />
+            <Route path="/exposure" element={<Navigate to="/users" replace />} />
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/signins" element={<SignInsPage />} />
             <Route path="/reports" element={<ReportsPage />} />
