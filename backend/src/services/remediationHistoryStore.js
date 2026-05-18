@@ -91,8 +91,10 @@ async function getRemediationHistory(tenantId, options = {}) {
     return limit > 0 ? list.slice(0, limit) : list;
   }
 
-  await ensureTable();
+  // No ensureTable() here — table is guaranteed to exist after startup init.
+  // Calling ensureTable() on every read adds a slow HTTP round-trip to Azure.
   const records = [];
+  const fetchLimit = limit > 0 ? limit * 3 : 600; // over-fetch so we can sort, then slice
   const iterator = client.listEntities({
     queryOptions: { filter: `PartitionKey eq '${tenantId.replace(/'/g, "''")}'` }
   });
@@ -111,7 +113,7 @@ async function getRemediationHistory(tenantId, options = {}) {
       result:      (() => { try { return JSON.parse(e.result || '{}'); } catch { return {}; } })(),
       executedAt:  e.executedAt  || '',
     });
-    if (limit > 0 && records.length >= limit * 3) break; // fetch more, sort, slice
+    if (records.length >= fetchLimit) break;
   }
 
   records.sort((a, b) => b.executedAt.localeCompare(a.executedAt));
@@ -120,9 +122,10 @@ async function getRemediationHistory(tenantId, options = {}) {
 
 /**
  * Aggregate stats for the dashboard.
+ * Accepts an already-loaded record list to avoid a second Azure round-trip.
  */
-async function getRemediationStats(tenantId) {
-  const records = await getRemediationHistory(tenantId, { limit: 500 });
+async function getRemediationStats(tenantId, preloadedRecords) {
+  const records = preloadedRecords ?? await getRemediationHistory(tenantId, { limit: 500 });
   const byStatus   = {};
   const byCategory = {};
   const bySeverity = {};

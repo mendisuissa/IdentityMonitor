@@ -958,14 +958,12 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     let mounted = true;
     setLoadingHistory(true);
     setHistoryError('');
-    Promise.all([
-      api.getRemediationHistory({ limit: 200 }),
-      api.getRemediationStats(),
-    ])
-      .then(([histRes, statsRes]: any[]) => {
+    // Single call — backend now returns records + stats together to avoid two Azure round-trips
+    api.getRemediationHistory({ limit: 200 })
+      .then((res: any) => {
         if (!mounted) return;
-        setHistoryRecords(Array.isArray(histRes?.records) ? histRes.records : []);
-        setHistoryStats(statsRes?.stats || null);
+        setHistoryRecords(Array.isArray(res?.records) ? res.records : []);
+        setHistoryStats(res?.stats || null);
       })
       .catch((err: any) => {
         if (!mounted) return;

@@ -374,17 +374,22 @@ router.get('/history', async (req, res) => {
   try {
     const tenantId = getTenantIdFromRequest({ session: req.session, body: { tenantId: req.query?.tenantId || null } });
     const limit = Math.min(Number(req.query?.limit || 200), 500);
-    const records = await getRemediationHistory(tenantId, { limit });
-    return res.json({ ok: true, tenantId, records, total: records.length });
+    // Fetch once; derive stats from the same records — avoids a second Azure round-trip.
+    const records = await getRemediationHistory(tenantId, { limit: Math.max(limit, 500) });
+    const stats   = await getRemediationStats(tenantId, records);
+    const trimmed = limit > 0 ? records.slice(0, limit) : records;
+    return res.json({ ok: true, tenantId, records: trimmed, total: records.length, stats });
   } catch (error) {
     return res.status(error.status || 500).json({ ok: false, error: error.message });
   }
 });
 
+// Keep /history/stats for backwards compat but serve from same single fetch
 router.get('/history/stats', async (req, res) => {
   try {
     const tenantId = getTenantIdFromRequest({ session: req.session, body: { tenantId: req.query?.tenantId || null } });
-    const stats = await getRemediationStats(tenantId);
+    const records = await getRemediationHistory(tenantId, { limit: 500 });
+    const stats   = await getRemediationStats(tenantId, records);
     return res.json({ ok: true, tenantId, stats });
   } catch (error) {
     return res.status(error.status || 500).json({ ok: false, error: error.message });
