@@ -448,8 +448,8 @@ router.post('/auto-remediation/trigger', async (req, res) => {
 router.get('/auto-remediation/job/:jobId', async (req, res) => {
   const job = _autoRemJobs.get(req.params.jobId);
   if (!job) {
-    // Job expired or unknown — treat as still running (rare edge case)
-    return res.json({ status: 'running' });
+    // Job not found — server restarted and cleared in-memory map, or jobId expired
+    return res.json({ status: 'error', error: 'Job not found — the server restarted during the run. Please try again.' });
   }
   res.json(job);
 });
