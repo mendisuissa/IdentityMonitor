@@ -108,11 +108,13 @@ async function remediateTenant(tenantId) {
       continue;
     }
 
-    // ── 2. Already fixed recently — skip ────────────────────────────────────
-    const recent = await getRecentSuccessForCve(tenantId, cveId, 24).catch(() => null);
-    if (recent) {
-      summary.skipped++;
-      continue;
+    // ── 2. Already fixed recently — skip (guard: empty cveId would match every record) ─
+    if (cveId) {
+      const recent = await getRecentSuccessForCve(tenantId, cveId, 24).catch(() => null);
+      if (recent) {
+        summary.skipped++;
+        continue;
+      }
     }
 
     actioned++;

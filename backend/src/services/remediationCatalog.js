@@ -66,7 +66,23 @@ function classifyFinding(finding = {}) {
   const intuneHints = ['intune', 'configuration profile', 'compliance policy', 'device policy', 'settings catalog'];
   const scriptHints = ['script', 'powershell', 'remediation script', 'proactive remediation', 'detection script'];
   const identityHints = ['identity', 'conditional access', 'entra', 'azure ad', 'authentication', 'mfa'];
-  const appHints = ['chrome', 'chromium', 'firefox', 'edge', 'webview', '7-zip', '7zip', 'notepad++', 'acrobat', 'office', 'vlc', 'java', 'browser', 'runtime', 'mongodb', 'openssl'];
+  const appHints = [
+    'chrome', 'chromium', 'firefox', 'edge', 'webview',
+    '7-zip', '7zip', 'notepad++', 'notepad',
+    'acrobat', 'adobe',
+    'office', 'word', 'excel', 'outlook', 'powerpoint', 'onenote',
+    'vlc', 'java', 'browser', 'runtime',
+    'mongodb', 'openssl',
+    'teams', 'zoom', 'slack', 'skype', 'webex',
+    'visual studio code', 'vscode',
+    'python', 'git', 'nodejs', 'node.js',
+    'winrar', 'winzip',
+    'putty', 'filezilla', 'citrix',
+    'dropbox', 'wireshark', 'libreoffice', 'thunderbird',
+    'keepass', 'bitwarden', 'lastpass',
+    'oracle', 'mysql', 'postgresql',
+    'vmware', 'virtualbox',
+  ];
 
   if (category === 'unsupported-platform') {
     return { type: 'unsupported-platform', family: 'non-windows' };
