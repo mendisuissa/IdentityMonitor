@@ -1389,7 +1389,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         </section>
       )}
 
-      {error && (
+      {error && mainTab === 'vulnerabilities' && (
         <section className="remediation-banner danger">
           <div>
             <strong>Unable to load remediation data</strong>
