@@ -320,6 +320,14 @@ async function runAutoRemediation() {
   return allSummaries;
 }
 
+// ── Manual trigger — runs for a single tenant, bypasses _running lock ────────
+async function runForTenant(tenantId) {
+  if (!tenantId) throw new Error('tenantId is required');
+  console.log(`[AutoRemediation] Manual trigger for tenant ${tenantId}`);
+  const summary = await remediateTenant(tenantId);
+  return [summary];
+}
+
 function escMd(str) {
   return String(str || '').replace(/[_*[\]()~`>#+=|{}.!\\-]/g, '\\$&');
 }
@@ -348,4 +356,4 @@ function stop() {
 
 function isEnabled() { return ENABLED(); }
 
-module.exports = { start, stop, runAutoRemediation, isEnabled };
+module.exports = { start, stop, runAutoRemediation, runForTenant, isEnabled };

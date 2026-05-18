@@ -409,8 +409,10 @@ router.get('/auto-remediation/status', async (req, res) => {
 
 router.post('/auto-remediation/trigger', async (req, res) => {
   try {
-    getTenantIdFromRequest(req); // auth check only — runs for all tenants
-    const summaries = await autoRemediationService.runAutoRemediation();
+    const tenantId = getTenantIdFromRequest(req);
+    // Use runForTenant so manual trigger always runs for the authenticated tenant,
+    // bypassing the global _running lock (which cron may hold).
+    const summaries = await autoRemediationService.runForTenant(tenantId);
     res.json({ ok: true, summaries: summaries || [] });
   } catch (error) {
     return res.status(error.status || 500).json({ ok: false, error: error.message });
