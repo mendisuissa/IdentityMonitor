@@ -112,45 +112,100 @@ export default function LandingPage() {
   return (
     <div style={{ background: BG, color: '#e8e8f0', fontFamily: 'system-ui, -apple-system, sans-serif', minHeight: '100vh' }}>
 
-      {/* Responsive nav helpers */}
+      {/* Global styles */}
       <style>{`
+        /* ── Nav ── */
         .nav-links { display: flex; gap: 20px; align-items: center; }
         .nav-text-links { display: flex; gap: 20px; }
-        @media (max-width: 560px) {
-          .nav-text-links { display: none; }
-          .nav-links { gap: 10px; }
+        @media (max-width: 560px) { .nav-text-links { display: none; } .nav-links { gap: 10px; } }
+
+        /* ── Animations ── */
+        @keyframes lp-ping  { 0%{transform:scale(1);opacity:.9} 100%{transform:scale(2.4);opacity:0} }
+        @keyframes lp-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+        @keyframes lp-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+        @keyframes lp-shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
+        @keyframes lp-slide-up { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes lp-scan-line { 0%{left:-60%} 100%{left:110%} }
+
+        /* ── Live dot ── */
+        .lp-live-wrap { position:relative; display:inline-flex; align-items:center; justify-content:center; width:10px; height:10px; }
+        .lp-live-wrap::before { content:''; position:absolute; inset:0; border-radius:50%; background:#00C98B; animation:lp-ping 1.6s ease-out infinite; }
+        .lp-live-dot { width:8px; height:8px; border-radius:50%; background:#00C98B; position:relative; z-index:1; }
+
+        /* ── Hero grid background ── */
+        .lp-hero-bg {
+          background-image:
+            radial-gradient(ellipse at 50% -5%, rgba(232,120,74,0.16) 0%, transparent 55%),
+            radial-gradient(circle at 15% 85%, rgba(91,155,213,0.06) 0%, transparent 35%),
+            radial-gradient(circle at 85% 75%, rgba(155,107,255,0.05) 0%, transparent 35%),
+            linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+          background-size: 100% 100%, 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+          background-position: 0 0, 0 0, 0 0, -1px -1px, -1px -1px;
         }
 
-        /* Comparison table → responsive rows */
-        .cmp-grid { display: grid; grid-template-columns: 1.6fr 1fr 1.2fr 1.1fr; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.07); }
-        .cmp-cell { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .cmp-head { padding: 12px 16px; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; border-bottom: 2px solid rgba(255,255,255,0.08); }
-        .cmp-head.im { border-bottom-color: #E8784A; background: rgba(232,120,74,0.05); color: #E8784A; }
-        .cmp-cell.im  { background: rgba(232,120,74,0.03); font-weight: 600; }
-        .cmp-cell.yes { color: #00C98B; }
-        .cmp-cell.no  { color: rgba(255,255,255,0.30); }
-        .cmp-cell.val { color: #fff; }
-        .cmp-cell.feat { color: rgba(255,255,255,0.60); font-weight: 500; }
-        .cmp-alt { display: none; }
+        /* ── Pill hover ── */
+        .lp-pill { transition: transform .15s, border-color .15s, background .15s; cursor:default; }
+        .lp-pill:hover { transform:scale(1.05); }
+        .lp-pill-detect:hover { background:rgba(255,255,255,0.065) !important; border-color:rgba(255,255,255,0.18) !important; }
+        .lp-pill-action:hover { background:rgba(232,120,74,0.14) !important; border-color:rgba(232,120,74,0.38) !important; }
 
-        @media (max-width: 620px) {
-          .cmp-grid { display: none; }
-          .cmp-alt  { display: flex; flex-direction: column; gap: 10px; }
-          .cmp-alt-row {
-            background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07);
-            border-radius: 12px; padding: 14px 16px;
-            display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center;
-          }
-          .cmp-alt-feat { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.80); grid-column: 1; }
-          .cmp-alt-others { font-size: 11px; color: rgba(255,255,255,0.32); grid-column: 1; margin-top: 2px; }
-          .cmp-alt-im {
-            grid-column: 2; grid-row: 1 / 3;
-            font-size: 13px; font-weight: 700;
-            background: rgba(232,120,74,0.10); border: 1px solid rgba(232,120,74,0.25);
-            border-radius: 8px; padding: 6px 12px; text-align: center; white-space: nowrap;
-          }
-          .cmp-alt-im.yes  { color: #00C98B; border-color: rgba(0,201,139,0.25); background: rgba(0,201,139,0.08); }
-          .cmp-alt-im.no   { color: rgba(255,255,255,0.35); border-color: rgba(255,255,255,0.10); background: transparent; }
+        /* ── Card hover ── */
+        .lp-card { transition: transform .2s, box-shadow .2s; }
+        .lp-card:hover { transform:translateY(-4px); box-shadow:0 16px 48px rgba(0,0,0,.45) !important; }
+
+        /* ── Step card ── */
+        .lp-step { transition: transform .2s, border-color .2s; }
+        .lp-step:hover { transform:translateY(-3px); border-color:rgba(232,120,74,0.28) !important; }
+
+        /* ── Pro card shimmer border ── */
+        .lp-pro-card {
+          background: rgba(232,120,74,0.07);
+          border: 2px solid rgba(232,120,74,0.38);
+          border-radius: 20px;
+          padding: 28px 24px;
+          text-align: left;
+          box-shadow: 0 0 60px rgba(232,120,74,0.13), 0 0 0 1px rgba(232,120,74,0.10);
+          position: relative;
+          overflow: hidden;
+          flex: 1 1 270px;
+          max-width: 320px;
+        }
+        .lp-pro-card::before {
+          content: '';
+          position: absolute;
+          top: 0; left: -60%; width: 40%; height: 2px;
+          background: linear-gradient(90deg, transparent, rgba(232,120,74,0.9), transparent);
+          animation: lp-scan-line 2.8s ease-in-out infinite;
+        }
+
+        /* ── Section gradient dividers ── */
+        .lp-section-alt { background: rgba(255,255,255,0.013); }
+
+        /* ── Timeline highlight row ── */
+        .lp-tl-hi { background: rgba(0,201,139,0.06); border-radius: 8px; padding: 2px 6px; margin: -2px -6px; }
+
+        /* ── Comparison table ── */
+        .cmp-grid { display:grid; grid-template-columns:1.6fr 1fr 1.2fr 1.1fr; border-radius:14px; overflow:hidden; border:1px solid rgba(255,255,255,0.07); }
+        .cmp-cell { padding:12px 16px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.05); }
+        .cmp-head { padding:12px 16px; font-size:11px; font-weight:700; letter-spacing:.4px; border-bottom:2px solid rgba(255,255,255,0.08); }
+        .cmp-head.im { border-bottom-color:#E8784A; background:rgba(232,120,74,0.05); color:#E8784A; }
+        .cmp-cell.im { background:rgba(232,120,74,0.03); font-weight:600; }
+        .cmp-cell.yes { color:#00C98B; }
+        .cmp-cell.no  { color:rgba(255,255,255,0.30); }
+        .cmp-cell.val { color:#fff; }
+        .cmp-cell.feat { color:rgba(255,255,255,0.60); font-weight:500; }
+        .cmp-alt { display:none; }
+
+        @media (max-width:620px) {
+          .cmp-grid { display:none; }
+          .cmp-alt  { display:flex; flex-direction:column; gap:10px; }
+          .cmp-alt-row { background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.07); border-radius:12px; padding:14px 16px; display:grid; grid-template-columns:1fr auto; gap:4px 12px; align-items:center; }
+          .cmp-alt-feat { font-size:13px; font-weight:600; color:rgba(255,255,255,0.80); grid-column:1; }
+          .cmp-alt-others { font-size:11px; color:rgba(255,255,255,0.32); grid-column:1; margin-top:2px; }
+          .cmp-alt-im { grid-column:2; grid-row:1/3; font-size:13px; font-weight:700; background:rgba(232,120,74,0.10); border:1px solid rgba(232,120,74,0.25); border-radius:8px; padding:6px 12px; text-align:center; white-space:nowrap; }
+          .cmp-alt-im.yes { color:#00C98B; border-color:rgba(0,201,139,0.25); background:rgba(0,201,139,0.08); }
+          .cmp-alt-im.no  { color:rgba(255,255,255,0.35); border-color:rgba(255,255,255,0.10); background:transparent; }
         }
       `}</style>
 
@@ -183,67 +238,127 @@ export default function LandingPage() {
       </nav>
 
       {/* ── HERO ── */}
-      <section style={{
-        textAlign: 'center', padding: '96px 24px 72px',
-        background: 'radial-gradient(ellipse at 50% 0%, rgba(232,120,74,0.09) 0%, transparent 65%)',
-      }}>
-        <div style={{ marginBottom: 20 }}>
-          <Badge>🔴 Live · Detect · Contain · Remediate</Badge>
+      <section className="lp-hero-bg" style={{ textAlign: 'center', padding: '96px 24px 80px' }}>
+
+        {/* Animated live scanning badge */}
+        <div style={{ marginBottom: 22, display: 'flex', justifyContent: 'center' }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '6px 16px', borderRadius: 99,
+            background: 'rgba(0,201,139,0.08)', border: '1px solid rgba(0,201,139,0.22)',
+            fontSize: 12, fontWeight: 700, color: '#00C98B', letterSpacing: 0.3,
+          }}>
+            <span className="lp-live-wrap"><span className="lp-live-dot" /></span>
+            Scanning · Detect · Contain · Auto-Remediate
+          </span>
         </div>
 
         <h1 style={{
-          fontSize: 'clamp(34px, 6vw, 62px)', fontWeight: 900,
-          letterSpacing: -2, lineHeight: 1.08,
-          maxWidth: 860, margin: '0 auto 22px',
+          fontSize: 'clamp(34px, 6vw, 66px)', fontWeight: 900,
+          letterSpacing: -2.5, lineHeight: 1.06,
+          maxWidth: 880, margin: '0 auto 24px',
         }}>
           Your Microsoft 365 is being{' '}
-          <span style={{ color: ORANGE }}>attacked right now.</span>
+          <span style={{
+            background: `linear-gradient(135deg, ${ORANGE} 0%, #F5C543 100%)`,
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+          }}>attacked right now.</span>
           <br />
-          <span style={{ color: 'rgba(255,255,255,0.92)' }}>Are you the first to know?</span>
+          <span style={{ color: 'rgba(255,255,255,0.90)' }}>Are you the first to know?</span>
         </h1>
 
         <p style={{
-          fontSize: 18, color: 'rgba(255,255,255,0.50)', maxWidth: 580,
-          margin: '0 auto 36px', lineHeight: 1.75,
+          fontSize: 18, color: 'rgba(255,255,255,0.48)', maxWidth: 580,
+          margin: '0 auto 40px', lineHeight: 1.8,
         }}>
-          IdentityMonitor scans every privileged account every <strong style={{ color: 'rgba(255,255,255,0.82)' }}>60 seconds</strong> — and when a threat fires, you
-          {' '}<strong style={{ color: 'rgba(255,255,255,0.82)' }}>revoke sessions, patch CVEs, and disable accounts</strong> in one tap. No Azure Portal, no analyst, no delay.
+          IdentityMonitor scans every privileged account every <strong style={{ color: 'rgba(255,255,255,0.85)' }}>60 seconds</strong> — and when a threat fires, you
+          {' '}<strong style={{ color: 'rgba(255,255,255,0.85)' }}>revoke sessions, patch CVEs, and disable accounts</strong> in one tap. No Azure Portal, no analyst, no delay.
         </p>
 
-        <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 24 }}>
+        <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 28 }}>
           <Btn href="/api/auth/login" primary large>Start monitoring free →</Btn>
           <Btn href="/pricing">See pricing</Btn>
         </div>
 
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.28)', display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.28)', display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 56 }}>
           <span>✓ Free tier — forever</span>
           <span>✓ No credit card</span>
           <span>✓ 2-minute setup</span>
           <span>✓ Read-only permissions</span>
         </div>
+
+        {/* Mini product preview — scan ticker */}
+        <div style={{
+          maxWidth: 680, margin: '0 auto',
+          background: 'rgba(255,255,255,0.028)', border: '1px solid rgba(255,255,255,0.07)',
+          borderRadius: 16, overflow: 'hidden',
+          boxShadow: '0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(232,120,74,0.06)',
+        }}>
+          {/* Window bar */}
+          <div style={{ padding: '10px 16px', background: 'rgba(0,0,0,0.3)', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 7 }}>
+            {['#FF5F57','#FEBC2E','#28C840'].map(c => <div key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />)}
+            <div style={{ flex: 1, textAlign: 'center', fontSize: 10, fontFamily: 'monospace', color: 'rgba(255,255,255,0.25)' }}>identitymonitor.modernendpoint.tech</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="lp-live-wrap" style={{ width: 8, height: 8 }}><span className="lp-live-dot" style={{ width: 6, height: 6 }} /></span>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#00C98B', fontFamily: 'monospace' }}>LIVE</span>
+            </div>
+          </div>
+          {/* Content */}
+          <div style={{ padding: '16px 20px', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {[
+              { n: '2', l: 'Critical', c: '#FF3D6B' },
+              { n: '3', l: 'High',     c: '#FF7A3D' },
+              { n: '12', l: 'CVEs',    c: ORANGE    },
+              { n: '4', l: 'Admins',   c: '#A78BFA' },
+              { n: '7', l: 'Resolved', c: '#00C98B' },
+            ].map(s => (
+              <div key={s.l} style={{ flex: '1 1 80px', background: 'rgba(0,0,0,0.25)', borderRadius: 10, padding: '12px 8px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ fontSize: 24, fontWeight: 900, color: s.c, lineHeight: 1 }}>{s.n}</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.32)', fontWeight: 600, marginTop: 4, letterSpacing: 0.5, textTransform: 'uppercase' }}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '0 20px 16px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {[
+              { sev: 'CRITICAL', color: '#FF3D6B', bg: 'rgba(255,61,107,0.10)', text: 'Alex Johnson — Impossible Travel · Tel Aviv→New York · 0.7h', time: '2 min ago' },
+              { sev: 'HIGH',     color: '#FF7A3D', bg: 'rgba(255,122,61,0.08)', text: 'Sarah Mitchell — New Country: North Korea · Intune Admin Center', time: '15 min ago' },
+            ].map(r => (
+              <div key={r.text} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, background: r.bg, borderLeft: `3px solid ${r.color}` }}>
+                <span style={{ fontSize: 9, fontWeight: 800, color: r.color, padding: '2px 7px', borderRadius: 4, background: `${r.color}20`, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{r.sev}</span>
+                <div style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.72)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.text}</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', whiteSpace: 'nowrap' }}>{r.time}</div>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* ── SOCIAL PROOF BAR ── */}
-      <section style={{ padding: '0 24px 72px' }}>
+      <section style={{ padding: '48px 24px 72px' }}>
         <div style={{
-          maxWidth: 820, margin: '0 auto',
-          background: 'rgba(255,255,255,0.025)', borderRadius: 16,
-          border: '1px solid rgba(255,255,255,0.07)',
+          maxWidth: 860, margin: '0 auto',
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(232,120,74,0.03) 100%)',
+          borderRadius: 18,
+          border: '1px solid rgba(255,255,255,0.08)',
           display: 'flex', flexWrap: 'wrap', justifyContent: 'center',
+          boxShadow: '0 0 0 1px rgba(232,120,74,0.06) inset',
         }}>
           {[
-            { value: '60s',    label: 'Scan cycle' },
-            { value: '$15',    label: 'Per month, flat' },
-            { value: '1-tap',  label: 'Remediation' },
-            { value: '100%',   label: 'Microsoft Graph API' },
-            { value: '$0',     label: 'Free tier forever' },
+            { value: '60s',    label: 'Scan cycle',          icon: '⚡' },
+            { value: '$15',    label: 'Per month, flat',      icon: '💳' },
+            { value: '1-tap',  label: 'Remediation',         icon: '👆' },
+            { value: '100%',   label: 'Microsoft Graph API', icon: '🔗' },
+            { value: '$0',     label: 'Free tier forever',   icon: '🎁' },
           ].map((s, i, arr) => (
-            <div key={s.value} style={{
-              flex: '1 1 120px', padding: '20px 16px', textAlign: 'center',
+            <div key={s.value} className="lp-card" style={{
+              flex: '1 1 130px', padding: '22px 16px', textAlign: 'center',
               borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+              borderRadius: i === 0 ? '18px 0 0 18px' : i === arr.length - 1 ? '0 18px 18px 0' : 0,
+              cursor: 'default',
             }}>
-              <div style={{ fontSize: 24, fontWeight: 900, color: ORANGE, marginBottom: 4 }}>{s.value}</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontWeight: 600, letterSpacing: 0.3 }}>{s.label}</div>
+              <div style={{ fontSize: 16, marginBottom: 6 }}>{s.icon}</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: ORANGE, marginBottom: 5, letterSpacing: -0.5 }}>{s.value}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', fontWeight: 600, letterSpacing: 0.3 }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -266,7 +381,9 @@ export default function LandingPage() {
             <div style={{
               flex: '1 1 320px',
               background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.15)',
+              borderTop: '2px solid rgba(239,68,68,0.45)',
               borderRadius: 18, padding: '24px',
+              boxShadow: '0 8px 32px rgba(239,68,68,0.06)',
             }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: RED, letterSpacing: 0.8, marginBottom: 20, textTransform: 'uppercase' }}>
                 🔴 Without IdentityMonitor
@@ -292,7 +409,9 @@ export default function LandingPage() {
             <div style={{
               flex: '1 1 320px',
               background: 'rgba(0,201,139,0.04)', border: '1px solid rgba(0,201,139,0.18)',
+              borderTop: '2px solid rgba(0,201,139,0.55)',
               borderRadius: 18, padding: '24px',
+              boxShadow: '0 8px 32px rgba(0,201,139,0.07)',
             }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#00C98B', letterSpacing: 0.8, marginBottom: 20, textTransform: 'uppercase' }}>
                 🟢 With IdentityMonitor
@@ -302,7 +421,7 @@ export default function LandingPage() {
                 { time: 'T+0:03',  text: 'Sign-in from new country — scanner catches it' },
                 { time: 'T+0:03',  text: 'Telegram alert fires with full context', highlight: true },
                 { time: 'T+0:04',  text: 'You tap ⊘ Revoke Sessions from your phone', highlight: true },
-                { time: 'T+0:04',  text: 'Attacker locked out. Audit log created.', highlight: true },
+                { time: 'T+0:05',  text: 'Attacker locked out. Audit log created.', highlight: true },
               ].map((e: any) => (
                 <div key={e.time + e.text} style={{ display: 'flex', gap: 14, marginBottom: 14, alignItems: 'flex-start' }}>
                   <div style={{ fontSize: 10, fontFamily: 'monospace', color: '#00C98B', fontWeight: 700, flexShrink: 0, paddingTop: 2, width: 60 }}>{e.time}</div>
@@ -325,8 +444,8 @@ export default function LandingPage() {
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginBottom: 28 }}>
             {DETECTIONS.map(d => (
-              <span key={d} style={{
-                padding: '6px 15px', borderRadius: 99, fontSize: 12, fontWeight: 500,
+              <span key={d} className="lp-pill lp-pill-detect" style={{
+                padding: '7px 16px', borderRadius: 99, fontSize: 12, fontWeight: 500,
                 background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)',
                 color: 'rgba(255,255,255,0.65)',
               }}>{d}</span>
@@ -338,8 +457,8 @@ export default function LandingPage() {
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
             {ACTIONS.map(a => (
-              <span key={a} style={{
-                padding: '6px 15px', borderRadius: 99, fontSize: 12, fontWeight: 600,
+              <span key={a} className="lp-pill lp-pill-action" style={{
+                padding: '7px 16px', borderRadius: 99, fontSize: 12, fontWeight: 600,
                 background: 'rgba(232,120,74,0.08)', border: '1px solid rgba(232,120,74,0.22)',
                 color: '#F5A462',
               }}>{a}</span>
@@ -542,20 +661,40 @@ export default function LandingPage() {
           <h2 style={{ textAlign: 'center', fontSize: 'clamp(22px, 4vw, 32px)', fontWeight: 800, marginBottom: 56, letterSpacing: -0.5 }}>
             Up and running in 5 minutes
           </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 36 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {STEPS.map((s, i) => (
-              <div key={s.n} style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+              <div key={s.n} className="lp-step" style={{
+                display: 'flex', gap: 24, alignItems: 'flex-start',
+                background: 'rgba(255,255,255,0.025)', borderRadius: 16,
+                border: '1px solid rgba(255,255,255,0.07)',
+                padding: '22px 24px',
+                borderLeft: `3px solid ${i === 0 ? 'rgba(232,120,74,0.5)' : i === 1 ? 'rgba(91,155,213,0.5)' : 'rgba(0,201,139,0.5)'}`,
+              }}>
                 <div style={{
-                  flexShrink: 0, width: 46, height: 46, borderRadius: '50%',
-                  background: `linear-gradient(135deg, ${ORANGE}, #F5A462)`,
+                  flexShrink: 0, width: 44, height: 44, borderRadius: '50%',
+                  background: i === 0
+                    ? `linear-gradient(135deg, ${ORANGE}, #F5A462)`
+                    : i === 1
+                      ? 'linear-gradient(135deg, #5B9BD5, #7BB8F0)'
+                      : 'linear-gradient(135deg, #00C98B, #00E5A0)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 900, fontSize: 18, color: '#fff',
-                  boxShadow: '0 4px 20px rgba(232,120,74,0.35)',
+                  fontWeight: 900, fontSize: 17, color: '#fff',
+                  boxShadow: i === 0
+                    ? '0 4px 16px rgba(232,120,74,0.35)'
+                    : i === 1
+                      ? '0 4px 16px rgba(91,155,213,0.30)'
+                      : '0 4px 16px rgba(0,201,139,0.30)',
+                  marginTop: 2,
                 }}>{s.n}</div>
                 <div>
-                  <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 6 }}>{s.title}</div>
-                  <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.50)', lineHeight: 1.7, marginBottom: 8 }}>{s.desc}</div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: ORANGE, letterSpacing: 0.3 }}>→ {s.detail}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{s.title}</div>
+                  <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.50)', lineHeight: 1.75, marginBottom: 8 }}>{s.desc}</div>
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    fontSize: 11, fontWeight: 700,
+                    color: i === 0 ? ORANGE : i === 1 ? '#5B9BD5' : '#00C98B',
+                    letterSpacing: 0.3,
+                  }}>→ {s.detail}</div>
                 </div>
               </div>
             ))}
@@ -658,14 +797,8 @@ export default function LandingPage() {
             </div>
 
             {/* Pro */}
-            <div style={{
-              flex: '1 1 270px', maxWidth: 320,
-              background: 'rgba(232,120,74,0.07)', border: '2px solid rgba(232,120,74,0.35)',
-              borderRadius: 20, padding: '28px 24px', textAlign: 'left',
-              boxShadow: '0 0 48px rgba(232,120,74,0.12)',
-              position: 'relative', overflow: 'hidden',
-            }}>
-              <div style={{ position: 'absolute', top: 16, right: 16, fontSize: 10, padding: '3px 10px', borderRadius: 99, background: ORANGE, color: '#fff', fontWeight: 800, letterSpacing: 0.5 }}>MOST POPULAR</div>
+            <div className="lp-pro-card">
+              <div style={{ position: 'absolute', top: 16, right: 16, fontSize: 10, padding: '3px 10px', borderRadius: 99, background: `linear-gradient(135deg, ${ORANGE}, #F5A462)`, color: '#fff', fontWeight: 800, letterSpacing: 0.5, boxShadow: '0 2px 12px rgba(232,120,74,0.4)' }}>MOST POPULAR</div>
               <div style={{ fontSize: 12, fontWeight: 700, color: ORANGE, marginBottom: 14, letterSpacing: 1 }}>PRO</div>
               <div style={{ fontSize: 40, fontWeight: 900, color: '#fff', marginBottom: 6 }}>$15<span style={{ fontSize: 14, fontWeight: 400, color: 'rgba(255,255,255,0.40)' }}>/mo</span></div>
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)', marginBottom: 20 }}>Per tenant · Cancel any time</div>
@@ -725,11 +858,13 @@ export default function LandingPage() {
 
       {/* ── CTA BANNER ── */}
       <section style={{
-        margin: '0 24px 80px', borderRadius: 22,
-        background: `linear-gradient(135deg, rgba(232,120,74,0.13), rgba(232,120,74,0.04))`,
-        border: '1px solid rgba(232,120,74,0.25)',
-        padding: '60px 32px', textAlign: 'center',
+        margin: '0 24px 80px', borderRadius: 24,
+        background: 'radial-gradient(ellipse at 50% 0%, rgba(232,120,74,0.18) 0%, rgba(12,12,17,0.95) 70%)',
+        border: '1px solid rgba(232,120,74,0.28)',
+        padding: '72px 32px', textAlign: 'center',
         maxWidth: 860, marginLeft: 'auto', marginRight: 'auto',
+        boxShadow: '0 0 80px rgba(232,120,74,0.08)',
+        position: 'relative', overflow: 'hidden',
       }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: ORANGE, letterSpacing: 1, marginBottom: 16, textTransform: 'uppercase' }}>
           Right now, someone might be in your tenant
