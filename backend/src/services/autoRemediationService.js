@@ -62,7 +62,7 @@ async function remediateTenant(tenantId, options = {}) {
   }
 
   // ── Detect new CVEs vs last run ──────────────────────────────────────────
-  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+  {
     const currentIds = new Set(vulns.map(v => (v.cveId || v.id || '').toUpperCase()).filter(Boolean));
     const seenIds    = _seenCves.get(tenantId);
     if (seenIds) {
@@ -125,7 +125,7 @@ async function remediateTenant(tenantId, options = {}) {
 
     // ── 3. Approval gate for Critical CVEs ──────────────────────────────────
     const isCritical = String(vuln.severity || '').toLowerCase() === 'critical';
-    if (isCritical && REQUIRE_APPROVAL() && process.env.TELEGRAM_BOT_TOKEN) {
+    if (isCritical && REQUIRE_APPROVAL()) {
       console.log(`[AutoRemediation] ${tenantId} ${cveId} — Critical CVE, requesting Telegram approval`);
       let decision = 'approved';
       try {
@@ -306,8 +306,9 @@ async function runAutoRemediation() {
 
   console.log(`[AutoRemediation] Run complete — ✅ ${totalSuccess} success, ❌ ${totalFailed} failed, ⏭ ${totalSkipped} skipped, 🚫 ${totalUnsup} unsupported`);
 
-  // ── Telegram notification ─────────────────────────────────────────────────
-  if (process.env.TELEGRAM_BOT_TOKEN && (totalSuccess > 0 || totalFailed > 0)) {
+  // ── Telegram notification (uses settings-based credentials with env fallback) ──
+  if (totalSuccess > 0 || totalFailed > 0) {
+    const firstTenant = allSummaries[0]?.tenantId;
     try {
       let msg = `🤖 *Auto\\-Remediation Run*\n\n`;
       msg += `📅 ${escMd(new Date().toLocaleString('en-GB'))}\n`;
@@ -324,7 +325,7 @@ async function runAutoRemediation() {
         msg += '\n';
       }
 
-      await telegramService.sendMessage(msg);
+      await telegramService.sendMessageForTenant(firstTenant, msg);
     } catch (_) { /* non-fatal */ }
   }
 
@@ -339,8 +340,8 @@ async function runForTenant(tenantId, options = {}) {
   const summary = await remediateTenant(tenantId, { forceRemediate });
   const summaries = [summary];
 
-  // ── Telegram notification (same as cron run) ─────────────────────────────
-  if (process.env.TELEGRAM_BOT_TOKEN && (summary.success > 0 || summary.failed > 0)) {
+  // ── Telegram notification (uses settings-based credentials with env fallback) ──
+  if (summary.success > 0 || summary.failed > 0) {
     try {
       let msg = `🤖 *Manual Remediation Run*\n\n`;
       msg += `📅 ${escMd(new Date().toLocaleString('en-GB'))}\n`;
@@ -351,7 +352,7 @@ async function runForTenant(tenantId, options = {}) {
         msg += `  ${icon} ${escMd(a.cveId)} · ${escMd(a.productName || a.category)}\n`;
       }
       if ((summary.actions?.length || 0) > 10) msg += `  \\.\\.\\. and ${summary.actions.length - 10} more\n`;
-      await telegramService.sendMessage(msg);
+      await telegramService.sendMessageForTenant(tenantId, msg);
     } catch (_) { /* non-fatal */ }
   }
 

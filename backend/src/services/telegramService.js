@@ -130,19 +130,22 @@ async function updateMessageAfterAction(messageId, tokenOrAction, chatIdOrUndefi
 }
 
 // ─── Send simple text message (MarkdownV2) ───────────────────────────────
-async function sendMessage(text) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-    console.warn('[Telegram] sendMessage skipped — TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set');
+// Accepts optional token/chatId overrides so settings-stored credentials work.
+async function sendMessage(text, tokenOverride, chatIdOverride) {
+  const token  = tokenOverride  || TELEGRAM_BOT_TOKEN;
+  const chatId = chatIdOverride || TELEGRAM_CHAT_ID;
+  if (!token || !chatId) {
+    console.warn('[Telegram] sendMessage skipped — bot token or chat ID not configured');
     return;
   }
   try {
     const res = await fetch(
-      'https://api.telegram.org/bot' + TELEGRAM_BOT_TOKEN + '/sendMessage',
+      'https://api.telegram.org/bot' + token + '/sendMessage',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id:    TELEGRAM_CHAT_ID,
+          chat_id:    chatId,
           text,
           parse_mode: 'MarkdownV2',
         })
@@ -156,6 +159,19 @@ async function sendMessage(text) {
     }
   } catch (err) {
     console.error('[Telegram] sendMessage error:', err.message);
+  }
+}
+
+// ─── Send for a specific tenant (uses settings-based credentials with env fallback) ───
+async function sendMessageForTenant(tenantId, text) {
+  try {
+    const settingsService = require('./settingsService');
+    const s = await settingsService.getSettingsAsync(tenantId).catch(() => ({}));
+    const token  = s?.notifications?.telegramBotToken  || TELEGRAM_BOT_TOKEN;
+    const chatId = s?.notifications?.telegramChatId    || TELEGRAM_CHAT_ID;
+    return sendMessage(text, token, chatId);
+  } catch (_) {
+    return sendMessage(text); // fallback to env vars
   }
 }
 
@@ -448,6 +464,7 @@ async function sendMessageWithToken(botToken, chatId, text) {
 module.exports = {
   sendAlertWithPlaybook,
   sendMessage,
+  sendMessageForTenant,
   sendMessageWithToken,
   sendTestMessage,
   handleCallbackQuery,
