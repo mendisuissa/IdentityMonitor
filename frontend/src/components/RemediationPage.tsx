@@ -852,6 +852,10 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [autoTriggerResult, setAutoTriggerResult] = useState<any>(null);
   // Ref to cancel an in-flight polling loop (prevents duplicate loops on re-click / remount)
   const cancelPollRef = React.useRef<(() => void) | null>(null);
+  // Cancel any in-flight poll when the component unmounts so stale loops don't accumulate
+  React.useEffect(() => {
+    return () => { if (cancelPollRef.current) { cancelPollRef.current(); cancelPollRef.current = null; } };
+  }, []);
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [affectedMachines, setAffectedMachines] = useState<string[]>([]);
   const [affectedMachinesError, setAffectedMachinesError] = useState('');
@@ -1686,8 +1690,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
 
                   // Set up a cancellable polling loop
                   const jobId = trigger.jobId;
-                  const maxWaitMs = 4 * 60 * 1000;
-                  const pollIntervalMs = 2500;
+                  const maxWaitMs = 9 * 60 * 1000;
+                  const pollIntervalMs = 5000;
                   const deadline = Date.now() + maxWaitMs;
                   let cancelled = false;
                   let timeoutId: ReturnType<typeof setTimeout> | null = null;
