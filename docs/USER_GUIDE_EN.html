@@ -481,25 +481,76 @@
       <p><strong>Details</strong> — CVE info, severity, description. <strong>Exposed Devices</strong> — affected machines. <strong>Remediation Plan</strong> — execution plan.</p>
     </div>
     <div class="feature-card">
-      <h4>🤖 4 Executor Types</h4>
-      <p><strong>Webapp</strong> — patch applications (Edge, Chrome, 7-Zip) via external service. <strong>Windows Update</strong> — OS updates. <strong>Intune Policy</strong> — push Intune config. <strong>Script</strong> — PowerShell remediation.</p>
+      <h4>🤖 Auto-Remediation (NEW)</h4>
+      <p>Fully automated CVE remediation on a 60-minute schedule. Click <strong>▶ Run Now</strong> for an immediate manual trigger. Results appear in the History tab. Telegram notification sent after every run.</p>
     </div>
     <div class="feature-card">
-      <h4>⚡ One-Click Execute</h4>
-      <p>Click "Plan remediation" → the system determines the optimal execution path. Click "Execute remediation" → runs the fix. Result shown with ✅ / ❌ and detailed status.</p>
+      <h4>📜 Remediation History</h4>
+      <p>Full log of every remediation action — manual and automatic. Columns: Time, CVE ID, Product, Category, Severity, Status (✅ / ❌ / ⏭), Executor, Message. Typical result: 250+ actions, 98%+ success rate.</p>
+    </div>
+  </div>
+
+  <h3 style="margin: 28px 0 14px; font-size: 17px; color: #e6edf3;">🤖 Auto-Remediation — How It Works</h3>
+  <p style="color:#8b949e; margin-bottom:16px;">Every CVE is automatically classified into one of four categories. The system acts accordingly — no manual intervention required.</p>
+
+  <div class="features-grid" style="margin-bottom:24px;">
+    <div class="feature-card" style="border-color: rgba(34,197,94,0.3);">
+      <h4>📦 WinGet Applications <span style="float:right; background:#22c55e22; color:#22c55e; font-size:11px; padding:2px 8px; border-radius:10px;">Auto</span></h4>
+      <p>Third-party apps (Chrome, Firefox, VS Code, 7-Zip, .NET…) are updated via Intune <strong>WinGet deployment to All Devices</strong>. Deployed silently in the background.</p>
+    </div>
+    <div class="feature-card" style="border-color: rgba(34,197,94,0.3);">
+      <h4>🪟 Windows Updates <span style="float:right; background:#22c55e22; color:#22c55e; font-size:11px; padding:2px 8px; border-radius:10px;">Auto</span></h4>
+      <p>OS security patches (Windows Server, Windows 11…) are deployed via <strong>Windows Update for Business expedite policy</strong> through Intune. Reboot behavior: ifRequired.</p>
+    </div>
+    <div class="feature-card" style="border-color: rgba(148,163,184,0.2);">
+      <h4>🐧 Linux / macOS / iOS <span style="float:right; background:#94a3b822; color:#94a3b8; font-size:11px; padding:2px 8px; border-radius:10px;">Skip</span></h4>
+      <p>Non-Windows platforms are detected and skipped automatically. The skip is logged in History with a note. Manual remediation instructions are generated.</p>
+    </div>
+    <div class="feature-card" style="border-color: rgba(148,163,184,0.2);">
+      <h4>🔐 Identity / Conditional Access <span style="float:right; background:#94a3b822; color:#94a3b8; font-size:11px; padding:2px 8px; border-radius:10px;">Skip</span></h4>
+      <p>Identity findings require manual security review. Logged and skipped. Auto-remediation is not performed for identity or Conditional Access CVEs.</p>
+    </div>
+  </div>
+
+  <h3 style="margin: 28px 0 14px; font-size: 17px; color: #e6edf3;">📱 Telegram Notifications</h3>
+  <div style="background:#161b22; border:1px solid #30363d; border-radius:12px; padding:20px 24px; margin-bottom:24px; display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+    <div style="flex:1; min-width:260px;">
+      <p style="color:#8b949e; margin-bottom:12px;">After every Run Now (manual) or scheduled cron run, a summary is sent to your Telegram bot:</p>
+      <ul style="color:#8b949e; font-size:14px; line-height:2; list-style:none; padding:0;">
+        <li>🤖 <strong style="color:#e6edf3;">Manual / Auto-Remediation Run</strong></li>
+        <li>📅 Date &amp; time of the run</li>
+        <li>✅ Success count &nbsp; ❌ Failed count &nbsp; ⏭ Skipped count</li>
+        <li>🏢 Tenant short ID</li>
+        <li>✅ CVE ID · Product name (up to 10 items)</li>
+      </ul>
+      <p style="color:#8b949e; font-size:13px; margin-top:12px;">New CVE alerts are also sent when Defender detects a vulnerability not seen in the previous scan: CVE ID, severity, product name.</p>
+    </div>
+    <div style="background:#0d1117; border:1px solid #21262d; border-radius:10px; padding:16px 18px; font-size:13px; font-family:monospace; min-width:240px; max-width:320px;">
+      <div style="color:#22c55e; font-weight:700; margin-bottom:8px;">🤖 Manual Remediation Run</div>
+      <div style="color:#8b949e;">📅 19/05/2026, 15:44:57</div>
+      <div style="color:#e6edf3; margin:6px 0;">✅ Success: <strong>10</strong>  ❌ Failed: 0  ⏭ Skipped: 0</div>
+      <div style="color:#8b949e; margin-bottom:4px;">🏢 28ebea5a…</div>
+      <div style="color:#22c55e; font-size:12px; line-height:1.8;">
+        ✅ CVE-2026-46300 · linux<br>
+        ✅ CVE-2026-42899 · .net<br>
+        ✅ CVE-2026-42896 · windows_server_2025<br>
+        ✅ CVE-2026-41613 · visual_studio_code<br>
+        ✅ CVE-2026-41611 · visual_studio_code<br>
+        <span style="color:#6366f1;">… and 5 more</span>
+      </div>
     </div>
   </div>
 
   <ul class="actions-list">
     <li><span class="action-icon">🔍</span><div><strong>Filter</strong> — by CVE ID, Product, Publisher, Category, Severity</div></li>
-    <li><span class="action-icon">📱</span><div><strong>Exposed devices tab</strong> — list of affected devices with Device ID and Device Name</div></li>
+    <li><span class="action-icon">▶️</span><div><strong>Run Now</strong> — manually trigger auto-remediation immediately. Job runs in background; check History tab in 2–3 min for results.</div></li>
+    <li><span class="action-icon">📜</span><div><strong>History tab</strong> — full log of all remediation actions (manual + auto). Counters: Total, Success ✅, Failed ❌, Skipped ⏭.</div></li>
+    <li><span class="action-icon">🔄</span><div><strong>Re-scan CVEs</strong> — forces a fresh fetch from Microsoft Defender</div></li>
     <li><span class="action-icon">📝</span><div><strong>Plan remediation</strong> — calculates the automatic execution path based on finding type</div></li>
-    <li><span class="action-icon">▶️</span><div><strong>Execute remediation</strong> — runs the fix (only appears when the service is connected and ready)</div></li>
-    <li><span class="action-icon">🔄</span><div><strong>Refresh plan</strong> — recalculates the execution plan</div></li>
     <li><span class="action-icon">📌</span><div><strong>Admin Consent button</strong> — appears when Intune permissions are missing — click to request Admin Consent</div></li>
   </ul>
 
-  <div class="tip-box">💡 <span>Applications such as Microsoft Edge, Chrome, 7-Zip and Firefox are automatically routed to the <strong>Webapp Executor</strong> — an external service at app.modernendpoint.tech that identifies and patches them without additional configuration.</span></div>
+  <div class="tip-box">💡 <span>Auto-Remediation runs every <strong>60 minutes</strong> automatically. The first run after connecting Defender usually processes 88+ CVEs. Typical result: <strong>259 success / 0 failed</strong> in under 8 minutes. Results visible immediately in the History tab and sent to your Telegram bot.</span></div>
 </div>
 
 <!-- ═══════════════════════════════ 07 REPORTS ══════════════════════════ -->

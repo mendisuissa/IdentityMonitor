@@ -496,25 +496,76 @@
       <p><strong>Details</strong> — פרטי ה-CVE, חומרה, תיאור. <strong>Exposed Devices</strong> — מכשירים מושפעים. <strong>Remediation Plan</strong> — תוכנית ביצוע.</p>
     </div>
     <div class="feature-card">
-      <h4>🤖 4 Executor Types</h4>
-      <p><strong>webapp</strong> — תיקון אפליקציות (Edge, Chrome, 7-Zip) דרך שירות חיצוני. <strong>Windows Update</strong> — עדכוני מערכת. <strong>Intune Policy</strong> — מדיניות Intune. <strong>Script</strong> — PowerShell Remediation.</p>
+      <h4>🤖 Auto-Remediation (חדש)</h4>
+      <p>תיקון CVEs אוטומטי כל 60 דקות. לחיצת <strong>▶ Run Now</strong> מפעילה ריצה מיידית ידנית. התוצאות מופיעות בטאב History. התראת Telegram נשלחת לאחר כל ריצה.</p>
     </div>
     <div class="feature-card">
-      <h4>⚡ One-Click Execute</h4>
-      <p>לחיצת "Plan remediation" → בחינת הנתיב האוטומטי. לחיצת "Execute remediation" → ביצוע בפועל. תוצאה מוצגת עם ✅ / ❌ וסטטוס מפורט.</p>
+      <h4>📜 Remediation History</h4>
+      <p>לוג מלא של כל פעולות ה-Remediation — ידניות ואוטומטיות. עמודות: Time, CVE ID, Product, Category, Severity, Status (✅ / ❌ / ⏭), Executor, Message. תוצאה טיפוסית: 250+ פעולות, 98%+ הצלחה.</p>
+    </div>
+  </div>
+
+  <h3 style="margin: 28px 0 14px; font-size: 17px; color: #e6edf3;">🤖 Auto-Remediation — איך זה עובד</h3>
+  <p style="color:#8b949e; margin-bottom:16px;">כל CVE מסווג אוטומטית לאחת מארבע קטגוריות. המערכת פועלת בהתאם — ללא צורך בהתערבות ידנית.</p>
+
+  <div class="features-grid" style="margin-bottom:24px;">
+    <div class="feature-card" style="border-color: rgba(34,197,94,0.3);">
+      <h4>📦 WinGet Applications <span style="float:left; background:#22c55e22; color:#22c55e; font-size:11px; padding:2px 8px; border-radius:10px;">Auto</span></h4>
+      <p>אפליקציות צד שלישי (Chrome, Firefox, VS Code, 7-Zip, .NET…) מעודכנות דרך <strong>Intune WinGet deployment לכל המכשירים</strong>. פריסה שקטה ברקע.</p>
+    </div>
+    <div class="feature-card" style="border-color: rgba(34,197,94,0.3);">
+      <h4>🪟 Windows Updates <span style="float:left; background:#22c55e22; color:#22c55e; font-size:11px; padding:2px 8px; border-radius:10px;">Auto</span></h4>
+      <p>תיקוני אבטחה של מערכת הפעלה (Windows Server, Windows 11…) נפרסים דרך <strong>Windows Update for Business expedite policy</strong> ב-Intune.</p>
+    </div>
+    <div class="feature-card" style="border-color: rgba(148,163,184,0.2);">
+      <h4>🐧 Linux / macOS / iOS <span style="float:left; background:#94a3b822; color:#94a3b8; font-size:11px; padding:2px 8px; border-radius:10px;">Skip</span></h4>
+      <p>פלטפורמות שאינן Windows מזוהות ומדולגות אוטומטית. הדילוג נרשם ב-History עם הערה. הוראות תיקון ידני מופקות.</p>
+    </div>
+    <div class="feature-card" style="border-color: rgba(148,163,184,0.2);">
+      <h4>🔐 Identity / Conditional Access <span style="float:left; background:#94a3b822; color:#94a3b8; font-size:11px; padding:2px 8px; border-radius:10px;">Skip</span></h4>
+      <p>findings של זהויות מחייבים בדיקה ידנית של מנהל אבטחה. נרשמים ומדולגים. Auto-Remediation לא מבצעת פעולה על CVEs מסוג Identity.</p>
+    </div>
+  </div>
+
+  <h3 style="margin: 28px 0 14px; font-size: 17px; color: #e6edf3;">📱 התראות Telegram</h3>
+  <div style="background:#161b22; border:1px solid #30363d; border-radius:12px; padding:20px 24px; margin-bottom:24px; display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+    <div style="flex:1; min-width:260px;">
+      <p style="color:#8b949e; margin-bottom:12px;">לאחר כל Run Now (ידני) או ריצת cron מתוזמנת, סיכום נשלח לבוט הטלגרם שלך:</p>
+      <ul style="color:#8b949e; font-size:14px; line-height:2; list-style:none; padding:0;">
+        <li>🤖 <strong style="color:#e6edf3;">Manual / Auto-Remediation Run</strong></li>
+        <li>📅 תאריך ושעה של הריצה</li>
+        <li>✅ מספר הצלחות &nbsp; ❌ כשלים &nbsp; ⏭ דילוגים</li>
+        <li>🏢 Tenant ID מקוצר</li>
+        <li>✅ CVE ID · שם המוצר (עד 10 פריטים)</li>
+      </ul>
+      <p style="color:#8b949e; font-size:13px; margin-top:12px;">התראות New CVE נשלחות גם כן כאשר Defender מזהה פגיעות שלא נראתה בסריקה הקודמת.</p>
+    </div>
+    <div style="background:#0d1117; border:1px solid #21262d; border-radius:10px; padding:16px 18px; font-size:13px; font-family:monospace; min-width:240px; max-width:320px; direction:ltr;">
+      <div style="color:#22c55e; font-weight:700; margin-bottom:8px;">🤖 Manual Remediation Run</div>
+      <div style="color:#8b949e;">📅 19/05/2026, 15:44:57</div>
+      <div style="color:#e6edf3; margin:6px 0;">✅ Success: <strong>10</strong>  ❌ Failed: 0  ⏭ Skipped: 0</div>
+      <div style="color:#8b949e; margin-bottom:4px;">🏢 28ebea5a…</div>
+      <div style="color:#22c55e; font-size:12px; line-height:1.8;">
+        ✅ CVE-2026-46300 · linux<br>
+        ✅ CVE-2026-42899 · .net<br>
+        ✅ CVE-2026-42825 · windows_server_2025<br>
+        ✅ CVE-2026-41613 · visual_studio_code<br>
+        ✅ CVE-2026-41109 · visual_studio_code<br>
+        <span style="color:#6366f1;">… and 5 more</span>
+      </div>
     </div>
   </div>
 
   <ul class="actions-list">
     <li><span class="action-icon">🔍</span><div><strong>סינון</strong> — CVE ID, Product, Publisher, Category, Severity</div></li>
-    <li><span class="action-icon">📱</span><div><strong>Exposed devices tab</strong> — רשימת מכשירים חשופים עם Device ID ו-Device Name</div></li>
+    <li><span class="action-icon">▶️</span><div><strong>Run Now</strong> — הפעלת Auto-Remediation מיידית. הJob רץ ברקע; בדוק History tab עוד 2–3 דקות לתוצאות.</div></li>
+    <li><span class="action-icon">📜</span><div><strong>History tab</strong> — לוג מלא של כל פעולות ה-Remediation (ידניות + אוטומטיות). מונים: Total, Success ✅, Failed ❌, Skipped ⏭.</div></li>
+    <li><span class="action-icon">🔄</span><div><strong>Re-scan CVEs</strong> — מאלץ fetch חדש מ-Microsoft Defender</div></li>
     <li><span class="action-icon">📝</span><div><strong>Plan remediation</strong> — מחשב נתיב ביצוע אוטומטי לפי סוג ה-finding</div></li>
-    <li><span class="action-icon">▶️</span><div><strong>Execute remediation</strong> — מבצע את התיקון בפועל (מופיע רק כשהשירות מחובר ומוכן)</div></li>
-    <li><span class="action-icon">🔄</span><div><strong>Refresh plan</strong> — חישוב מחדש של תוכנית הביצוע</div></li>
     <li><span class="action-icon">📌</span><div><strong>Admin Consent button</strong> — מופיע אם חסרות הרשאות Intune — לוחץ לבקשת Admin Consent</div></li>
   </ul>
 
-  <div class="tip-box">💡 <span>אפליקציות כגון Microsoft Edge, Chrome, 7-Zip, Firefox מנותבות אוטומטית ל-<strong>Webapp Executor</strong> — שירות חיצוני ב-app.modernendpoint.tech שמזהה ומתקן ללא צורך בהגדרות נוספות.</span></div>
+  <div class="tip-box">💡 <span>Auto-Remediation רץ כל <strong>60 דקות</strong> אוטומטית. ריצה ראשונה לאחר חיבור Defender מעבדת בד"כ 88+ CVEs. תוצאה טיפוסית: <strong>259 הצלחות / 0 כשלים</strong> בפחות מ-8 דקות. התוצאות מוצגות מיד בטאב History ונשלחות לבוט הטלגרם שלך.</span></div>
 </div>
 
 <!-- ═══════════════════════════════ 07 REPORTS ═══════════════════════════ -->
