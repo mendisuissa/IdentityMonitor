@@ -156,15 +156,20 @@ export default function AlertsPage() {
         <div className="stat-card neutral"><div className="stat-value">{overview.withNotes}</div><div className="stat-label">Documented</div></div>
       </div>
       <div className="callout-panel" style={{ marginBottom: 12 }}>
-        <div className="card-title" style={{ marginBottom: 4 }}>Queue visibility</div>
-        <div className="text-muted" style={{ fontSize: 12 }}>
-          If the navbar badge looks higher than the visible list, the difference is usually caused by search text, severity filters, or alerts waiting in another workflow state.
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <div className="card-title" style={{ marginBottom: 2 }}>Queue visibility</div>
+            <div className="text-muted" style={{ fontSize: 12 }}>
+              The sidebar badge shows <strong style={{ color: 'rgba(255,255,255,0.7)' }}>all open alerts</strong> regardless of time filter.
+              This page currently shows <strong style={{ color: 'rgba(255,255,255,0.7)' }}>{filtered.length}</strong> of{' '}
+              <strong style={{ color: 'rgba(255,255,255,0.7)' }}>{alerts.length}</strong> total open alerts.
+            </div>
+          </div>
           {timeRange !== 'all' && alerts.length > filtered.length && (
-            <span style={{ marginLeft: 8, color: '#f5a623', fontWeight: 600 }}>
-              ⚠ {alerts.length - filtered.length} older alert{alerts.length - filtered.length !== 1 ? 's' : ''} hidden by time filter (
+            <span style={{ color: '#f5a623', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}>
+              ⚠ {alerts.length - filtered.length} older alert{alerts.length - filtered.length !== 1 ? 's' : ''} hidden —{' '}
               <button style={{ background: 'none', border: 'none', color: '#f5a623', cursor: 'pointer', textDecoration: 'underline', fontSize: 'inherit', padding: 0 }}
                 onClick={() => setTimeRange('all')}>show all time</button>
-              )
             </span>
           )}
         </div>
