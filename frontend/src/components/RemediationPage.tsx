@@ -161,6 +161,13 @@ function getRecommendedBuiltInScripts(finding: Finding | null) {
   return hits.length ? hits.slice(0, 4) : BUILT_IN_SCRIPT_OPTIONS.slice(0, 4);
 }
 
+// Module-level — survives component remounts so we never run two poll loops at once.
+// If the user navigates away and back, cancelActivePoll() kills the old loop.
+let _cancelActivePoll: (() => void) | null = null;
+function cancelActivePoll() {
+  if (_cancelActivePoll) { _cancelActivePoll(); _cancelActivePoll = null; }
+}
+
 export default function RemediationPage({ tenantId, tenantName }: Props) {
 
   const componentStyles = `
@@ -850,12 +857,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
   const [autoStatus, setAutoStatus] = useState<any>(null);
   const [autoTriggering, setAutoTriggering] = useState(false);
   const [autoTriggerResult, setAutoTriggerResult] = useState<any>(null);
-  // Ref to cancel an in-flight polling loop (prevents duplicate loops on re-click / remount)
-  const cancelPollRef = React.useRef<(() => void) | null>(null);
-  // Cancel any in-flight poll when the component unmounts so stale loops don't accumulate
-  React.useEffect(() => {
-    return () => { if (cancelPollRef.current) { cancelPollRef.current(); cancelPollRef.current = null; } };
-  }, []);
+  // Cancel any in-flight poll when the component unmounts (module-level _cancelActivePoll handles the rest)
+  React.useEffect(() => { return () => cancelActivePoll(); }, []);
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [affectedMachines, setAffectedMachines] = useState<string[]>([]);
   const [affectedMachinesError, setAffectedMachinesError] = useState('');
@@ -1676,7 +1679,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
               disabled={autoTriggering}
               onClick={async () => {
                 // Cancel any previous poll loop before starting a new one
-                if (cancelPollRef.current) { cancelPollRef.current(); cancelPollRef.current = null; }
+                // Cancel any previous poll — module-level so it works across remounts
+                cancelActivePoll();
 
                 setAutoTriggering(true);
                 setAutoTriggerResult(null);
@@ -1688,18 +1692,17 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                     return;
                   }
 
-                  // Set up a cancellable polling loop
                   const jobId = trigger.jobId;
                   const maxWaitMs = 9 * 60 * 1000;
                   const pollIntervalMs = 5000;
                   const deadline = Date.now() + maxWaitMs;
                   let cancelled = false;
                   let timeoutId: ReturnType<typeof setTimeout> | null = null;
-                  cancelPollRef.current = () => { cancelled = true; if (timeoutId) clearTimeout(timeoutId); };
+                  _cancelActivePoll = () => { cancelled = true; if (timeoutId) clearTimeout(timeoutId); };
 
                   const done = (result: any) => {
                     cancelled = true;
-                    cancelPollRef.current = null;
+                    _cancelActivePoll = null;
                     setAutoTriggerResult(result);
                     setAutoTriggering(false);
                   };
