@@ -2421,6 +2421,13 @@ body {
   background: rgba(255,255,255,0.05);
   outline: none;
 }
+
+/* Ensure native <select> option list is always readable regardless of OS theme */
+.filter-select option,
+select option {
+  background: #1a1a2e;
+  color: #f0f0f5;
+}
 .input:focus {
   border-color: rgba(232,120,74,0.6);
   box-shadow: 0 0 0 3px rgba(232,120,74,0.10);
