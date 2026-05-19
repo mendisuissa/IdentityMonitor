@@ -839,4 +839,5 @@ module.exports = {
   updateMessageAfterAction,
   sendNewCveAlert,
   requestCveApproval,
+  fmtTime,
 };

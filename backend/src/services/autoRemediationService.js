@@ -19,6 +19,7 @@ const { saveRemediationRecord, getRecentSuccessForCve }        = require('./reme
 const { sendRemediationNotification }                          = require('./emailService');
 const tenantRegistry                                           = require('./tenantRegistry');
 const telegramService                                          = require('./telegramService');
+const { fmtTime }                                              = require('./telegramService');
 
 const ENABLED           = () => process.env.AUTO_REMEDIATION_ENABLED === 'true';
 const INTERVAL_MS       = () => Math.max(5, Number(process.env.AUTO_REMEDIATION_INTERVAL_MINUTES || 60)) * 60 * 1000;
@@ -311,7 +312,7 @@ async function runAutoRemediation() {
     const firstTenant = allSummaries[0]?.tenantId;
     try {
       let msg = `🤖 *Auto\\-Remediation Run*\n\n`;
-      msg += `📅 ${escMd(new Date().toLocaleString('en-GB'))}\n`;
+      msg += `📅 ${escMd(fmtTime(new Date().toISOString()))}\n`;
       msg += `✅ Success: *${totalSuccess}*  ❌ Failed: *${totalFailed}*  ⏭ Skipped: *${totalSkipped}*\n\n`;
 
       for (const s of allSummaries) {
@@ -344,7 +345,7 @@ async function runForTenant(tenantId, options = {}) {
   if (summary.success > 0 || summary.failed > 0) {
     try {
       let msg = `🤖 *Manual Remediation Run*\n\n`;
-      msg += `📅 ${escMd(new Date().toLocaleString('en-GB'))}\n`;
+      msg += `📅 ${escMd(fmtTime(new Date().toISOString()))}\n`;
       msg += `✅ Success: *${summary.success}*  ❌ Failed: *${summary.failed}*  ⏭ Skipped: *${summary.skipped}*\n\n`;
       msg += `🏢 *${escMd(tenantId.substring(0, 8))}…*\n`;
       for (const a of (summary.actions || []).slice(0, 10)) {
