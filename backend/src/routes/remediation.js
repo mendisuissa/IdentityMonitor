@@ -422,11 +422,12 @@ router.post('/auto-remediation/trigger', async (req, res) => {
     const jobId = `${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
     _autoRemJobs.set(jobId, { status: 'running' });
 
-    // Start the run with a 3-minute hard ceiling (Defender fetch can hang without this)
-    const RUN_TIMEOUT_MS = 3 * 60 * 1000;
+    // 8-minute hard ceiling. The HTTP response is already sent (fire-and-forget),
+    // so this only controls when the background job is marked failed vs completed.
+    const RUN_TIMEOUT_MS = 8 * 60 * 1000;
     const runPromise = autoRemediationService.runForTenant(tenantId);
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Auto-remediation run timed out after 3 minutes')), RUN_TIMEOUT_MS)
+      setTimeout(() => reject(new Error('Auto-remediation run timed out after 8 minutes')), RUN_TIMEOUT_MS)
     );
     Promise.race([runPromise, timeoutPromise])
       .then(summaries => {

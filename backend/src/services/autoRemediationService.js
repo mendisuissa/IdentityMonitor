@@ -54,7 +54,7 @@ async function remediateTenant(tenantId, options = {}) {
 
   let vulns;
   try {
-    vulns = await listTenantVulnerabilities(tenantId, 200, { forceRefresh: true });
+    vulns = await listTenantVulnerabilities(tenantId, 200);
   } catch (err) {
     console.error(`[AutoRemediation] ${tenantId} — failed to list CVEs:`, err.message);
     summary.error = err.message;
@@ -152,10 +152,15 @@ async function remediateTenant(tenantId, options = {}) {
     }
 
     // ── 4. Deep-enrich CVE before executing (gets affectedMachines, WingetId, etc.)
+    // 5-second cap so a slow Defender enrichment call doesn't stall the whole run.
     let enrichedDeep = enriched;
     try {
       if (cveId.toUpperCase().startsWith('CVE-')) {
-        const deep = await enrichTenantVulnerability(tenantId, cveId);
+        const ENRICH_TIMEOUT_MS = 5000;
+        const deep = await Promise.race([
+          enrichTenantVulnerability(tenantId, cveId),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('enrich-timeout')), ENRICH_TIMEOUT_MS)),
+        ]);
         if (deep) enrichedDeep = { ...enriched, ...deep };
       }
     } catch (_) { /* enrichment is best-effort */ }
