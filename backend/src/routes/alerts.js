@@ -326,4 +326,32 @@ router.post('/:id/notify-admin', requirePermission('alerts.respond'), async (req
   });
 });
 
+// ─── Reset behavioral baseline for a specific user ────────────────────────
+// DELETE /api/alerts/baseline/:userId
+// Clears the sign-in + audit baseline so the system re-learns from scratch.
+// Useful after a known legitimate location change (e.g. travelling).
+router.delete('/baseline/:userId', requirePermission('settings.manage'), async (req, res) => {
+  const tenantId = getTenantId(req);
+  if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+
+  const { userId } = req.params;
+  const tableStorage = require('../services/tableStorage');
+
+  try {
+    // Wipe from Azure Table Storage
+    await tableStorage.saveBaseline(tenantId, userId, {
+      knownIPs: [], knownCountries: [], knownDevices: [],
+      recentSignIns: [], auditBaseline: null, lastUpdated: new Date().toISOString()
+    });
+
+    // Wipe from in-memory cache
+    incidentStore.saveAuditBaseline(tenantId, userId, null);
+
+    auditLog.log(tenantId, { action: 'baseline.reset', actor: getActor(req), userId, detail: 'Behavioral baseline cleared — will re-learn on next scan' });
+    res.json({ ok: true, userId, message: 'Baseline cleared — system will re-learn on next scan' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

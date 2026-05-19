@@ -575,6 +575,9 @@ export const api = {
   enableUser: (userId: string) =>
     apiFetch<any>(`/users/${userId}/enable`, { method: 'POST' }),
 
+  resetUserBaseline: (userId: string) =>
+    apiFetch<any>(`/alerts/baseline/${userId}`, { method: 'DELETE' }),
+
   // ── Conditional Access ───────────────────────────────────────────────────
   getCaPolicies: () => apiFetch<any>('/identity/ca-policies'),
 

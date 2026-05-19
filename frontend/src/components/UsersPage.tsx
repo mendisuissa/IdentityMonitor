@@ -488,18 +488,40 @@ export default function UsersPage() {
               )}
 
               {/* Baseline countries */}
-              {(selectedPosture?.baseline?.knownCountries?.length ?? 0) > 0 && (
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     Baseline Countries
                   </div>
+                  {selectedUser && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: 10, padding: '2px 8px', opacity: 0.7 }}
+                      title="Clear behavioral baseline — system will re-learn on next scan"
+                      onClick={async () => {
+                        if (!window.confirm(`Reset behavioral baseline for ${selectedUser.displayName}? The system will re-learn their normal patterns from the next scan.`)) return;
+                        try {
+                          await api.resetUserBaseline(selectedUser.id);
+                          window.alert('Baseline cleared — will re-learn on next scan.');
+                        } catch (e: any) {
+                          window.alert('Failed: ' + e.message);
+                        }
+                      }}
+                    >
+                      ↺ Reset baseline
+                    </button>
+                  )}
+                </div>
+                {(selectedPosture?.baseline?.knownCountries?.length ?? 0) > 0 ? (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                     {selectedPosture!.baseline.knownCountries.map((c: string) => (
                       <span key={c} className="role-tag">{c}</span>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="text-muted" style={{ fontSize: 12 }}>No baseline yet — will build on next scan</div>
+                )}
+              </div>
 
               {/* Recent sign-ins */}
               <div style={{ marginBottom: 14 }}>
