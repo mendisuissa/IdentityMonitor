@@ -46,7 +46,7 @@ async function sendAlertWithPlaybook(alert, tokenOverride, chatIdOverride) {
     `*Device:* ${escMd(alert.deviceName || 'Unknown')} \\(${escMd(alert.deviceOs || '')}\\)`,
     `*App:* ${escMd(alert.appName || 'Unknown')}`,
     ``,
-    `*Detected:* ${escMd(new Date(alert.detectedAt).toLocaleString('en-GB'))}`,
+    `*Detected:* ${escMd(fmtTime(alert.detectedAt))}`,
   ].join('\n');
 
   // Inline keyboard — action buttons
@@ -564,13 +564,13 @@ async function handleFailedQuery(chatId, tenantId) {
       const success = lastRun.filter(r => r.status === 'success').length;
       return replyTo(chatId,
         `✅ *No failures* in the last run\\!\n` +
-        `Run time: ${escMd(new Date(lastRun[0].executedAt).toLocaleString('en-GB'))}\n` +
+        `Run time: ${escMd(fmtTime(lastRun[0].executedAt))}\n` +
         `${success} succeeded, 0 failed`
       );
     }
 
     let msg = `❌ *${failed.length} failure${failed.length !== 1 ? 's' : ''} in last run*\n`;
-    msg += `🕐 ${escMd(new Date(lastRun[0].executedAt).toLocaleString('en-GB'))}\n\n`;
+    msg += `🕐 ${escMd(fmtTime(lastRun[0].executedAt))}\n\n`;
 
     for (const f of failed) {
       msg += `🔴 *${escMd(f.cveId)}* · ${escMd(f.productName || f.category)}\n`;
@@ -605,7 +605,7 @@ async function handleLastRunQuery(chatId, tenantId) {
     const runTime = new Date(lastRun[lastRun.length - 1].executedAt); // earliest item = run start
 
     let msg = `🤖 *Last Auto\\-Remediation Run*\n`;
-    msg += `🕐 ${escMd(runTime.toLocaleString('en-GB'))}\n`;
+    msg += `🕐 ${escMd(fmtTime(runTime.toISOString()))}\n`;
     msg += `📦 ${lastRun.length} items processed\n\n`;
     msg += `✅ Success: ${success}   ❌ Failed: ${failed}   ⏭ Skipped: ${skipped}\n\n`;
 
@@ -664,7 +664,7 @@ async function handleStatusQuery(chatId, tenantId) {
     msg += '\n';
 
     if (stats.lastRunAt) {
-      msg += `🤖 Last Remediation: ${escMd(new Date(stats.lastRunAt).toLocaleString('en-GB'))}\n`;
+      msg += `🤖 Last Remediation: ${escMd(fmtTime(stats.lastRunAt))}\n`;
       msg += `   ✅ ${stats.byStatus?.success || 0}  ❌ ${stats.byStatus?.failed || 0}  ⏭ ${stats.byStatus?.skipped || 0}\n`;
     } else {
       msg += `🤖 No remediation runs yet\n`;
@@ -692,7 +692,7 @@ async function handleCveQuery(chatId, tenantId, cveId) {
     msg += `📦 Product: ${escMd(latest.productName || latest.category || 'unknown')}\n`;
     msg += `🔴 Severity: ${escMd((latest.severity || '').toUpperCase())}\n`;
     msg += `📋 Status: ${escMd(latest.status)}\n`;
-    msg += `🕐 Last attempt: ${escMd(new Date(latest.executedAt).toLocaleString('en-GB'))}\n`;
+    msg += `🕐 Last attempt: ${escMd(fmtTime(latest.executedAt))}\n`;
     if (latest.message) msg += `📝 Message: ${escMd(latest.message)}\n`;
 
     const errDetail = latest.result?.error?.message || latest.result?.errorMessage;
@@ -782,6 +782,21 @@ async function sendTestMessage() {
 function escMd(str) {
   if (!str) return '';
   return String(str).replace(/[_*[\]()~`>#+=|{}.!\\-]/g, '\\$&');
+}
+
+// ─── Format date with configured timezone ────────────────────────────────
+// Set DISPLAY_TIMEZONE in env (e.g. "Asia/Bangkok", "Asia/Jerusalem", "UTC")
+function fmtTime(dateStr) {
+  const tz = process.env.DISPLAY_TIMEZONE || 'UTC';
+  try {
+    return new Date(dateStr).toLocaleString('en-GB', {
+      timeZone: tz,
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }) + ` (${tz})`;
+  } catch {
+    return new Date(dateStr).toLocaleString('en-GB') + ' (UTC)';
+  }
 }
 
 
