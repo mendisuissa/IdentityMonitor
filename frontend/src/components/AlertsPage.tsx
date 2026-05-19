@@ -27,6 +27,7 @@ export default function AlertsPage() {
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
   const [severityFilter, setSeverityFilter] = useState(searchParams.get('severity') || '');
   const [search, setSearch] = useState('');
+  const [timeRange, setTimeRange] = useState(searchParams.get('timeRange') || '24h');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const [access, setAccess] = useState<AccessProfile | null>(null);
@@ -103,7 +104,29 @@ export default function AlertsPage() {
     setCommentDrafts(prev => ({ ...prev, [alertId]: '' }));
   };
 
-  const filtered = alerts.filter(a => !search || [a.userDisplayName, a.userPrincipalName, a.anomalyLabel, a.ipAddress, a.country, a.appName].filter(Boolean).join(' ').toLowerCase().includes(search.toLowerCase()));
+  const TIME_RANGE_OPTIONS = [
+    { value: '24h',  label: 'Last 24 hours' },
+    { value: '48h',  label: 'Last 48 hours' },
+    { value: '7d',   label: 'Last 7 days'   },
+    { value: '14d',  label: 'Last 14 days'  },
+    { value: '30d',  label: 'Last 30 days'  },
+    { value: '60d',  label: 'Last 60 days'  },
+    { value: 'all',  label: 'All time'      },
+  ];
+  const cutoff = useMemo(() => {
+    if (timeRange === 'all') return null;
+    const ms = timeRange.endsWith('h')
+      ? parseInt(timeRange) * 60 * 60 * 1000
+      : parseInt(timeRange) * 24 * 60 * 60 * 1000;
+    return new Date(Date.now() - ms);
+  }, [timeRange]);
+
+  const filtered = alerts.filter(a => {
+    if (cutoff && new Date(a.detectedAt) < cutoff) return false;
+    if (!search) return true;
+    return [a.userDisplayName, a.userPrincipalName, a.anomalyLabel, a.ipAddress, a.country, a.appName]
+      .filter(Boolean).join(' ').toLowerCase().includes(search.toLowerCase());
+  });
   const overview = useMemo(() => {
     const open = filtered.filter(a => a.status === 'open');
     return {
@@ -134,12 +157,33 @@ export default function AlertsPage() {
       </div>
       <div className="callout-panel" style={{ marginBottom: 12 }}>
         <div className="card-title" style={{ marginBottom: 4 }}>Queue visibility</div>
-        <div className="text-muted" style={{ fontSize: 12 }}>If the navbar badge looks higher than the visible list, the difference is usually caused by search text, severity filters, or alerts waiting in another workflow state.</div>
+        <div className="text-muted" style={{ fontSize: 12 }}>
+          If the navbar badge looks higher than the visible list, the difference is usually caused by search text, severity filters, or alerts waiting in another workflow state.
+          {timeRange !== 'all' && alerts.length > filtered.length && (
+            <span style={{ marginLeft: 8, color: '#f5a623', fontWeight: 600 }}>
+              ⚠ {alerts.length - filtered.length} older alert{alerts.length - filtered.length !== 1 ? 's' : ''} hidden by time filter (
+              <button style={{ background: 'none', border: 'none', color: '#f5a623', cursor: 'pointer', textDecoration: 'underline', fontSize: 'inherit', padding: 0 }}
+                onClick={() => setTimeRange('all')}>show all time</button>
+              )
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="filter-bar">
         <select className="filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="">All Statuses</option><option value="open">Open</option><option value="resolved">Resolved</option><option value="dismissed">Dismissed</option></select>
         <select className="filter-select" value={severityFilter} onChange={e => setSeverityFilter(e.target.value)}><option value="">All Severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+        <select
+          className="filter-select"
+          value={timeRange}
+          onChange={e => setTimeRange(e.target.value)}
+          style={{ borderColor: timeRange !== 'all' ? 'rgba(245,166,35,0.45)' : undefined }}
+          title="Time range filter (default: last 24 hours)"
+        >
+          {TIME_RANGE_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.value === '24h' ? `🕐 ${o.label}` : `📅 ${o.label}`}</option>
+          ))}
+        </select>
         <input className="filter-input" placeholder="Search threat, user, app, IP, location..." value={search} onChange={e => setSearch(e.target.value)} />
         <button className="btn btn-ghost btn-sm" onClick={fetchAlerts}>↻ Refresh</button>
       </div>
