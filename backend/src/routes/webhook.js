@@ -50,12 +50,23 @@ router.post('/notify', async (req, res) => {
   }
 });
 
-// ─── POST /api/webhook/telegram — Telegram bot callback ──────────────────
+// ─── POST /api/webhook/telegram — Telegram bot callback + text messages ──
 router.post('/telegram', async (req, res) => {
   res.status(200).send('OK');
-  const { callback_query } = req.body || {};
-  if (callback_query) {
-    await telegramService.handleCallbackQuery(callback_query);
+  const update = req.body || {};
+
+  // Button presses (inline keyboard callbacks)
+  if (update.callback_query) {
+    await telegramService.handleCallbackQuery(update.callback_query);
+    return;
+  }
+
+  // Text messages from the admin
+  const msg = update.message || update.edited_message;
+  if (msg && msg.text) {
+    await telegramService.handleTextMessage(msg).catch(err =>
+      console.error('[Webhook/Telegram] handleTextMessage error:', err.message)
+    );
   }
 });
 

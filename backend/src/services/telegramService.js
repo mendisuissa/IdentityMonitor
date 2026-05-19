@@ -432,6 +432,302 @@ async function requestCveApproval(tenantId, cveId, cveData, timeoutMs = 5 * 60 *
   });
 }
 
+// ─── Handle incoming text messages from the bot admin ────────────────────
+/**
+ * Called when the admin types a message (not a button press) to the bot.
+ * Supports:
+ *   /help | עזרה          — list of commands
+ *   /alerts | התראות      — open alerts summary
+ *   /last | ריצה אחרונה   — last remediation run results
+ *   /failed | למה failed  — failures detail from last run
+ *   CVE-YYYY-NNNNN        — details for a specific CVE
+ *   /status               — system health summary
+ */
+async function handleTextMessage(msg) {
+  const chatId = String(msg.chat?.id || '');
+  const text   = (msg.text || '').trim();
+  const lower  = text.toLowerCase();
+
+  if (!chatId) return;
+
+  // Find which tenant owns this chatId
+  const tenantId = await findTenantByChatId(chatId);
+
+  // ── /help ─────────────────────────────────────────────────────────────
+  if (lower === '/help' || lower === 'עזרה' || lower === 'help') {
+    return replyTo(chatId,
+      '🤖 *IdentityMonitor Bot Commands*\n\n' +
+      '`/alerts` — open security alerts summary\n' +
+      '`/failed` — CVEs that failed in the last remediation run\n' +
+      '`/last` — full results of the last remediation run\n' +
+      '`/status` — system health overview\n' +
+      '`CVE-YYYY-NNNNN` — details for a specific CVE\n\n' +
+      '_You can also type naturally, e.g. "למה failed?" or "show alerts"_'
+    );
+  }
+
+  // ── /alerts | show alerts | התראות ────────────────────────────────────
+  if (lower.startsWith('/alerts') || lower.includes('alert') || lower === 'התראות') {
+    return handleAlertsQuery(chatId, tenantId);
+  }
+
+  // ── /failed | למה | why | כישלונות ────────────────────────────────────
+  if (lower.startsWith('/failed') || lower.includes('failed') || lower.includes('למה') || lower.includes('why') || lower.includes('כישלון')) {
+    return handleFailedQuery(chatId, tenantId);
+  }
+
+  // ── /last | ריצה | last run ────────────────────────────────────────────
+  if (lower.startsWith('/last') || lower.includes('last run') || lower.includes('ריצה') || lower.includes('remediat')) {
+    return handleLastRunQuery(chatId, tenantId);
+  }
+
+  // ── /status ────────────────────────────────────────────────────────────
+  if (lower.startsWith('/status') || lower === 'status' || lower === 'סטטוס') {
+    return handleStatusQuery(chatId, tenantId);
+  }
+
+  // ── CVE lookup ─────────────────────────────────────────────────────────
+  const cveMatch = text.toUpperCase().match(/CVE-\d{4}-\d+/);
+  if (cveMatch) {
+    return handleCveQuery(chatId, tenantId, cveMatch[0]);
+  }
+
+  // ── Unknown ────────────────────────────────────────────────────────────
+  return replyTo(chatId,
+    '🤔 לא הבנתי\\. נסה `/help` לרשימת הפקודות\\.'
+  );
+}
+
+// ── Query helpers ─────────────────────────────────────────────────────────
+
+async function handleAlertsQuery(chatId, tenantId) {
+  try {
+    const alertsStore = require('./alertsStore');
+    if (tenantId) await alertsStore.loadFromAzure(tenantId);
+    const alerts = alertsStore.getAll(tenantId).filter(a => a.status === 'open');
+
+    if (alerts.length === 0) {
+      return replyTo(chatId, '✅ *No open alerts* — all clear\\!');
+    }
+
+    const bySev = { critical: 0, high: 0, medium: 0, low: 0 };
+    for (const a of alerts) bySev[a.severity] = (bySev[a.severity] || 0) + 1;
+
+    const recent = alerts
+      .sort((a, b) => new Date(b.detectedAt) - new Date(a.detectedAt))
+      .slice(0, 5);
+
+    let msg = `🚨 *Open Alerts: ${alerts.length}*\n\n`;
+    if (bySev.critical) msg += `🔴 Critical: ${bySev.critical}\n`;
+    if (bySev.high)     msg += `🟠 High: ${bySev.high}\n`;
+    if (bySev.medium)   msg += `🟡 Medium: ${bySev.medium}\n`;
+    if (bySev.low)      msg += `🔵 Low: ${bySev.low}\n`;
+    msg += '\n*Recent:*\n';
+    for (const a of recent) {
+      const icon = { critical: '🔴', high: '🟠', medium: '🟡', low: '🔵' }[a.severity] || '⚪';
+      msg += `${icon} ${escMd(a.anomalyLabel || a.anomalyType)} — ${escMd(a.userDisplayName)}\n`;
+    }
+    if (alerts.length > 5) msg += `_…and ${alerts.length - 5} more_`;
+
+    return replyTo(chatId, msg);
+  } catch (err) {
+    return replyTo(chatId, `❌ Could not fetch alerts: ${escMd(err.message)}`);
+  }
+}
+
+async function handleFailedQuery(chatId, tenantId) {
+  try {
+    const histStore = require('./remediationHistoryStore');
+    const history   = await histStore.getRemediationHistory(tenantId || 'default', { limit: 200 });
+
+    if (history.length === 0) {
+      return replyTo(chatId, 'ℹ️ No remediation history found\\.');
+    }
+
+    // Group by run (same executedAt minute = same run)
+    const lastRunTime = history[0].executedAt.slice(0, 16); // YYYY-MM-DDTHH:MM
+    const lastRun     = history.filter(r => r.executedAt.slice(0, 16) === lastRunTime);
+    const failed      = lastRun.filter(r => r.status === 'failed');
+
+    if (failed.length === 0) {
+      const success = lastRun.filter(r => r.status === 'success').length;
+      return replyTo(chatId,
+        `✅ *No failures* in the last run\\!\n` +
+        `Run time: ${escMd(new Date(lastRun[0].executedAt).toLocaleString('en-GB'))}\n` +
+        `${success} succeeded, 0 failed`
+      );
+    }
+
+    let msg = `❌ *${failed.length} failure${failed.length !== 1 ? 's' : ''} in last run*\n`;
+    msg += `🕐 ${escMd(new Date(lastRun[0].executedAt).toLocaleString('en-GB'))}\n\n`;
+
+    for (const f of failed) {
+      msg += `🔴 *${escMd(f.cveId)}* · ${escMd(f.productName || f.category)}\n`;
+      if (f.message) msg += `   └ ${escMd(f.message)}\n`;
+      // Try to extract error from result object
+      const errDetail = f.result?.error?.message || f.result?.errorMessage || f.result?.statusText;
+      if (errDetail) msg += `   └ ⚠️ ${escMd(String(errDetail).slice(0, 120))}\n`;
+      msg += '\n';
+    }
+
+    return replyTo(chatId, msg);
+  } catch (err) {
+    return replyTo(chatId, `❌ Error: ${escMd(err.message)}`);
+  }
+}
+
+async function handleLastRunQuery(chatId, tenantId) {
+  try {
+    const histStore = require('./remediationHistoryStore');
+    const history   = await histStore.getRemediationHistory(tenantId || 'default', { limit: 200 });
+
+    if (history.length === 0) {
+      return replyTo(chatId, 'ℹ️ No remediation runs found\\.');
+    }
+
+    const lastRunTime = history[0].executedAt.slice(0, 16);
+    const lastRun     = history.filter(r => r.executedAt.slice(0, 16) === lastRunTime);
+
+    const success = lastRun.filter(r => r.status === 'success').length;
+    const failed  = lastRun.filter(r => r.status === 'failed').length;
+    const skipped = lastRun.filter(r => r.status === 'skipped').length;
+
+    let msg = `🤖 *Last Auto\\-Remediation Run*\n`;
+    msg += `🕐 ${escMd(new Date(lastRun[0].executedAt).toLocaleString('en-GB'))}\n\n`;
+    msg += `✅ Success: ${success}   ❌ Failed: ${failed}   ⏭ Skipped: ${skipped}\n\n`;
+
+    const failedItems = lastRun.filter(r => r.status === 'failed');
+    if (failedItems.length > 0) {
+      msg += `*Failures:*\n`;
+      for (const f of failedItems) {
+        msg += `❌ ${escMd(f.cveId)} · ${escMd(f.productName || '')}\n`;
+        if (f.message) msg += `   _${escMd(f.message.slice(0, 100))}_\n`;
+      }
+      msg += '\nType `/failed` for full error details\\.';
+    }
+
+    return replyTo(chatId, msg);
+  } catch (err) {
+    return replyTo(chatId, `❌ Error: ${escMd(err.message)}`);
+  }
+}
+
+async function handleStatusQuery(chatId, tenantId) {
+  try {
+    const alertsStore = require('./alertsStore');
+    const histStore   = require('./remediationHistoryStore');
+
+    if (tenantId) await alertsStore.loadFromAzure(tenantId).catch(() => {});
+    const openAlerts = alertsStore.getAll(tenantId).filter(a => a.status === 'open');
+    const critical   = openAlerts.filter(a => a.severity === 'critical').length;
+    const high       = openAlerts.filter(a => a.severity === 'high').length;
+
+    const stats = await histStore.getRemediationStats(tenantId || 'default');
+
+    let msg = `📊 *IdentityMonitor Status*\n\n`;
+    msg += `🚨 Open Alerts: *${openAlerts.length}*`;
+    if (critical || high) msg += ` \\(${critical} critical, ${high} high\\)`;
+    msg += '\n';
+
+    if (stats.lastRunAt) {
+      msg += `🤖 Last Remediation: ${escMd(new Date(stats.lastRunAt).toLocaleString('en-GB'))}\n`;
+      msg += `   ✅ ${stats.byStatus?.success || 0}  ❌ ${stats.byStatus?.failed || 0}  ⏭ ${stats.byStatus?.skipped || 0}\n`;
+    } else {
+      msg += `🤖 No remediation runs yet\n`;
+    }
+
+    return replyTo(chatId, msg);
+  } catch (err) {
+    return replyTo(chatId, `❌ Error: ${escMd(err.message)}`);
+  }
+}
+
+async function handleCveQuery(chatId, tenantId, cveId) {
+  try {
+    const histStore = require('./remediationHistoryStore');
+    const history   = await histStore.getRemediationHistory(tenantId || 'default', { limit: 500 });
+    const records   = history.filter(r => r.cveId.toUpperCase() === cveId.toUpperCase());
+
+    if (records.length === 0) {
+      return replyTo(chatId, `ℹ️ No remediation history found for *${escMd(cveId)}*\\.`);
+    }
+
+    const latest = records[0];
+    const icon   = latest.status === 'success' ? '✅' : latest.status === 'failed' ? '❌' : '⏭';
+    let msg = `${icon} *${escMd(cveId)}*\n\n`;
+    msg += `📦 Product: ${escMd(latest.productName || latest.category || 'unknown')}\n`;
+    msg += `🔴 Severity: ${escMd((latest.severity || '').toUpperCase())}\n`;
+    msg += `📋 Status: ${escMd(latest.status)}\n`;
+    msg += `🕐 Last attempt: ${escMd(new Date(latest.executedAt).toLocaleString('en-GB'))}\n`;
+    if (latest.message) msg += `📝 Message: ${escMd(latest.message)}\n`;
+
+    const errDetail = latest.result?.error?.message || latest.result?.errorMessage;
+    if (errDetail) msg += `⚠️ Error: ${escMd(String(errDetail).slice(0, 200))}\n`;
+
+    msg += `\n_Total attempts: ${records.length}_`;
+    const successes = records.filter(r => r.status === 'success').length;
+    if (successes > 0) msg += ` \\(${successes} succeeded\\)`;
+
+    return replyTo(chatId, msg);
+  } catch (err) {
+    return replyTo(chatId, `❌ Error: ${escMd(err.message)}`);
+  }
+}
+
+// ── Find tenant by Telegram chatId ───────────────────────────────────────────
+async function findTenantByChatId(chatId) {
+  // First try env var (most common single-tenant setup)
+  if (process.env.TELEGRAM_CHAT_ID === chatId) {
+    // Try to get tenantId from active sessions / tableStorage
+    try {
+      const tableStorage = require('./tableStorage');
+      const tenants = await tableStorage.listTenants().catch(() => []);
+      if (tenants.length === 1) return tenants[0];
+      if (tenants.length > 1) {
+        // Find tenant whose settings have this chatId
+        const settingsService = require('./settingsService');
+        for (const tid of tenants) {
+          const s = settingsService.getSettings(tid);
+          if (String(s?.notifications?.telegramChatId) === chatId) return tid;
+        }
+        return tenants[0]; // fallback to first
+      }
+    } catch (_) {}
+    return null;
+  }
+  // Multi-tenant: scan settings
+  try {
+    const tableStorage    = require('./tableStorage');
+    const settingsService = require('./settingsService');
+    const tenants = await tableStorage.listTenants().catch(() => []);
+    for (const tid of tenants) {
+      const s = settingsService.getSettings(tid);
+      if (String(s?.notifications?.telegramChatId) === chatId) return tid;
+    }
+  } catch (_) {}
+  return null;
+}
+
+// ── Helper: send plain reply ──────────────────────────────────────────────────
+async function replyTo(chatId, text) {
+  try {
+    await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          chat_id:    chatId,
+          text,
+          parse_mode: 'MarkdownV2',
+        })
+      }
+    );
+  } catch (err) {
+    console.error('[Telegram] replyTo error:', err.message);
+  }
+}
+
 // ─── Send test message ────────────────────────────────────────────────────
 async function sendTestMessage() {
   return sendMessage(
@@ -468,6 +764,7 @@ module.exports = {
   sendMessageWithToken,
   sendTestMessage,
   handleCallbackQuery,
+  handleTextMessage,
   cancelAutoRevoke,
   updateMessageAfterAction,
   sendNewCveAlert,
