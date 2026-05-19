@@ -347,7 +347,7 @@ router.delete('/baseline/:userId', requirePermission('settings.manage'), async (
     // Wipe from in-memory cache
     incidentStore.saveAuditBaseline(tenantId, userId, null);
 
-    auditLog.log(tenantId, { action: 'baseline.reset', actor: getActor(req), userId, detail: 'Behavioral baseline cleared — will re-learn on next scan' });
+    auditLog.log(tenantId, 'baseline.reset', { userId, detail: 'Behavioral baseline cleared — will re-learn on next scan' }, getActor(req));
     res.json({ ok: true, userId, message: 'Baseline cleared — system will re-learn on next scan' });
   } catch (err) {
     res.status(500).json({ error: err.message });
