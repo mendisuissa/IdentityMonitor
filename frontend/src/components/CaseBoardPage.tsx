@@ -103,11 +103,11 @@ export default function CaseBoardPage() {
                 </div>
               </div>
               <div className="detail-stack">
-                <div className="text-muted" style={{ fontSize: 12 }}>{c.userDisplayName} · {c.userPrincipalName}</div>
-                <div style={{ fontSize: 12 }}>Owner: <strong>{c.owner || 'Unassigned'}</strong></div>
-                <div style={{ fontSize: 12 }}>Case status: <strong>{c.caseStatus}</strong></div>
-                <div style={{ fontSize: 12 }}>Approval: <strong>{c.approvalStatus}</strong></div>
-                <div style={{ fontSize: 12 }}>Due: <strong>{c.dueAt ? new Date(c.dueAt).toLocaleString() : '—'}</strong></div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>{c.userDisplayName} · {c.userPrincipalName}</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>Owner: <strong style={{ color: c.owner ? 'rgba(255,255,255,0.85)' : '#f5a623' }}>{c.owner || 'Unassigned'}</strong></div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>Case status: <strong style={{ color: 'rgba(255,255,255,0.85)' }}>{c.caseStatus}</strong></div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>Approval: <strong style={{ color: c.approvalStatus === 'approved' ? '#00C98B' : c.approvalStatus === 'rejected' ? '#ff4444' : 'rgba(255,255,255,0.85)' }}>{c.approvalStatus}</strong></div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>Due: <strong style={{ color: c.isOverdue ? '#ff4444' : 'rgba(255,255,255,0.75)' }}>{c.dueAt ? new Date(c.dueAt).toLocaleString() : '—'}</strong></div>
               </div>
             </button>
           ))}
