@@ -418,10 +418,10 @@ export default function LandingPage() {
               </div>
               {[
                 { time: 'T+0:00',  text: 'Attacker steals credentials via phishing' },
-                { time: 'T+0:03',  text: 'Sign-in from new country — scanner catches it' },
-                { time: 'T+0:03',  text: 'Telegram alert fires with full context', highlight: true },
-                { time: 'T+0:04',  text: 'You tap ⊘ Revoke Sessions from your phone', highlight: true },
-                { time: 'T+0:05',  text: 'Attacker locked out. Audit log created.', highlight: true },
+                { time: 'T+0:01',  text: 'Sign-in from new country — scanner catches it' },
+                { time: 'T+0:01',  text: 'Telegram alert fires with full context', highlight: true },
+                { time: 'T+0:02',  text: 'You tap ⊘ Revoke Sessions from your phone', highlight: true },
+                { time: 'T+0:03',  text: 'Attacker locked out. Audit log created.', highlight: true },
               ].map((e: any) => (
                 <div key={e.time + e.text} style={{ display: 'flex', gap: 14, marginBottom: 14, alignItems: 'flex-start' }}>
                   <div style={{ fontSize: 10, fontFamily: 'monospace', color: '#00C98B', fontWeight: 700, flexShrink: 0, paddingTop: 2, width: 60 }}>{e.time}</div>
@@ -429,7 +429,7 @@ export default function LandingPage() {
                 </div>
               ))}
               <div style={{ marginTop: 8, padding: '10px 14px', background: 'rgba(0,201,139,0.08)', borderRadius: 8, fontSize: 12, color: '#00C98B', fontWeight: 700 }}>
-                Dwell time: &lt;4 minutes. Damage: zero.
+                Dwell time: &lt;3 minutes. Damage: zero.
               </div>
             </div>
           </div>
