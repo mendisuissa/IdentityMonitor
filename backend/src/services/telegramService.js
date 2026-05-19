@@ -554,10 +554,11 @@ async function handleFailedQuery(chatId, tenantId) {
       return replyTo(chatId, 'ℹ️ No remediation history found\\.');
     }
 
-    // Group by run (same executedAt minute = same run)
-    const lastRunTime = history[0].executedAt.slice(0, 16); // YYYY-MM-DDTHH:MM
-    const lastRun     = history.filter(r => r.executedAt.slice(0, 16) === lastRunTime);
-    const failed      = lastRun.filter(r => r.status === 'failed');
+    // Group history into runs (items within 10 min of each other = same run)
+    const runs   = groupIntoRuns(history);
+    // Pick the most recent run with >1 item, or just the latest if all are single
+    const lastRun = runs.find(r => r.length > 1) || runs[0];
+    const failed  = lastRun.filter(r => r.status === 'failed');
 
     if (failed.length === 0) {
       const success = lastRun.filter(r => r.status === 'success').length;
@@ -574,7 +575,6 @@ async function handleFailedQuery(chatId, tenantId) {
     for (const f of failed) {
       msg += `🔴 *${escMd(f.cveId)}* · ${escMd(f.productName || f.category)}\n`;
       if (f.message) msg += `   └ ${escMd(f.message)}\n`;
-      // Try to extract error from result object
       const errDetail = f.result?.error?.message || f.result?.errorMessage || f.result?.statusText;
       if (errDetail) msg += `   └ ⚠️ ${escMd(String(errDetail).slice(0, 120))}\n`;
       msg += '\n';
@@ -595,15 +595,18 @@ async function handleLastRunQuery(chatId, tenantId) {
       return replyTo(chatId, 'ℹ️ No remediation runs found\\.');
     }
 
-    const lastRunTime = history[0].executedAt.slice(0, 16);
-    const lastRun     = history.filter(r => r.executedAt.slice(0, 16) === lastRunTime);
+    // Group into runs and pick the most recent substantial run
+    const runs    = groupIntoRuns(history);
+    const lastRun = runs.find(r => r.length > 1) || runs[0];
 
     const success = lastRun.filter(r => r.status === 'success').length;
     const failed  = lastRun.filter(r => r.status === 'failed').length;
     const skipped = lastRun.filter(r => r.status === 'skipped').length;
+    const runTime = new Date(lastRun[lastRun.length - 1].executedAt); // earliest item = run start
 
     let msg = `🤖 *Last Auto\\-Remediation Run*\n`;
-    msg += `🕐 ${escMd(new Date(lastRun[0].executedAt).toLocaleString('en-GB'))}\n\n`;
+    msg += `🕐 ${escMd(runTime.toLocaleString('en-GB'))}\n`;
+    msg += `📦 ${lastRun.length} items processed\n\n`;
     msg += `✅ Success: ${success}   ❌ Failed: ${failed}   ⏭ Skipped: ${skipped}\n\n`;
 
     const failedItems = lastRun.filter(r => r.status === 'failed');
@@ -620,6 +623,27 @@ async function handleLastRunQuery(chatId, tenantId) {
   } catch (err) {
     return replyTo(chatId, `❌ Error: ${escMd(err.message)}`);
   }
+}
+
+// ── Group flat history (newest-first) into run batches ───────────────────────
+// Items within 10 minutes of each other are considered the same run.
+function groupIntoRuns(history, gapMinutes = 10) {
+  if (!history.length) return [];
+  const runs = [];
+  let current = [history[0]];
+  for (let i = 1; i < history.length; i++) {
+    const prevMs = new Date(history[i - 1].executedAt).getTime();
+    const currMs = new Date(history[i].executedAt).getTime();
+    const gap    = (prevMs - currMs) / 60000; // positive because newest-first
+    if (gap > gapMinutes) {
+      runs.push(current);
+      current = [history[i]];
+    } else {
+      current.push(history[i]);
+    }
+  }
+  runs.push(current);
+  return runs; // runs[0] = most recent
 }
 
 async function handleStatusQuery(chatId, tenantId) {
