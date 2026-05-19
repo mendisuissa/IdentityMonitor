@@ -453,48 +453,58 @@ async function handleTextMessage(msg) {
   // Find which tenant owns this chatId
   const tenantId = await findTenantByChatId(chatId);
 
+  // Strip bot username suffix — Telegram sends "/cmd@BotName" in groups
+  // e.g. "/help@IdentityMBot" → "/help"
+  const cleanText  = text.replace(/@\S+$/, '').trim();
+  const cleanLower = cleanText.toLowerCase();
+
   // ── /help ─────────────────────────────────────────────────────────────
-  if (lower === '/help' || lower === 'עזרה' || lower === 'help') {
+  if (cleanLower.startsWith('/help') || cleanLower === 'עזרה' || cleanLower === 'help') {
     return replyTo(chatId,
       '🤖 *IdentityMonitor Bot Commands*\n\n' +
-      '`/alerts` — open security alerts summary\n' +
-      '`/failed` — CVEs that failed in the last remediation run\n' +
-      '`/last` — full results of the last remediation run\n' +
-      '`/status` — system health overview\n' +
-      '`CVE-YYYY-NNNNN` — details for a specific CVE\n\n' +
-      '_You can also type naturally, e.g. "למה failed?" or "show alerts"_'
+      '`/alerts` \\— open security alerts summary\n' +
+      '`/failed` \\— CVEs that failed in the last remediation run\n' +
+      '`/last` \\— full results of the last remediation run\n' +
+      '`/status` \\— system health overview\n' +
+      '`CVE\\-YYYY\\-NNNNN` \\— details for a specific CVE\n\n' +
+      '_Type naturally too: "למה failed?" or "show alerts"_'
     );
   }
 
   // ── /alerts | show alerts | התראות ────────────────────────────────────
-  if (lower.startsWith('/alerts') || lower.includes('alert') || lower === 'התראות') {
+  if (cleanLower.startsWith('/alerts') || cleanLower.includes('alert') || cleanLower.includes('התראות') || cleanLower.includes('alerts')) {
     return handleAlertsQuery(chatId, tenantId);
   }
 
   // ── /failed | למה | why | כישלונות ────────────────────────────────────
-  if (lower.startsWith('/failed') || lower.includes('failed') || lower.includes('למה') || lower.includes('why') || lower.includes('כישלון')) {
+  if (cleanLower.startsWith('/failed') || cleanLower.includes('failed') || cleanLower.includes('למה') || cleanLower.includes('why') || cleanLower.includes('כישלון') || cleanLower.includes('fail')) {
     return handleFailedQuery(chatId, tenantId);
   }
 
   // ── /last | ריצה | last run ────────────────────────────────────────────
-  if (lower.startsWith('/last') || lower.includes('last run') || lower.includes('ריצה') || lower.includes('remediat')) {
+  if (cleanLower.startsWith('/last') || cleanLower.includes('last run') || cleanLower.includes('ריצה') || cleanLower.includes('last') || cleanLower.includes('remediat')) {
     return handleLastRunQuery(chatId, tenantId);
   }
 
   // ── /status ────────────────────────────────────────────────────────────
-  if (lower.startsWith('/status') || lower === 'status' || lower === 'סטטוס') {
+  if (cleanLower.startsWith('/status') || cleanLower === 'status' || cleanLower === 'סטטוס' || cleanLower.includes('status')) {
     return handleStatusQuery(chatId, tenantId);
   }
 
   // ── CVE lookup ─────────────────────────────────────────────────────────
-  const cveMatch = text.toUpperCase().match(/CVE-\d{4}-\d+/);
+  const cveMatch = cleanText.toUpperCase().match(/CVE-\d{4}-\d+/);
   if (cveMatch) {
     return handleCveQuery(chatId, tenantId, cveMatch[0]);
   }
 
-  // ── Unknown ────────────────────────────────────────────────────────────
+  // ── Unknown — show mini-help ───────────────────────────────────────────
   return replyTo(chatId,
-    '🤔 לא הבנתי\\. נסה `/help` לרשימת הפקודות\\.'
+    '🤔 לא הבנתי\\.\n\n' +
+    'נסה:\n' +
+    '• `/help` \\— רשימת פקודות\n' +
+    '• `/failed` \\— למה כישלונות?\n' +
+    '• `/last` \\— ריצה אחרונה\n' +
+    '• `/alerts` \\— התראות פתוחות'
   );
 }
 
