@@ -72,29 +72,23 @@ router.get('/mock-login', (req, res) => {
 });
 
 // GET /api/auth/login
-// Flow: admin consent first (grants all app permissions) → then OAuth login
-// Microsoft skips the consent UI on repeat visits when permissions are unchanged.
+// Flow: go directly to OAuth (no consent screen for returning tenants).
+// If Microsoft returns AADSTS65001 (consent_required), the callback bounces
+// through adminconsent once, then back here — so new tenants consent exactly once.
 router.get('/login', (req, res) => {
   if (!CLIENT_ID) return res.status(500).json({ error: 'CLIENT_ID not configured' });
-
-  const nonce = crypto.randomBytes(16).toString('hex');
-  const statePayload = {
-    nonce,
-    step: 'consent_then_login',
-    createdAt: new Date().toISOString()
-  };
-  const encodedState = encodeConsentState(statePayload);
-
-  req.session.loginConsent = { nonce, startedAt: new Date().toISOString() };
 
   req.session.save((err) => {
     if (err) return res.status(500).json({ error: 'Session error' });
     const params = new URLSearchParams({
-      client_id:    CLIENT_ID,
-      redirect_uri: ADMIN_CONSENT_REDIRECT_URI,
-      state:        encodedState
+      client_id:     CLIENT_ID,
+      redirect_uri:  REDIRECT_URI,
+      response_type: 'code',
+      scope:         'openid profile email offline_access ' + REQUIRED_SCOPES,
+      response_mode: 'query',
+      state:         'login',
     });
-    res.redirect('https://login.microsoftonline.com/common/adminconsent?' + params.toString());
+    res.redirect('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?' + params.toString());
   });
 });
 
@@ -127,6 +121,20 @@ router.get('/callback', async (req, res) => {
   }
 
   if (error) {
+    // New tenant: consent not yet granted → bounce through adminconsent once, then back to OAuth
+    const desc = String(error_description || '');
+    const needsConsent = desc.includes('AADSTS65001') || desc.includes('consent_required') ||
+                         (error === 'access_denied' && desc.includes('consent'));
+    if (needsConsent) {
+      console.log('[Auth] Consent required — redirecting to adminconsent for first-time tenant');
+      const statePayload = { step: 'consent_then_login', createdAt: new Date().toISOString() };
+      const consentParams = new URLSearchParams({
+        client_id:    CLIENT_ID,
+        redirect_uri: ADMIN_CONSENT_REDIRECT_URI,
+        state:        encodeConsentState(statePayload),
+      });
+      return res.redirect('https://login.microsoftonline.com/common/adminconsent?' + consentParams.toString());
+    }
     return res.redirect(FRONTEND_URL + '/login?error=' + encodeURIComponent(String(error_description || error)));
   }
   if (!code) return res.redirect(FRONTEND_URL + '/login?error=no_code');
