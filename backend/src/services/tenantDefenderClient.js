@@ -21,6 +21,27 @@ function readVulnerabilityCache(tenantId) {
   return entry;
 }
 
+// Returns stale cache entry even if expired (for stale-while-revalidate).
+function readVulnerabilityCacheStale(tenantId) {
+  return vulnerabilityCache.get(getVulnerabilityCacheKey(tenantId)) || null;
+}
+
+// Tracks in-progress background refreshes so we never fire two at once per tenant.
+const _bgRefreshInProgress = new Set();
+
+async function _refreshVulnerabilityCacheBackground(tenantId) {
+  const key = getVulnerabilityCacheKey(tenantId);
+  if (_bgRefreshInProgress.has(key)) return;
+  _bgRefreshInProgress.add(key);
+  try {
+    await listTenantVulnerabilities(tenantId, 0, { forceRefresh: true });
+  } catch (_) {
+    // background refresh — errors are non-fatal
+  } finally {
+    _bgRefreshInProgress.delete(key);
+  }
+}
+
 function writeVulnerabilityCache(tenantId, items) {
   const key = getVulnerabilityCacheKey(tenantId);
   const normalized = Array.isArray(items) ? items : [];
@@ -730,13 +751,26 @@ async function getTenantConfigOrThrow(tenantId) {
 async function listTenantVulnerabilities(tenantId, top = 0, options = {}) {
   const requestedTop = Number(top) > 0 ? Number(top) : 0;
   const forceRefresh = options?.forceRefresh === true;
-  const cacheEntry = !forceRefresh ? readVulnerabilityCache(tenantId) : null;
 
-  if (cacheEntry) {
-    const items = requestedTop > 0 ? cacheEntry.items.slice(0, requestedTop) : cacheEntry.items;
-    return items;
+  // ── Fresh cache hit — instant return ────────────────────────────────────────
+  if (!forceRefresh) {
+    const cacheEntry = readVulnerabilityCache(tenantId);
+    if (cacheEntry) {
+      return requestedTop > 0 ? cacheEntry.items.slice(0, requestedTop) : cacheEntry.items;
+    }
   }
 
+  // ── Stale-while-revalidate — return expired cache immediately + refresh bg ──
+  // This prevents page-load timeouts when the cache has expired after 5 min.
+  if (!forceRefresh) {
+    const stale = readVulnerabilityCacheStale(tenantId);
+    if (stale && stale.items.length > 0) {
+      _refreshVulnerabilityCacheBackground(tenantId);
+      return requestedTop > 0 ? stale.items.slice(0, requestedTop) : stale.items;
+    }
+  }
+
+  // ── Cold cache — must fetch synchronously ───────────────────────────────────
   const { config } = await getTenantConfigOrThrow(tenantId);
   const fetchTop = requestedTop > 0
     ? Math.max(requestedTop, Math.min(VULNERABILITY_CACHE_MAX_TOP, 250))
@@ -746,7 +780,7 @@ async function listTenantVulnerabilities(tenantId, top = 0, options = {}) {
   const machineVulnRows = await fetchDefenderCollectionWithSkip(
     config,
     '/api/vulnerabilities/machinesVulnerabilities',
-    { pageSize: 200, maxPageSize: 8000, maxPages: 25, top: fetchTop }
+    { pageSize: 200, maxPageSize: 8000, maxPages: 5, top: fetchTop }
   ).catch(() => []);
 
   // Build: cveId → { machineCount, productName, publisher }
@@ -767,7 +801,7 @@ async function listTenantVulnerabilities(tenantId, top = 0, options = {}) {
 
   // Step 2: fetch full CVE details from /api/vulnerabilities (has CVSS, description, etc.)
   const vulnRows = await fetchDefenderCollectionWithSkip(config, '/api/vulnerabilities', {
-    pageSize: 200, maxPageSize: 8000, maxPages: 25, top: fetchTop,
+    pageSize: 200, maxPageSize: 8000, maxPages: 5, top: fetchTop,
   }).catch(() => []);
 
   // Step 3: merge — if we got org CVEs, filter global list to only those;

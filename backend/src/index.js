@@ -86,7 +86,8 @@ app.use(session({
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/') || req.path === '/health') {
     const isLongRunning = req.path.includes('/auto-remediation/trigger');
-    const timeoutMs = isLongRunning ? 5 * 60 * 1000 : 30000;
+    const isDefender   = req.path.includes('/defender/');
+    const timeoutMs = isLongRunning ? 5 * 60 * 1000 : isDefender ? 90 * 1000 : 30000;
     const timer = setTimeout(() => {
       if (!res.headersSent) {
         res.status(503).json({ error: 'Request timeout', path: req.path });
