@@ -460,14 +460,28 @@ async function handleTextMessage(msg) {
 
   // ── /help ─────────────────────────────────────────────────────────────
   if (cleanLower.startsWith('/help') || cleanLower === 'עזרה' || cleanLower === 'help') {
+    const tz = process.env.DISPLAY_TIMEZONE || 'UTC';
     return replyTo(chatId,
       '🤖 *IdentityMonitor Bot Commands*\n\n' +
       '`/alerts` \\— open security alerts summary\n' +
       '`/failed` \\— CVEs that failed in the last remediation run\n' +
       '`/last` \\— full results of the last remediation run\n' +
       '`/status` \\— system health overview\n' +
+      '`/time` \\— show current server time & timezone\n' +
       '`CVE\\-YYYY\\-NNNNN` \\— details for a specific CVE\n\n' +
-      '_Type naturally too: "למה failed?" or "show alerts"_'
+      `_Timezone: ${escMd(tz)}_`
+    );
+  }
+
+  // ── /time ──────────────────────────────────────────────────────────────
+  if (cleanLower.startsWith('/time') || cleanLower === 'time' || cleanLower === 'שעה') {
+    const tz  = process.env.DISPLAY_TIMEZONE || 'UTC';
+    const now = fmtTime(new Date().toISOString());
+    return replyTo(chatId,
+      `🕐 *Current Time*\n\n` +
+      `${escMd(now)}\n\n` +
+      `_Server UTC: ${escMd(new Date().toISOString().slice(0, 19).replace('T', ' '))}_\n` +
+      `_Zone: ${escMd(tz)}_`
     );
   }
 
