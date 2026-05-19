@@ -367,6 +367,7 @@ function AppShell() {
             <Route path="/remediation" element={<RemediationPage />} />
             <Route path="/identity" element={<ConditionalAccessPage />} />
             <Route path="/ca" element={<Navigate to="/identity" replace />} />
+            <Route path="/conditional-access" element={<Navigate to="/identity" replace />} />
             <Route path="/billing" element={<BillingPage />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/terms"   element={<TermsPage />} />

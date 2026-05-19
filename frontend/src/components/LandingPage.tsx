@@ -52,12 +52,12 @@ const DETECTIONS = [
 const ACTIONS = [
   'Revoke active sessions',
   'Disable compromised user',
-  'Patch CVE via Windows Update',
+  'Patch CVEs via Windows Update',
   'Run PowerShell remediation script',
   'Push Intune compliance policy',
   'Update apps (Chrome, Edge, Office…)',
-  'Telegram one-tap action buttons',
-  'Auto-remediate on trigger',
+  'Telegram alerts + run summaries',
+  'Auto-remediate CVEs every 60 min',
 ];
 
 const STEPS = [
@@ -76,8 +76,8 @@ const STEPS = [
   {
     n: '3',
     title: 'Alert fires — you act in one tap',
-    desc: 'Threats trigger a Telegram message with full context and action buttons: Revoke / Disable / Investigate. Or configure auto-response for critical severity.',
-    detail: 'Telegram + Email · Auto-response available',
+    desc: 'Threats trigger a Telegram message with full context and action buttons: Revoke / Disable / Investigate. CVEs are patched automatically on a 60-minute schedule — WinGet deploys app updates, Windows Update handles OS patches — with a Telegram summary after every run.',
+    detail: 'Telegram + Email · Auto-CVE remediation · 60-min schedule',
   },
 ];
 
@@ -88,7 +88,7 @@ const FAQ = [
   },
   {
     q: 'Can it actually break anything in my tenant?',
-    a: 'No. Monitoring is completely read-only. Remediation actions (session revoke, disable user) only execute when you tap a button in Telegram or the dashboard — and every action is logged in the Audit Center.',
+    a: 'Monitoring is completely read-only. Manual remediation actions (session revoke, disable user) only execute when you tap a button in Telegram or the dashboard. Auto-remediation for CVEs (app updates via WinGet, Windows security patches) runs on a 60-minute schedule when enabled — every action is logged in the Audit Center. You can pause or disable auto-remediation at any time.',
   },
   {
     q: 'Why not use Microsoft Sentinel or Defender for Identity?',
@@ -438,7 +438,7 @@ export default function LandingPage() {
               Endpoint vulnerability management — built in
             </h2>
             <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.40)', maxWidth: 560, margin: '0 auto', lineHeight: 1.7 }}>
-              Connect Microsoft Defender and see every open CVE across your fleet — prioritised by severity, exploit probability, and affected device count. Fix in one click.
+              Connect Microsoft Defender and see every open CVE across your fleet — prioritised by severity, exploit probability, and affected device count. Fix in one click, or let IdentityMonitor auto-remediate on a 60-minute schedule.
             </p>
           </div>
 
@@ -520,9 +520,10 @@ export default function LandingPage() {
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
               {[
                 { label: '⊞ Windows Update', color: '#5B9BD5' },
-                { label: '📦 Application patch', color: '#A78BFA' },
+                { label: '📦 Application patch (WinGet)', color: '#A78BFA' },
                 { label: '⚡ PowerShell script', color: ORANGE },
                 { label: '📋 Intune policy', color: '#00C98B' },
+                { label: '🤖 Auto-remediation schedule', color: ORANGE },
                 { label: '🔍 Device drill-down', color: 'rgba(255,255,255,0.45)' },
                 { label: '🧬 CVSS + EPSS scoring', color: 'rgba(255,255,255,0.45)' },
               ].map(p => (
@@ -671,10 +672,11 @@ export default function LandingPage() {
               {[
                 'Everything in Free',
                 'Telegram alerts + action buttons',
+                'Telegram run summary after every remediation',
                 'Email notifications',
                 'Auto session revoke',
                 'Auto disable on critical severity',
-                'CVE one-click remediation',
+                'CVE one-click + auto-remediation (60-min schedule)',
                 'Conditional Access + PIM monitoring',
                 '180-day alert retention',
               ].map(f => (

@@ -23,10 +23,15 @@ export default function MspDashboard() {
   const [sortBy, setSortBy]   = useState<'risk' | 'alerts' | 'name'>('risk');
 
   useEffect(() => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
     api.getMspTenants()
-      .then(d => setTenants(Array.isArray(d) ? d : []))
-      .catch(() => setTenants([]))
-      .finally(() => setLoading(false));
+      .then(d => { if (!controller.signal.aborted) setTenants(Array.isArray(d) ? d : []); })
+      .catch(() => { if (!controller.signal.aborted) setTenants([]); })
+      .finally(() => { clearTimeout(timeout); setLoading(false); });
+
+    return () => { controller.abort(); clearTimeout(timeout); };
   }, []);
 
   const sorted = [...tenants].sort((a, b) => {
