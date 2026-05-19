@@ -337,7 +337,25 @@ async function runForTenant(tenantId, options = {}) {
   const forceRemediate = options.forceRemediate !== false; // default true for manual triggers
   console.log(`[AutoRemediation] Manual trigger for tenant ${tenantId} forceRemediate=${forceRemediate}`);
   const summary = await remediateTenant(tenantId, { forceRemediate });
-  return [summary];
+  const summaries = [summary];
+
+  // ── Telegram notification (same as cron run) ─────────────────────────────
+  if (process.env.TELEGRAM_BOT_TOKEN && (summary.success > 0 || summary.failed > 0)) {
+    try {
+      let msg = `🤖 *Manual Remediation Run*\n\n`;
+      msg += `📅 ${escMd(new Date().toLocaleString('en-GB'))}\n`;
+      msg += `✅ Success: *${summary.success}*  ❌ Failed: *${summary.failed}*  ⏭ Skipped: *${summary.skipped}*\n\n`;
+      msg += `🏢 *${escMd(tenantId.substring(0, 8))}…*\n`;
+      for (const a of (summary.actions || []).slice(0, 10)) {
+        const icon = a.status === 'success' ? '✅' : a.status === 'skipped' ? '⏭' : '❌';
+        msg += `  ${icon} ${escMd(a.cveId)} · ${escMd(a.productName || a.category)}\n`;
+      }
+      if ((summary.actions?.length || 0) > 10) msg += `  \\.\\.\\. and ${summary.actions.length - 10} more\n`;
+      await telegramService.sendMessage(msg);
+    } catch (_) { /* non-fatal */ }
+  }
+
+  return summaries;
 }
 
 function escMd(str) {
