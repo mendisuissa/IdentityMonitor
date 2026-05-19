@@ -1678,61 +1678,24 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
               className="btn btn-primary"
               disabled={autoTriggering}
               onClick={async () => {
-                // Cancel any previous poll loop before starting a new one
-                // Cancel any previous poll — module-level so it works across remounts
-                cancelActivePoll();
-
                 setAutoTriggering(true);
                 setAutoTriggerResult(null);
                 try {
                   const trigger = await api.triggerAutoRemediation();
-                  if (!trigger.ok || !trigger.jobId) {
+                  if (!trigger.ok) {
                     setAutoTriggerResult({ ok: false, error: trigger.error || 'Failed to start.' });
-                    setAutoTriggering(false);
-                    return;
+                  } else {
+                    setAutoTriggerResult({ ok: true, started: true });
                   }
-
-                  const jobId = trigger.jobId;
-                  const maxWaitMs = 9 * 60 * 1000;
-                  const pollIntervalMs = 5000;
-                  const deadline = Date.now() + maxWaitMs;
-                  let cancelled = false;
-                  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-                  _cancelActivePoll = () => { cancelled = true; if (timeoutId) clearTimeout(timeoutId); };
-
-                  const done = (result: any) => {
-                    cancelled = true;
-                    _cancelActivePoll = null;
-                    setAutoTriggerResult(result);
-                    setAutoTriggering(false);
-                  };
-
-                  const poll = async (): Promise<void> => {
-                    if (cancelled) return;
-                    try {
-                      const job = await api.pollAutoRemediationJob(jobId);
-                      if (cancelled) return;
-                      if (job.status === 'completed') {
-                        done({ ok: true, summaries: job.summaries || [] });
-                      } else if (job.status === 'error') {
-                        done({ ok: false, error: job.error || 'Run failed.' });
-                      } else if (Date.now() < deadline) {
-                        timeoutId = setTimeout(poll, pollIntervalMs);
-                      } else {
-                        done({ ok: false, error: 'Timed out waiting for results. Check History tab.' });
-                      }
-                    } catch (_e) {
-                      done({ ok: false, error: 'Lost connection while polling.' });
-                    }
-                  };
-                  timeoutId = setTimeout(poll, pollIntervalMs);
                 } catch (e: any) {
                   setAutoTriggerResult({ ok: false, error: e?.message || 'Failed to trigger.' });
-                  setAutoTriggering(false);
+                } finally {
+                  // Re-enable button after 3 minutes so user can't spam-click
+                  setTimeout(() => setAutoTriggering(false), 3 * 60 * 1000);
                 }
               }}
             >
-              {autoTriggering ? <><span className="spin">⟳</span> Running…</> : '▶ Run Now'}
+              {autoTriggering ? <><span className="spin">⟳</span> Starting…</> : '▶ Run Now'}
             </button>
           </div>
 
@@ -1773,16 +1736,11 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
               style={{ marginBottom: 20, borderLeft: `3px solid ${autoTriggerResult.ok ? '#22c55e' : '#ef4444'}` }}>
               {autoTriggerResult.ok ? (
                 <>
-                  <div style={{ fontWeight: 700, marginBottom: 8 }}>✅ Run completed</div>
-                  {autoTriggerResult.summaries?.map((s: any, i: number) => (
-                    <div key={i} style={{ fontSize: 13, marginBottom: 4 }}>
-                      <strong>{s.tenantId?.substring(0, 8)}…</strong> — ✅ {s.success} success, ❌ {s.failed} failed, ⏭ {s.skipped} skipped{s.unsupported > 0 ? `, 🚫 ${s.unsupported} unsupported platform` : ''}
-                      {s.error && <span style={{ color: '#ef4444', marginLeft: 8 }}>{s.error}</span>}
-                    </div>
-                  ))}
-                  {autoTriggerResult.summaries?.length === 0 && (
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No active tenants found to process.</div>
-                  )}
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>✅ Remediation job started</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                    Running in background — check the <strong>History</strong> tab in 2–3 minutes to see results.
+                    Button re-enables automatically after 3 minutes.
+                  </div>
                 </>
               ) : (
                 <div style={{ color: '#ef4444', fontWeight: 600 }}>❌ {autoTriggerResult.error}</div>
