@@ -72,7 +72,11 @@ function scoreSignIn(signIn, baseline, settings) {
 
   // ── Factor 1: New IP ──────────────────────────────────────────────────
   const ip = signIn.ipAddress;
-  if (ip && baseline.knownIPs?.length > 0 && !baseline.knownIPs.includes(ip)) {
+  // baseline collections may be Set or Array — normalise to a Set-compatible check
+  const knownIPs       = baseline.knownIPs instanceof Set ? baseline.knownIPs       : new Set(baseline.knownIPs       || []);
+  const knownCountries = baseline.knownCountries instanceof Set ? baseline.knownCountries : new Set(baseline.knownCountries || []);
+  const knownDevices   = baseline.knownDevices   instanceof Set ? baseline.knownDevices   : new Set(baseline.knownDevices   || []);
+  if (ip && knownIPs.size > 0 && !knownIPs.has(ip)) {
     let ipScore = 15;
     // Boost if high-risk country
     if (countryRisk === 'HIGH')   ipScore += 20;
@@ -83,7 +87,7 @@ function scoreSignIn(signIn, baseline, settings) {
 
   // ── Factor 2: New Country ─────────────────────────────────────────────
   const country = signIn.location?.countryOrRegion;
-  if (country && baseline.knownCountries?.length > 0 && !baseline.knownCountries.includes(country)) {
+  if (country && knownCountries.size > 0 && !knownCountries.has(country)) {
     let countryScore = 20;
     if (countryRisk === 'HIGH')   countryScore += 35;  // Russia/China/NK = automatic high
     if (countryRisk === 'MEDIUM') countryScore += 15;
@@ -94,7 +98,7 @@ function scoreSignIn(signIn, baseline, settings) {
   // ── Factor 3: Unknown Device ──────────────────────────────────────────
   const deviceId   = signIn.deviceDetail?.deviceId;
   const deviceName = signIn.deviceDetail?.displayName;
-  if (deviceId && baseline.knownDevices?.length > 0 && !baseline.knownDevices.includes(deviceId)) {
+  if (deviceId && knownDevices.size > 0 && !knownDevices.has(deviceId)) {
     const deviceScore = 15;
     baseScore += deviceScore;
     factors.push({ type: 'UNKNOWN_DEVICE', score: deviceScore, detail: 'Unknown device: ' + (deviceName || deviceId) });
@@ -167,12 +171,12 @@ function scoreSignIn(signIn, baseline, settings) {
     let failScore = 20;
     if (countryRisk === 'HIGH')   failScore += 15;
     if (countryRisk === 'MEDIUM') failScore += 8;
-    if (country && !baseline.knownCountries?.includes(country)) failScore += 10; // foreign + new country
+    if (country && !knownCountries.has(country)) failScore += 10; // foreign + new country
     baseScore += failScore;
     factors.push({
       type:   'FAILED_SIGN_IN',
       score:  failScore,
-      detail: `Authentication failed (error ${errorCode})${country ? ' from ' + country : ''}${country && !baseline.knownCountries?.includes(country) ? ' — unrecognised country' : ''}`
+      detail: `Authentication failed (error ${errorCode})${country ? ' from ' + country : ''}${country && !knownCountries.has(country) ? ' — unrecognised country' : ''}`
     });
   }
 
