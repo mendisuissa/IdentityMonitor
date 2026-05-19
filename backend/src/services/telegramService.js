@@ -129,22 +129,31 @@ async function updateMessageAfterAction(messageId, tokenOrAction, chatIdOrUndefi
   }
 }
 
-// ─── Send simple text message ────────────────────────────────────────────
+// ─── Send simple text message (MarkdownV2) ───────────────────────────────
 async function sendMessage(text) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.warn('[Telegram] sendMessage skipped — TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set');
+    return;
+  }
   try {
-    await fetch(
+    const res = await fetch(
       'https://api.telegram.org/bot' + TELEGRAM_BOT_TOKEN + '/sendMessage',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
+          chat_id:    TELEGRAM_CHAT_ID,
           text,
-          parse_mode: 'Markdown'
+          parse_mode: 'MarkdownV2',
         })
       }
     );
+    const data = await res.json();
+    if (!data.ok) {
+      console.error('[Telegram] sendMessage API error:', data.description, '| text preview:', text.slice(0, 120));
+    } else {
+      console.log('[Telegram] ✅ Message sent, message_id:', data.result.message_id);
+    }
   } catch (err) {
     console.error('[Telegram] sendMessage error:', err.message);
   }
@@ -211,7 +220,7 @@ async function handleCallbackQuery(callbackQuery) {
     const key = payload;
     const pending = pendingCveApprovals.get(key);
     if (!pending) {
-      await sendMessage('⚠️ This approval request has already expired or been handled.');
+      await sendMessage('⚠️ This approval request has already expired or been handled\\.');
       return;
     }
     clearTimeout(pending.timer);
@@ -235,7 +244,7 @@ async function handleCallbackQuery(callbackQuery) {
         });
       } catch (_) {}
     }
-    await sendMessage(`${icon} *CVE Approval*: ${pending.cveId} — ${label}`);
+    await sendMessage(`${icon} *CVE Approval*: ${escMd(pending.cveId)} — ${escMd(label)}`);
     pending.resolve(decision);
     return;
   }
