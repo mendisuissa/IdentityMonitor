@@ -685,36 +685,43 @@ async function handleCveQuery(chatId, tenantId, cveId) {
 }
 
 // ── Find tenant by Telegram chatId ───────────────────────────────────────────
+// Strategy (in order):
+//  1. Pull tenantId from alerts already in memory (works for single-tenant setups)
+//  2. Scan settings for all known tenants matching this chatId
 async function findTenantByChatId(chatId) {
-  // First try env var (most common single-tenant setup)
-  if (process.env.TELEGRAM_CHAT_ID === chatId) {
-    // Try to get tenantId from active sessions / tableStorage
-    try {
-      const tableStorage = require('./tableStorage');
-      const tenants = await tableStorage.listTenants().catch(() => []);
-      if (tenants.length === 1) return tenants[0];
-      if (tenants.length > 1) {
-        // Find tenant whose settings have this chatId
-        const settingsService = require('./settingsService');
-        for (const tid of tenants) {
-          const s = settingsService.getSettings(tid);
-          if (String(s?.notifications?.telegramChatId) === chatId) return tid;
-        }
-        return tenants[0]; // fallback to first
-      }
-    } catch (_) {}
-    return null;
-  }
-  // Multi-tenant: scan settings
+  // Strategy 1 — pull tenantId from alerts already loaded in memory
   try {
-    const tableStorage    = require('./tableStorage');
-    const settingsService = require('./settingsService');
-    const tenants = await tableStorage.listTenants().catch(() => []);
-    for (const tid of tenants) {
-      const s = settingsService.getSettings(tid);
-      if (String(s?.notifications?.telegramChatId) === chatId) return tid;
+    const alertsStore = require('./alertsStore');
+    const allAlerts   = typeof alertsStore.getAllRaw === 'function'
+      ? alertsStore.getAllRaw()
+      : alertsStore.getAll(null);
+    if (Array.isArray(allAlerts) && allAlerts.length > 0 && allAlerts[0].tenantId) {
+      const tid = allAlerts[0].tenantId;
+      // Confirm this tenant's chatId matches (or no chatId configured)
+      try {
+        const s = require('./settingsService').getSettings(tid);
+        const cfgChatId = s?.notifications?.telegramChatId || process.env.TELEGRAM_CHAT_ID;
+        if (!cfgChatId || String(cfgChatId) === chatId) return tid;
+      } catch (_) {
+        return tid; // can't verify settings — trust alert tenantId
+      }
     }
   } catch (_) {}
+
+  // Strategy 2 — scan settings for all known tenants
+  try {
+    const settingsService = require('./settingsService');
+    const knownTenants = typeof settingsService.listKnownTenants === 'function'
+      ? settingsService.listKnownTenants()
+      : [];
+    for (const tid of knownTenants) {
+      const s = settingsService.getSettings(tid);
+      if (s?.notifications?.telegramChatId && String(s.notifications.telegramChatId) === chatId) {
+        return tid;
+      }
+    }
+  } catch (_) {}
+
   return null;
 }
 
