@@ -31,7 +31,25 @@ function getBaselineProfile(tenantId, userId) {
 }
 
 function _emptyBaseline(userId) {
-  return { userId, knownIPs: [], knownCountries: [], knownDevices: [], recentSignIns: [], anomalyHistory: [], resolutionHistory: [], stats: { totalSignIns: 0, offHoursCount: 0, riskEvents: 0, lastSeenAt: null }, lastUpdated: null };
+  return { userId, knownIPs: [], knownCountries: [], knownDevices: [], recentSignIns: [], anomalyHistory: [], resolutionHistory: [], stats: { totalSignIns: 0, offHoursCount: 0, riskEvents: 0, lastSeenAt: null }, auditBaseline: null, lastUpdated: null };
+}
+
+function getAuditBaseline(tenantId, userId) {
+  const profile = _baselineCache.get(`${tenantId}:${userId}`) || _emptyBaseline(userId);
+  return profile.auditBaseline || null;
+}
+
+function saveAuditBaseline(tenantId, userId, auditBaseline) {
+  const k       = `${tenantId}:${userId}`;
+  const profile = _baselineCache.get(k) || _emptyBaseline(userId);
+  const next    = { ...profile, auditBaseline };
+  _baselineCache.set(k, next);
+  // Best-effort persist alongside the sign-in baseline
+  tableStorage.saveBaseline(tenantId, userId, {
+    knownIPs: next.knownIPs, knownCountries: next.knownCountries,
+    knownDevices: next.knownDevices, recentSignIns: next.recentSignIns,
+    auditBaseline, lastUpdated: new Date().toISOString(),
+  }).catch(e => console.warn('[IncidentStore] saveAuditBaseline persist error:', e.message));
 }
 
 const _baselineCache = new Map();
@@ -228,4 +246,4 @@ function buildInvestigation(tenantId, alert, workflow) {
   };
 }
 
-module.exports = { getBaselineProfile, updateBaselineProfile, recordIncident, recordResolution, getIncident, buildInvestigation };
+module.exports = { getBaselineProfile, updateBaselineProfile, getAuditBaseline, saveAuditBaseline, recordIncident, recordResolution, getIncident, buildInvestigation };

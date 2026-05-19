@@ -1,10 +1,11 @@
-const graphService    = require('./graphService');
-const alertsStore     = require('./alertsStore');
-const emailService    = require('./emailService');
-const settingsService = require('./settingsService');
-const behavioralEngine = require('./behavioralEngine');
-const siemService = require('./siemService');
-const incidentStore = require('./incidentStore');
+const graphService      = require('./graphService');
+const alertsStore       = require('./alertsStore');
+const emailService      = require('./emailService');
+const settingsService   = require('./settingsService');
+const behavioralEngine  = require('./behavioralEngine');
+const auditAnomalyEngine = require('./auditAnomalyEngine');
+const siemService       = require('./siemService');
+const incidentStore     = require('./incidentStore');
 
 // ─── Application Risk Weights ─────────────────────────────────────────────
 // Sign-in to high-privilege portals = more dangerous than Outlook
@@ -64,13 +65,17 @@ const ANOMALY = {
 };
 
 const ANOMALY_LABELS = {
-  NEW_IP:            'New IP Address',
-  NEW_COUNTRY:       'New Country Detected',
-  UNKNOWN_DEVICE:    'Unrecognized Device',
-  IMPOSSIBLE_TRAVEL: 'Impossible Travel',
-  OFF_HOURS:         'Off-Hours Sign-in',
-  FAILED_MFA:        'MFA Failure',
-  HIGH_RISK:         'High Risk Sign-in'
+  NEW_IP:                'New IP Address',
+  NEW_COUNTRY:           'New Country Detected',
+  UNKNOWN_DEVICE:        'Unrecognized Device',
+  IMPOSSIBLE_TRAVEL:     'Impossible Travel',
+  OFF_HOURS:             'Off-Hours Sign-in',
+  FAILED_MFA:            'MFA Failure',
+  HIGH_RISK:             'High Risk Sign-in',
+  // Audit-action anomalies
+  UNUSUAL_DELETION:      'Unusual Deletion Activity',
+  UNUSUAL_RULE_CREATION: 'Suspicious Policy/Rule Creation',
+  LATERAL_MOVEMENT:      'Lateral Movement Detected',
 };
 
 function toRuntimeBaseline(profile) {
@@ -249,6 +254,59 @@ async function scanUser(tenantId, user, signIns, settings) {
   return newAlerts;
 }
 
+// ─── Scan a user's directory audit actions for behavioral anomalies ───────
+async function scanUserAuditActions(tenantId, user, auditActions, settings) {
+  const auditBaseline = incidentStore.getAuditBaseline(tenantId, user.id);
+  const scoring       = auditAnomalyEngine.scoreAuditActions(auditActions, auditBaseline);
+
+  // Always update baseline (even if clean — builds the rolling 30-day history)
+  const updatedBaseline = auditAnomalyEngine.updateAuditBaseline(
+    auditBaseline ? { ...auditBaseline } : null,
+    auditActions
+  );
+  incidentStore.saveAuditBaseline(tenantId, user.id, updatedBaseline);
+
+  if (scoring.isClean) return [];
+
+  const newAlerts = [];
+  for (const factor of scoring.factors) {
+    const alertId = `${tenantId}-${user.id}-audit-${factor.type}-${new Date().toISOString().slice(0, 10)}`;
+
+    if (alertsStore.exists(alertId)) continue;
+
+    const alert = {
+      id:                alertId,
+      tenantId,
+      userId:            user.id,
+      userDisplayName:   user.displayName,
+      userPrincipalName: user.userPrincipalName,
+      roles:             user.roles,
+      anomalyType:       factor.type,
+      anomalyLabel:      auditAnomalyEngine.ANOMALY_LABELS[factor.type] || factor.type,
+      severity:          scoring.severity,
+      riskScore:         scoring.score,
+      detail:            factor.detail,
+      riskFactors:       scoring.factors,
+      status:            'open',
+      detectedAt:        new Date().toISOString(),
+      source:            'audit_log',
+      actionsTriggered:  [],
+    };
+
+    alertsStore.add(alert);
+
+    incidentStore.recordIncident(tenantId, alert, {
+      entraRiskContext:  { riskScore: scoring.score, factors: scoring.factors },
+      recommendedAction: scoring.severity === 'critical' ? 'revoke' : 'triage',
+      updateDetail:      factor.detail,
+    });
+
+    newAlerts.push(alert);
+  }
+
+  return newAlerts;
+}
+
 async function runFullScan(tenantId) {
   if (!tenantId) { console.warn('[Anomaly] No tenantId — skipping'); return []; }
 
@@ -264,13 +322,18 @@ async function runFullScan(tenantId) {
     if (settings.whitelist.users && settings.whitelist.users.includes(user.userPrincipalName)) continue;
 
     try {
+      // ── Sign-in anomalies (existing) ────────────────────────────────────
       const signIns   = await graphService.getUserSignIns(tenantId, user.id, 48);
       const newAlerts = await scanUser(tenantId, user, signIns, settings);
       allAlerts.push(...newAlerts);
+      if (newAlerts.length > 0) await triggerActions(tenantId, newAlerts, user, settings);
 
-      if (newAlerts.length > 0) {
-        await triggerActions(tenantId, newAlerts, user, settings);
-      }
+      // ── Audit action anomalies (new: deletions, rule creation, lateral movement) ─
+      const auditActions      = await graphService.getUserAuditActions(tenantId, user.id, 48);
+      const newAuditAlerts    = await scanUserAuditActions(tenantId, user, auditActions, settings);
+      allAlerts.push(...newAuditAlerts);
+      if (newAuditAlerts.length > 0) await triggerActions(tenantId, newAuditAlerts, user, settings);
+
     } catch (err) {
       console.error('[Anomaly] Error scanning user:', err.message);
     }

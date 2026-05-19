@@ -200,6 +200,28 @@ async function getUserSignIns(tenantId, userId, hoursBack) {
   }
 }
 
+// ─── Get directory audit actions for a user ───────────────────────────────
+async function getUserAuditActions(tenantId, userId, hoursBack) {
+  hoursBack = hoursBack || 48;
+  const client = await getClientForTenant(tenantId);
+  const since  = new Date(Date.now() - hoursBack * 3600000).toISOString();
+
+  try {
+    const result = await client
+      .api('/auditLogs/directoryAudits')
+      .filter(`initiatedBy/user/id eq '${userId}' and activityDateTime ge ${since}`)
+      .select('id,activityDateTime,activityDisplayName,category,operationType,result,initiatedBy,targetResources,loggedByService')
+      .orderby('activityDateTime desc')
+      .top(200)
+      .get();
+
+    return (result.value || []).filter(a => a.result === 'success'); // only successful actions
+  } catch (err) {
+    console.error('[Graph] Error fetching audit actions for ' + userId + ':', err.message);
+    return [];
+  }
+}
+
 // ─── Get all privileged sign-ins (last N hours) ────────────────────────────
 async function getAllPrivilegedSignIns(tenantId, hoursBack) {
   hoursBack = hoursBack || 24;
@@ -309,6 +331,7 @@ module.exports = {
   getClientFromToken,
   getPrivilegedUsers,
   getUserSignIns,
+  getUserAuditActions,
   getAllPrivilegedSignIns,
   sendAlertEmail,
   revokeUserSessions,
