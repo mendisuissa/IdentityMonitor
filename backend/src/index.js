@@ -43,6 +43,7 @@ const mspRoutes = require('./routes/msp');
 const identityRoutes = require('./routes/identity');
 const superadminRoutes = require('./routes/superadmin');
 const billingRoutes    = require('./routes/billing');
+const internalRoutes   = require('./routes/internal');
 
 const app    = express();
 const server = http.createServer(app);
@@ -140,6 +141,8 @@ try {
   const settingsRoutes = require('./routes/settings');
   app.use('/api/settings', settingsRoutes);
 } catch(e) { /* optional */ }
+
+app.use('/api/internal', internalRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({
