@@ -13,7 +13,7 @@ const { getAccessTokenForTenant } = require('./graphService');
 
 const WINGET_CATALOG = [
   { names: ['google chrome', 'chrome'],             publishers: ['google'],          wingetId: 'Google.Chrome',                displayName: 'Google Chrome',         publisher: 'Google' },
-  { names: ['microsoft edge', 'edge', 'edge_chromium-based', 'edge_chromium', 'msedge'], publishers: ['microsoft'],       wingetId: 'Microsoft.Edge',               displayName: 'Microsoft Edge',        publisher: 'Microsoft' },
+  { names: ['microsoft edge', 'edge', 'edge_chromium-based', 'edge chromium-based', 'edge_chromium', 'edge chromium', 'msedge'], publishers: ['microsoft'],       wingetId: 'Microsoft.Edge',               displayName: 'Microsoft Edge',        publisher: 'Microsoft' },
   { names: ['mozilla firefox', 'firefox'],          publishers: ['mozilla'],         wingetId: 'Mozilla.Firefox',              displayName: 'Mozilla Firefox',       publisher: 'Mozilla' },
   { names: ['7-zip', '7zip'],                       publishers: ['igor pavlov'],     wingetId: '7zip.7zip',                    displayName: '7-Zip',                 publisher: 'Igor Pavlov' },
   { names: ['notepad++', 'notepad plus'],           publishers: [],                  wingetId: 'Notepad++.Notepad++',          displayName: 'Notepad++',             publisher: 'Notepad++ Team' },
@@ -156,7 +156,9 @@ function resolveWingetId(finding) {
 
   // Priority 2: catalog lookup
   const product = finding.displayProductName || finding.productName || finding.softwareName || finding.name || '';
-  const pub = finding.publisher || finding.displayPublisher || '';
+  // Use raw publisher only — displayPublisher may contain fallback strings like "Not provided by Defender payload"
+  const rawPub = finding.publisher || '';
+  const pub = rawPub.toLowerCase().includes('not provided') ? '' : rawPub;
   const catalogHit = lookupCatalog(product, pub);
   if (catalogHit) {
     return { ok: true, ...catalogHit, source: 'catalog' };
