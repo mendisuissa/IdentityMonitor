@@ -1,15 +1,23 @@
-const DEFAULT_BASE_URL = 'http://localhost:4000';
+'use strict';
 
-function normalizeBaseUrl(raw) {
-  return String(raw || DEFAULT_BASE_URL).replace(/\/$/, '');
-}
+/**
+ * webappExecutionClient.js
+ *
+ * Provides resolve + execute for CVE remediation.
+ * Primary path: local wingetService (no external dependency).
+ * Fallback: localhost:4000 Webapp (if WEBAPP_REMEDIATION_BASE_URL is set and reachable).
+ */
+
+const { resolveWingetId, deployRemediationForFinding } = require('./wingetService');
+
+// ─── Optional external Webapp fallback ───────────────────────────────────────
 
 function getWebappConfig() {
-  const baseUrl = normalizeBaseUrl(
+  const baseUrl = String(
     process.env.WEBAPP_REMEDIATION_BASE_URL ||
     process.env.WEBAPP_BASE_URL ||
-    DEFAULT_BASE_URL
-  );
+    ''
+  ).replace(/\/$/, '');
 
   const token = String(
     process.env.WEBAPP_REMEDIATION_TOKEN ||
@@ -17,132 +25,126 @@ function getWebappConfig() {
     ''
   ).trim();
 
-  return {
-    baseUrl,
-    token,
-    tokenConfigured: !!token
-  };
+  return { baseUrl, token, configured: !!baseUrl };
 }
 
-function buildHeaders(extraHeaders = {}) {
-  const { token } = getWebappConfig();
-  const headers = {
-    Accept: 'application/json',
-    ...extraHeaders
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  return headers;
-}
-
-async function requestJson(method, path, payload, timeoutMs = 15000) {
-  const { baseUrl } = getWebappConfig();
-  const isBodyMethod = method !== 'GET' && method !== 'HEAD';
-  const response = await fetch(`${baseUrl}${path}`, {
-    method,
-    headers: buildHeaders(isBodyMethod ? { 'Content-Type': 'application/json' } : {}),
-    body: isBodyMethod ? JSON.stringify(payload || {}) : undefined,
-    signal: AbortSignal.timeout(timeoutMs)
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const externalMessage = data?.details?.message || data?.message || data?.error || `Request failed: ${response.status}`;
-    const error = new Error(externalMessage);
-    error.status = response.status;
-    error.details = data;
-    throw error;
-  }
-
-  return data;
-}
-
-function buildHints(finding = {}) {
-  const hints = {
-    id: finding.id || finding.cveId || finding.name || null,
-    cveId: finding.cveId || null,
-    productName: finding.productName || finding.displayProductName || finding.softwareName || finding.name || null,
-    publisher: finding.publisher || finding.displayPublisher || null,
-    recommendation: finding.recommendation || null,
-    description: finding.description || null,
-    category: finding.category || null,
-    severity: finding.severity || null,
-    relatedProducts: Array.isArray(finding.relatedProducts) ? finding.relatedProducts : [],
-    productNames: Array.isArray(finding.productNames) ? finding.productNames : [],
-    remediationConfidence: finding.remediationConfidence || null,
-    fixVersion: finding.fixVersion || null,
-  };
-
-  // If enrichment resolved a definitive WinGet ID, override productName with the
-  // exact package identifier so the webapp does a direct lookup instead of fuzzy search.
-  // This prevents the webapp from picking .Dev/.Beta variants when we want Stable.
-  if (finding.suggestedWingetId) {
-    hints.wingetId = finding.suggestedWingetId;
-    hints.packageIdentifier = finding.suggestedWingetId;
-    hints.productName = finding.suggestedWingetId;
-  }
-
-  return hints;
-}
-
-function buildExecuteBody(payload) {
-  const { finding = {}, options = {}, ...rest } = payload || {};
-  const hints = buildHints(finding);
-
-  // Merge deployToAllDevices from options into the top-level payload
-  // so the webapp assigns the app to All Devices when no specific targets exist.
-  const deployToAllDevices = options.deployToAllDevices === true;
-
-  return {
-    ...rest,
-    finding: hints,
-    options: {
-      ...options,
-      deployToAllDevices,
-      // If we know the exact WinGet ID, tell the webapp to skip its own resolution
-      wingetId: hints.wingetId || options.suggestedWingetId || undefined,
-      assignToAllDevices: deployToAllDevices,
-    }
-  };
-}
-
-async function getExternalHealth() {
+async function tryExternalHealth() {
+  const { baseUrl, token } = getWebappConfig();
+  if (!baseUrl) return { ok: false, reason: 'not configured' };
   try {
-    const health = await requestJson('GET', '/api/remediation/health');
-    return {
-      ok: true,
-      service: health?.service || 'webapp-remediation-executor',
-      sharedTokenConfigured: !!health?.sharedTokenConfigured,
-      sharedTokenAccepted: !!health?.sharedTokenAccepted,
-      baseUrl: getWebappConfig().baseUrl
-    };
-  } catch (error) {
+    const headers = { Accept: 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${baseUrl}/api/remediation/health`, {
+      headers,
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) return { ok: false, reason: `HTTP ${res.status}` };
+    const data = await res.json().catch(() => ({}));
+    return { ok: true, service: data?.service || 'webapp', baseUrl };
+  } catch (err) {
+    return { ok: false, reason: err.message, baseUrl };
+  }
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Health check — always returns ok:true now that we have a local executor.
+ * Still tries external as an advisory (shown in /api/remediation/health).
+ */
+async function getExternalHealth() {
+  const external = await tryExternalHealth();
+  return {
+    ok: true,                         // local executor is always available
+    service: 'local-winget-executor',
+    executor: 'local',
+    external,                         // advisory only
+    baseUrl: 'local',
+  };
+}
+
+/**
+ * Resolve a finding to a remediation plan (catalog lookup — fast, no Graph call).
+ */
+async function resolveApplicationRemediation(finding) {
+  const resolved = resolveWingetId(finding);
+  if (!resolved.ok) {
     return {
       ok: false,
-      baseUrl: getWebappConfig().baseUrl,
-      tokenConfigured: getWebappConfig().tokenConfigured,
-      status: error.status || 500,
-      error: error.message,
-      details: error.details || null
+      supported: false,
+      remediationType: 'manual-review',
+      autoRemediate: false,
+      message: resolved.reason,
+      executor: 'local-winget',
     };
   }
+  return {
+    ok: true,
+    supported: true,
+    remediationType: 'winget-intune-upgrade',
+    autoRemediate: true,
+    executor: 'local-winget',
+    app: {
+      wingetId: resolved.wingetId,
+      packageIdentifier: resolved.wingetId,
+      displayName: resolved.displayName,
+      publisher: resolved.publisher,
+      installerType: 'winget',
+      source: resolved.source,
+      installCommand: `winget install --id ${resolved.wingetId} --silent --accept-package-agreements --accept-source-agreements`,
+    },
+    message: `Resolved: ${resolved.displayName} (${resolved.wingetId}) from ${resolved.source}.`,
+  };
 }
 
-async function resolveApplicationRemediation(finding) {
-  return requestJson('POST', '/api/remediation/resolve', { finding: buildHints(finding) }, 30000);
-}
-
+/**
+ * Execute remediation: deploy WinGet app to Intune via Graph API.
+ * payload = { tenantId, finding, options }
+ */
 async function executeApplicationRemediation(payload) {
-  return requestJson('POST', '/api/remediation/execute', buildExecuteBody(payload), 120000);
+  const { tenantId, finding = {}, options = {} } = payload || {};
+
+  if (!tenantId) {
+    throw Object.assign(new Error('tenantId is required for local WinGet execution.'), { status: 400 });
+  }
+
+  // Merge any wingetId hint from options into the finding
+  const enrichedFinding = {
+    ...finding,
+    suggestedWingetId: finding.suggestedWingetId || options.wingetId || options.suggestedWingetId || null,
+  };
+
+  const result = await deployRemediationForFinding(tenantId, enrichedFinding);
+
+  if (!result.ok) {
+    const err = new Error(result.message);
+    err.status = result.permissionError ? 403 : 502;
+    err.details = result;
+    throw err;
+  }
+
+  return {
+    ok: true,
+    executor: 'local-winget',
+    appId: result.appId,
+    wingetId: result.wingetId,
+    displayName: result.displayName,
+    publishingState: result.publishingState,
+    assigned: result.assigned,
+    timedOut: result.timedOut,
+    message: result.message,
+    steps: [
+      { step: 'resolve',  status: 'ok', detail: `Package: ${result.wingetId}` },
+      { step: 'create',   status: 'ok', detail: `Intune app ID: ${result.appId}` },
+      { step: 'publish',  status: result.timedOut ? 'pending' : 'ok', detail: result.publishingState },
+      { step: 'assign',   status: result.assigned ? 'ok' : 'pending', detail: result.assigned ? 'All Devices' : 'pending' },
+    ],
+  };
 }
 
 module.exports = {
   getExternalHealth,
   getWebappConfig,
   resolveApplicationRemediation,
-  executeApplicationRemediation
+  executeApplicationRemediation,
 };

@@ -333,6 +333,114 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── PRODUCT DASHBOARD MOCKUP ── */}
+      <section style={{ padding: '0 24px 72px' }}>
+        <div style={{ maxWidth: 980, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1.5, color: ORANGE, textTransform: 'uppercase', marginBottom: 10 }}>Product Preview</p>
+            <h2 style={{ fontSize: 'clamp(20px, 3.5vw, 28px)', fontWeight: 800, letterSpacing: -0.5, color: 'rgba(255,255,255,0.90)' }}>
+              Everything in one view — threats, users, actions.
+            </h2>
+          </div>
+          {/* Browser chrome wrapper */}
+          <div style={{
+            borderRadius: 14, overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.09)',
+            boxShadow: '0 40px 100px rgba(0,0,0,0.65), 0 0 0 1px rgba(232,120,74,0.08)',
+          }}>
+            {/* Title bar */}
+            <div style={{ background: '#13131a', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              {['#FF5F57','#FEBC2E','#28C840'].map(c => <div key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />)}
+              <div style={{ flex: 1, margin: '0 12px', background: 'rgba(255,255,255,0.05)', borderRadius: 6, height: 22, display: 'flex', alignItems: 'center', paddingLeft: 10, gap: 6 }}>
+                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.18)' }}>🔒</span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'rgba(255,255,255,0.25)' }}>identitymonitor.modernendpoint.tech/dashboard</span>
+              </div>
+            </div>
+            {/* App shell */}
+            <div style={{ display: 'flex', background: '#0D0D14', minHeight: 420 }}>
+              {/* Sidebar */}
+              <div style={{ width: 54, background: '#0a0a10', borderRight: '1px solid rgba(255,255,255,0.06)', padding: '12px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 7, background: 'linear-gradient(135deg, #E8784A, #F5A462)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 900, color: '#fff' }}>IM</span>
+                </div>
+                {[
+                  { icon: 'ti-layout-dashboard', active: true },
+                  { icon: 'ti-users',             active: false },
+                  { icon: 'ti-shield-exclamation',active: false },
+                  { icon: 'ti-virus',             active: false },
+                  { icon: 'ti-lock',              active: false },
+                  { icon: 'ti-settings',          active: false },
+                ].map((item, i) => (
+                  <div key={i} style={{
+                    width: 36, height: 36, borderRadius: 8,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: item.active ? 'rgba(232,120,74,0.15)' : 'transparent',
+                    border: item.active ? '1px solid rgba(232,120,74,0.30)' : '1px solid transparent',
+                    color: item.active ? ORANGE : 'rgba(255,255,255,0.25)',
+                    fontSize: 16,
+                  }}>
+                    <i className={`ti ${item.icon}`} />
+                  </div>
+                ))}
+              </div>
+              {/* Main content */}
+              <div style={{ flex: 1, padding: '18px 20px', overflow: 'hidden' }}>
+                {/* Page header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: -0.3, color: 'rgba(255,255,255,0.95)' }}>Dashboard</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>contoso.onmicrosoft.com · Last scan 47s ago</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="lp-live-wrap" style={{ width: 8, height: 8 }}><span className="lp-live-dot" style={{ width: 6, height: 6 }} /></span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#00C98B', letterSpacing: 0.5 }}>LIVE</span>
+                  </div>
+                </div>
+                {/* KPI row */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 18 }}>
+                  {[
+                    { n: '2',  l: 'Critical',  c: '#FF3D6B', icon: 'ti-alert-triangle' },
+                    { n: '3',  l: 'High Risk', c: '#FF7A3D', icon: 'ti-flame'          },
+                    { n: '8',  l: 'Admins',    c: '#A78BFA', icon: 'ti-crown'          },
+                    { n: '12', l: 'CVEs Found',c: ORANGE,    icon: 'ti-virus'          },
+                  ].map(s => (
+                    <div key={s.l} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '12px 10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                        <i className={`ti ${s.icon}`} style={{ fontSize: 13, color: s.c }} />
+                        <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.32)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.l}</span>
+                      </div>
+                      <div style={{ fontSize: 26, fontWeight: 900, color: s.c, lineHeight: 1, letterSpacing: -0.5 }}>{s.n}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Alerts list */}
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.60)' }}>Active Threats</span>
+                    <span style={{ fontSize: 10, color: ORANGE, fontWeight: 600 }}>View all →</span>
+                  </div>
+                  {[
+                    { sev: 'CRITICAL', c: '#FF3D6B', bg: 'rgba(255,61,107,0.08)', user: 'alex.johnson@contoso.com', alert: 'Impossible Travel · Tel Aviv → New York · 0.7h gap', time: '2m ago',  action: 'Revoke Session' },
+                    { sev: 'HIGH',     c: '#FF7A3D', bg: 'rgba(255,122,61,0.06)', user: 'sarah.mitchell@contoso.com', alert: 'New Country Login · North Korea · Intune Admin',      time: '14m ago', action: 'Disable Account' },
+                    { sev: 'HIGH',     c: '#FF7A3D', bg: 'rgba(255,122,61,0.06)', user: 'david.cohen@contoso.com',   alert: 'Outdated Chrome · CVE-2024-7971 · 97 devices affected', time: '1h ago',  action: 'Deploy Update' },
+                  ].map(r => (
+                    <div key={r.user} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)', background: r.bg }}>
+                      <span style={{ fontSize: 8, fontWeight: 800, color: r.c, padding: '2px 6px', borderRadius: 3, background: `${r.c}22`, fontFamily: 'monospace', whiteSpace: 'nowrap', flexShrink: 0 }}>{r.sev}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.75)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.user}</div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.alert}</div>
+                      </div>
+                      <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', whiteSpace: 'nowrap', marginRight: 8 }}>{r.time}</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: r.c, padding: '4px 10px', borderRadius: 5, border: `1px solid ${r.c}44`, whiteSpace: 'nowrap', flexShrink: 0, background: `${r.c}0f` }}>{r.action}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── SOCIAL PROOF BAR ── */}
       <section style={{ padding: '48px 24px 72px' }}>
         <div style={{
@@ -345,7 +453,7 @@ export default function LandingPage() {
         }}>
           {[
             { value: '60s',    label: 'Scan cycle',          icon: '⚡' },
-            { value: '$15',    label: 'Per month, flat',      icon: '💳' },
+            { value: '$29',    label: 'Per tenant/month',     icon: '💳' },
             { value: '1-tap',  label: 'Remediation',         icon: '👆' },
             { value: '100%',   label: 'Microsoft Graph API', icon: '🔗' },
             { value: '$0',     label: 'Free tier forever',   icon: '🎁' },

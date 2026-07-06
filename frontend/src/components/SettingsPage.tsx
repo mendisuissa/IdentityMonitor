@@ -163,17 +163,17 @@ export default function SettingsPage() {
 
   const trialText = useMemo(() => { const trial = settings.trialStatus; if (!trial) return '—'; if (trial.status === 'active') return 'Active subscription'; if (trial.status === 'trial') return `Free trial · ${trial.daysLeft} days left`; return 'Trial expired'; }, [settings.trialStatus]);
   const tabs: Array<{ id: Tab; label: string; icon: string }> = [
-    { id: 'trial', label: 'Plan & Trial', icon: '💳' },
-    { id: 'detection', label: 'Detection', icon: '🔎' },
-    { id: 'actions', label: 'Auto-Actions', icon: '⚡' },
-    { id: 'admins', label: 'Admins', icon: '👥' },
-    { id: 'notifications', label: 'Notifications', icon: '🔔' },
-    { id: 'automation', label: 'Automation & Approvals', icon: '🧠' },
-    { id: 'whitelist', label: 'Whitelist', icon: '✅' },
-    { id: 'hours', label: 'Business Hours', icon: '🕐' },
-    { id: 'siem', label: 'SIEM & Log Analytics', icon: '📡' },
-    { id: 'audit', label: 'Audit Log', icon: '📋' },
-    { id: 'playbooks', label: 'Playbooks', icon: '🤖' }
+    { id: 'trial', label: 'Plan & Trial', icon: 'ti-credit-card' },
+    { id: 'detection', label: 'Detection', icon: 'ti-radar' },
+    { id: 'actions', label: 'Auto-Actions', icon: 'ti-bolt' },
+    { id: 'admins', label: 'Admins', icon: 'ti-users' },
+    { id: 'notifications', label: 'Notifications', icon: 'ti-bell' },
+    { id: 'automation', label: 'Automation', icon: 'ti-circuit-switchboard' },
+    { id: 'whitelist', label: 'Whitelist', icon: 'ti-shield-check' },
+    { id: 'hours', label: 'Business Hours', icon: 'ti-clock' },
+    { id: 'siem', label: 'SIEM & Logs', icon: 'ti-database' },
+    { id: 'audit', label: 'Audit Log', icon: 'ti-file-search' },
+    { id: 'playbooks', label: 'Playbooks', icon: 'ti-list-check' }
   ];
 
   if (loading) return <div className="loading-state"><div className="loading-spinner" /><div className="loading-text">Loading settings…</div></div>;
@@ -181,7 +181,7 @@ export default function SettingsPage() {
   return (
     <div>
       <div className="page-header"><div><div className="page-title">Settings</div><div className="page-subtitle">Per-tenant configuration — detection rules, notifications, admins, approvals, routing, runbooks, and SIEM integrations</div></div>{saved && <div className="role-tag">{saved}</div>}</div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 18, borderBottom: '1px solid var(--navy-border)', overflowX: 'auto', paddingBottom: 2 }}>{tabs.map(t => <button key={t.id} onClick={() => { setTab(t.id); if (t.id === 'audit') loadAudit(); if (t.id === 'notifications') loadInbox(); }} className={`btn btn-sm ${tab === t.id ? 'btn-primary' : 'btn-ghost'}`} style={{ whiteSpace: 'nowrap' }}>{t.icon} {t.label}</button>)}</div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 18, borderBottom: '1px solid var(--navy-border)', overflowX: 'auto', paddingBottom: 2 }}>{tabs.map(t => <button key={t.id} onClick={() => { setTab(t.id); if (t.id === 'audit') loadAudit(); if (t.id === 'notifications') loadInbox(); }} className={`btn btn-sm ${tab === t.id ? 'btn-primary' : 'btn-ghost'}`} style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}><i className={`ti ${t.icon}`} style={{ fontSize: 13 }}></i>{t.label}</button>)}</div>
 
       {tab === 'trial' && <div className="grid-two-responsive"><div className="card"><div className="card-header"><div className="card-title">Current plan</div></div><div style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>{trialText}</div>{settings.trialStatus?.status !== 'active' && (
               <div className="text-muted" style={{ fontSize: 13 }}>

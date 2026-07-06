@@ -184,81 +184,48 @@ router.post('/plan', async (req, res) => {
     }
 
     if (classification.type === 'application') {
-      // Plan step: health-check only — fast (~1s). Full WinGet resolve happens during Execute.
-      // Doing a full resolve here causes 30s+ timeouts due to deep package lookups.
-      const externalHealth = await getExternalHealth();
-      if (externalHealth.ok) {
-        const plan = {
-          executor: 'webapp',
-          supported: true,
-          remediationType: 'winget-intune-upgrade',
-          autoRemediate: true,
-          app: null,
-          candidates: [],
-          checkedSources: [],
-          message: 'External remediation service is connected. Click Execute to resolve the package and deploy via Intune.',
-          executionMode: 'webapp-live',
-          statusCard: {
-            code: 'webapp-ready',
-            label: 'webapp remediation',
-            tone: 'success',
-            message: 'Webapp is connected — package resolution and Intune deployment will happen on Execute.'
-          },
-          executionPath: {
-            classification: 'application',
-            family: 'software',
-            executor: 'webapp',
-            status: 'ready',
-            route: 'Application → Webapp external remediation'
-          },
-          external: { connected: true, service: externalHealth.service || 'webapp-remediation-executor', baseUrl: externalHealth.baseUrl }
-        };
-        return res.json({ ok: true, tenantId, classification, finding, plan });
-      }
-      // Webapp unreachable
-      console.error('[Remediation/plan] webapp health failed:', externalHealth.error, '| status:', externalHealth.status);
-      return res.json({
-        ok: true,
-        tenantId,
-        classification,
-        finding: enrichedFinding,
-        plan: {
-          executor: 'webapp',
-          supported: false,
-          remediationType: 'manual-review',
-          autoRemediate: false,
-          app: null,
-          candidates: [],
-          checkedSources: [],
-          message: `External remediation service unreachable: ${externalHealth.error || 'health check failed'}`,
-          executionMode: 'guided-manual',
-          statusCard: {
-            code: 'no-external-service',
-            label: 'manual remediation',
-            tone: 'warning',
-            message: `Webapp unreachable (HTTP ${externalHealth.status || '?'}): ${externalHealth.error || 'health check failed'}`
-          },
-          executionPath: {
-            classification: 'application',
-            family: 'software',
-            executor: 'guided-manual',
-            status: 'manual',
-            route: 'Application -> Manual remediation'
-          },
+      // Fast catalog resolve — no Graph calls at plan time, only at execute time
+      const resolved = await resolveApplicationRemediation(enrichedFinding);
+      const isResolved = resolved.ok && resolved.supported;
+      const plan = {
+        executor: 'local-winget',
+        supported: isResolved,
+        remediationType: isResolved ? 'winget-intune-upgrade' : 'manual-review',
+        autoRemediate: isResolved,
+        app: resolved.app || null,
+        candidates: [],
+        checkedSources: ['local-catalog'],
+        message: resolved.message || (isResolved
+          ? `Ready to deploy "${resolved.app?.displayName}" (${resolved.app?.wingetId}) via Intune WinGet.`
+          : 'No WinGet package found. Manual remediation required.'),
+        executionMode: isResolved ? 'local-winget-live' : 'guided-manual',
+        statusCard: {
+          code: isResolved ? 'local-winget-ready' : 'no-winget-package',
+          label: isResolved ? 'WinGet · ready' : 'manual remediation',
+          tone: isResolved ? 'success' : 'warning',
+          message: isResolved
+            ? `Package resolved: ${resolved.app?.wingetId}. Click Execute to deploy via Intune.`
+            : resolved.message || 'No matching WinGet package found for this CVE.',
+        },
+        executionPath: {
+          classification: 'application',
+          family: 'software',
+          executor: isResolved ? 'local-winget' : 'guided-manual',
+          status: isResolved ? 'ready' : 'manual',
+          route: isResolved
+            ? `Application → WinGet (${resolved.app?.wingetId}) → Intune All Devices`
+            : 'Application → Manual remediation',
+        },
+        ...(!isResolved && {
           manualSteps: [
             'Identify all affected devices using the Exposed devices tab.',
             'Apply the vendor-recommended update or patch on each affected device.',
             'Verify remediation by re-running a Defender scan.',
             'Document the action taken and mark the case as resolved.'
           ],
-          external: {
-            connected: false,
-            status: externalHealth.status || 503,
-            details: { message: externalHealth.error }
-          }
-        },
-        warning: 'External remediation service is unreachable — showing manual steps.'
-      });
+        }),
+      };
+      return res.json({ ok: true, tenantId, classification, finding: enrichedFinding, plan });
     }
 
     const plan = await planNativeRemediation({ classification, finding: enrichedFinding, options });
@@ -295,48 +262,24 @@ router.post('/execute', async (req, res) => {
       }).catch(() => {});
     }
 
-    if (plan.executor === 'webapp' || classification.type === 'application') {
+    if (plan.executor === 'local-winget' || plan.executor === 'webapp' || classification.type === 'application') {
       try {
         const result = await executeApplicationRemediation({ tenantId, approvalId, finding: enrichedFinding, devices, plan, options });
-
-        // If webapp fell back to Chocolatey (not a WinGet/Intune live deploy), reject it —
-        // Chocolatey is not supported for Intune production deployments.
-        const usedChocolatey = result?.app?.source === 'chocolatey' ||
-          String(result?.app?.installCommand || '').includes('choco ');
-        if (usedChocolatey && result?.mode !== 'live-winget-intune') {
-          const failResult = {
-            ...result,
-            ok: false,
-            status: 'unsupported-installer',
-            message: 'Chocolatey packages are not supported for Intune deployment. ' +
-              'This vulnerability should be resolved via Windows Update or a WinGet package. ' +
-              'Check that the correct product was identified and try again.',
-          };
-          saveHistory('failed', failResult.message, failResult);
-          return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'webapp', result: failResult });
-        }
-
         const ok = result?.ok !== false && result?.status !== 'failed';
         saveHistory(ok ? 'success' : 'failed', result?.message || '', result);
-        return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'webapp', result });
+        return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'local-winget', result });
       } catch (execError) {
-        const webappDebug = execError?.details?.debug || null;
-        const webappResolution = execError?.details?.resolution || null;
-        console.error('[Remediation/execute] webapp call failed:', execError?.message, execError?.status,
-          'debug:', JSON.stringify(webappDebug || {}),
-          'resolution:', JSON.stringify(webappResolution || {}));
-        const isNotSupported = execError?.status === 400;
+        console.error('[Remediation/execute] local-winget failed:', execError?.message, execError?.status);
+        const isNotSupported = execError?.status === 400 || execError?.status === 403;
         const failResult = {
           supported: false,
-          status: isNotSupported ? 'unsupported-application' : 'external-error',
+          status: isNotSupported ? 'unsupported-application' : 'execution-error',
           executionMode: 'guided-manual',
-          message: isNotSupported
-            ? 'No automated remediation path was found for this application. Use the bundle or manual steps below.'
-            : (execError?.message || 'The external remediation service returned an unexpected error.'),
-          debug: webappDebug,
+          message: execError?.message || 'Remediation execution failed.',
+          details: execError?.details || null,
         };
         saveHistory('failed', failResult.message, failResult);
-        return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'webapp', result: failResult });
+        return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'local-winget', result: failResult });
       }
     }
 

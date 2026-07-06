@@ -61,6 +61,45 @@ async function getClientForTenant(tenantId) {
   return getClientFromToken(data.access_token);
 }
 
+// ─── Return raw access token string for direct fetch() calls ────────────────
+async function getAccessTokenForTenant(tenantId) {
+  const CLIENT_ID     = process.env.CLIENT_ID;
+  const CLIENT_SECRET = process.env.CLIENT_SECRET;
+
+  if (!CLIENT_ID || !CLIENT_SECRET) {
+    throw new Error('CLIENT_ID and CLIENT_SECRET must be configured');
+  }
+
+  const cached = tokenCache.get(tenantId);
+  if (cached && cached.expiresAt > Date.now() + 60000) {
+    return cached.accessToken;
+  }
+
+  const tokenRes = await fetch(
+    'https://login.microsoftonline.com/' + tenantId + '/oauth2/v2.0/token',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id:     CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        scope:         'https://graph.microsoft.com/.default',
+        grant_type:    'client_credentials'
+      }).toString()
+    }
+  );
+
+  const data = await tokenRes.json();
+  if (data.error) throw new Error(data.error_description || data.error);
+
+  tokenCache.set(tenantId, {
+    accessToken: data.access_token,
+    expiresAt:   Date.now() + (data.expires_in * 1000)
+  });
+
+  return data.access_token;
+}
+
 // ─── Clear cached token so new permissions take effect after admin consent ───
 function clearTokenCache(tenantId) {
   if (tenantId) {
@@ -329,6 +368,7 @@ async function getDeviceActions(tenantId) {
 module.exports = {
   getClientForTenant,
   getClientFromToken,
+  getAccessTokenForTenant,
   getPrivilegedUsers,
   getUserSignIns,
   getUserAuditActions,

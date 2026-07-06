@@ -178,42 +178,16 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       gap:16px;
     }
     .remediation-shell *{ box-sizing:border-box; }
-    .remediation-hero,
     .remediation-banner,
     .remediation-filters,
     .remediation-list-card,
     .remediation-detail-card,
     .remediation-stat-card,
     .card-block{
-      background:var(--navy-900);
+      background:var(--navy-800);
       border:1px solid var(--navy-border);
-      border-radius:18px;
-      box-shadow:0 4px 24px rgba(0,0,0,.22);
-    }
-    .remediation-hero{
-      display:flex;
-      justify-content:space-between;
-      gap:20px;
-      padding:22px 20px;
-      align-items:flex-start;
-    }
-    .remediation-breadcrumb{
-      color:var(--text-accent);
-      font-size:12px;
-      font-weight:700;
-      margin-bottom:8px;
-    }
-    .remediation-hero h1{
-      margin:0 0 8px;
-      font-size:22px;
-      line-height:1.15;
-      color:var(--text-primary);
-    }
-    .remediation-hero p{
-      margin:0 0 14px;
-      color:var(--text-secondary);
-      max-width:760px;
-      line-height:1.55;
+      border-radius:var(--radius-xl);
+      box-shadow:0 2px 12px rgba(0,0,0,.18);
     }
     .remediation-tenant-line{
       display:flex;
@@ -221,8 +195,8 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       gap:16px;
       color:var(--text-secondary);
       font-size:13px;
+      margin-top:4px;
     }
-    .remediation-hero-actions{ display:flex; align-items:flex-start; }
     .btn{
       border:none;
       border-radius:12px;
@@ -394,6 +368,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       position:sticky;
       top:16px;
       min-height:560px;
+      background:var(--navy-800);
+      border:1px solid var(--navy-border);
+      border-radius:var(--radius-xl);
     }
     .list-card-header h3{
       margin:0 0 6px;
@@ -416,22 +393,21 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     .finding-card{
       width:100%;
       text-align:left;
-      padding:14px;
-      background:var(--navy-800);
+      padding:12px 14px;
+      background:rgba(255,255,255,0.03);
       border:1px solid var(--navy-border);
-      border-radius:16px;
+      border-radius:var(--radius-lg);
       color:var(--text-primary);
       cursor:pointer;
       transition:.18s ease;
     }
     .finding-card:hover{
       border-color:var(--navy-border-light);
-      transform:translateY(-1px);
+      background:rgba(255,255,255,0.05);
     }
     .finding-card.active{
       border-color:var(--indigo);
-      box-shadow:0 0 0 1px var(--indigo-glow) inset;
-      background:var(--navy-700);
+      background:rgba(232,120,74,0.06);
     }
     .finding-card-topline,
     .finding-card-footer{
@@ -511,7 +487,7 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     }
     .remediation-detail-card{
       padding:18px;
-      min-height:720px;
+      min-height:400px;
     }
     .detail-header{
       display:flex;
@@ -1343,11 +1319,10 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     <>
       <style>{componentStyles}</style>
       <div className="remediation-shell">
-      <section className="remediation-hero">
+      <div className="page-header">
         <div>
-          <div className="remediation-breadcrumb">Defender-informed remediation workspace</div>
-          <h1>Vulnerability Remediation</h1>
-          <p>Plan and execute remediation paths for software and platform exposure with a product view that is closer to Defender.</p>
+          <div className="page-title">Vulnerability Remediation</div>
+          <div className="page-subtitle">Plan and execute remediation paths for software and platform exposure</div>
           <div className="remediation-tenant-line">
             <div>Active tenant: <strong>{tenantName || tenantId || 'Current connected tenant'}</strong></div>
             {tenantConfig ? <div>Defender: <strong>{tenantConfig.defenderEnabled ? 'Enabled' : 'Disabled'}</strong></div> : null}
@@ -1355,19 +1330,18 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
             {cacheRefreshedAt && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Last scan: {new Date(cacheRefreshedAt).toLocaleString()}</div>}
           </div>
         </div>
-        <div className="remediation-hero-actions">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
-            className="btn btn-secondary"
+            className="btn btn-ghost btn-sm"
             onClick={handleRescan}
             disabled={rescanLoading || loadingFindings}
-            style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
             title="Force a fresh pull from Microsoft Defender (bypasses 5-min cache)"
           >
-            <span style={{ display: 'inline-block', animation: rescanLoading ? 'spin 1s linear infinite' : 'none' }}>⟳</span>
+            <i className={`ti ti-refresh${rescanLoading ? ' spin' : ''}`} style={{ fontSize: 13, marginRight: 4 }}></i>
             {rescanLoading ? 'Scanning…' : 'Re-scan CVEs'}
           </button>
         </div>
-      </section>
+      </div>
 
       {loadingFindings && (
         <div className="remediation-loading-bar">
@@ -1377,25 +1351,45 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         </div>
       )}
 
-      <section className="remediation-stats-grid">
-        <div className="remediation-stat-card"><span>Findings in scope</span><strong>{shownFindings}</strong></div>
-        <div className="remediation-stat-card"><span>Remediation required</span><strong>{remediationRequiredCount}</strong></div>
-        <div className="remediation-stat-card"><span>Exposed devices</span><strong>{exposedCount}</strong></div>
-        <div className="remediation-stat-card"><span>High / Critical</span><strong>{highOrCriticalCount}</strong></div>
-      </section>
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+        <div className="stat-card" onClick={() => {}} style={{ cursor: 'default' }}>
+          <i className="ti ti-bug stat-icon" aria-hidden="true"></i>
+          <div className="stat-value">{shownFindings}</div>
+          <div className="stat-label">Findings in scope</div>
+        </div>
+        <div className="stat-card" onClick={() => {}} style={{ cursor: 'default' }}>
+          <i className="ti ti-tool stat-icon" aria-hidden="true"></i>
+          <div className="stat-value">{remediationRequiredCount}</div>
+          <div className="stat-label">Remediation required</div>
+        </div>
+        <div className="stat-card" onClick={() => {}} style={{ cursor: 'default' }}>
+          <i className="ti ti-device-laptop stat-icon" aria-hidden="true"></i>
+          <div className="stat-value">{exposedCount}</div>
+          <div className="stat-label">Exposed devices</div>
+        </div>
+        <div className="stat-card" onClick={() => {}} style={{ cursor: 'default' }}>
+          <i className="ti ti-alert-triangle stat-icon" aria-hidden="true"></i>
+          <div className="stat-value">{highOrCriticalCount}</div>
+          <div className="stat-label">High / Critical</div>
+        </div>
+      </div>
 
       <div className="remediation-main-tabs">
         <button className={mainTab === 'vulnerabilities' ? 'active' : ''} onClick={() => setMainTab('vulnerabilities')}>
-          Vulnerabilities (CVEs) {findings.length > 0 ? `· ${findings.length}` : ''}
+          <i className="ti ti-virus" style={{ marginRight: 5 }}></i>
+          Vulnerabilities {findings.length > 0 ? `· ${findings.length}` : ''}
         </button>
         <button className={mainTab === 'recommendations' ? 'active' : ''} onClick={() => setMainTab('recommendations')}>
-          Security Recommendations {recommendations.length > 0 ? `· ${recommendations.length}` : ''}
+          <i className="ti ti-list-check" style={{ marginRight: 5 }}></i>
+          Recommendations {recommendations.length > 0 ? `· ${recommendations.length}` : ''}
         </button>
         <button className={mainTab === 'history' ? 'active' : ''} onClick={() => setMainTab('history')}>
-          📜 History {historyRecords.length > 0 ? `· ${historyRecords.length}` : ''}
+          <i className="ti ti-clock-hour-4" style={{ marginRight: 5 }}></i>
+          History {historyRecords.length > 0 ? `· ${historyRecords.length}` : ''}
         </button>
         <button className={mainTab === 'auto' ? 'active' : ''} onClick={() => setMainTab('auto')}>
-          🤖 Auto-Remediation {autoStatus?.enabled ? '· ON' : ''}
+          <i className="ti ti-cpu" style={{ marginRight: 5 }}></i>
+          Auto-Remediation {autoStatus?.enabled ? '· ON' : ''}
         </button>
       </div>
 
@@ -1838,17 +1832,18 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
         </aside>
 
         <article className="remediation-detail-card">
-          {!selectedFinding ? <div className="finding-empty">Choose a vulnerability to review details.</div> : (
+          {!selectedFinding ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320, gap: 12, color: 'var(--text-secondary)' }}>
+              <i className="ti ti-shield-search" style={{ fontSize: 40, opacity: 0.25 }} />
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', opacity: 0.5 }}>No vulnerability selected</div>
+              <div style={{ fontSize: 13, opacity: 0.5 }}>Pick a CVE from the list to see details and plan remediation.</div>
+            </div>
+          ) : (
             <>
               <div className="detail-header">
                 <div>
                   <h2>{selectedFinding.cveId || selectedFinding.id || 'Selected vulnerability'}</h2>
                   <div className="detail-status-line"><span className="detail-status-dot" /> {selectedFinding.status || 'Remediation required'}</div>
-                </div>
-                <div className="detail-header-actions">
-                  <button className={`chip-button ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Vulnerability details</button>
-                  <button className={`chip-button ${activeTab === 'devices' ? 'active' : ''}`} onClick={() => setActiveTab('devices')}>Exposed devices</button>
-                  <button className={`chip-button ${activeTab === 'plan' ? 'active' : ''}`} onClick={() => setActiveTab('plan')}>Remediation plan</button>
                 </div>
               </div>
 

@@ -115,82 +115,86 @@ function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, on
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         {/* Logo */}
         <div className="sidebar-logo">
-          <img src="/logo.svg" alt="IdentityMonitor" className="logo-icon" style={{ width: 32, height: 32, objectFit: 'contain' }} />
+          <div className="logo-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="0" y="0" width="7" height="7" fill="white" opacity="0.95"/>
+              <rect x="9" y="0" width="7" height="7" fill="white" opacity="0.6"/>
+              <rect x="0" y="9" width="7" height="7" fill="white" opacity="0.6"/>
+              <rect x="9" y="9" width="7" height="7" fill="white" opacity="0.95"/>
+            </svg>
+          </div>
           <div>
             <div className="logo-text">IdentityMonitor</div>
-            <div className="logo-sub">Security Operations</div>
+            <div className="logo-sub">by ModernEndpoint</div>
           </div>
         </div>
 
         {/* Nav sections */}
         <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 8 }} onClick={onClose}>
           <div className="nav-section">
-            <div className="nav-label">Overview</div>
+            <div className="nav-label">Core</div>
             <NavLink to="/" end className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>⊞</span> Dashboard
+              <i className="ti ti-layout-dashboard nav-icon" aria-hidden="true"></i> Dashboard
             </NavLink>
             <NavLink to="/alerts" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>⚡</span> Alerts
+              <i className="ti ti-bell nav-icon" aria-hidden="true"></i> Alerts
               {newAlertCount > 0 && <span className="nav-badge">{newAlertCount}</span>}
             </NavLink>
             <NavLink to="/cases" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>📋</span> Case Board
+              <i className="ti ti-clipboard-list nav-icon" aria-hidden="true"></i> Case Board
             </NavLink>
             <NavLink to="/users" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>👥</span> Exposure
+              <i className="ti ti-shield-half nav-icon" aria-hidden="true"></i> Exposure
             </NavLink>
           </div>
 
           <div className="nav-section">
-            <div className="nav-label">Security</div>
+            <div className="nav-label">Telemetry</div>
             <NavLink to="/signins" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>🔍</span> Sign-in Activity
+              <i className="ti ti-login nav-icon" aria-hidden="true"></i> Sign-in Activity
             </NavLink>
             <NavLink to="/remediation" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>🛠️</span> Remediation
+              <i className="ti ti-tool nav-icon" aria-hidden="true"></i> Remediation
             </NavLink>
             <NavLink to="/reports" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>📊</span> Reports
+              <i className="ti ti-chart-line nav-icon" aria-hidden="true"></i> Reports
             </NavLink>
             <NavLink to="/audit" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>📜</span> Audit Center
+              <i className="ti ti-file-search nav-icon" aria-hidden="true"></i> Audit Center
             </NavLink>
           </div>
 
           <div className="nav-section">
-            <div className="nav-label">Management</div>
+            <div className="nav-label">Config</div>
+            <NavLink to="/identity" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+              <i className="ti ti-lock-access nav-icon" aria-hidden="true"></i> Cond. Access
+            </NavLink>
             <NavLink to="/ops" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>🏢</span> Tenant Ops
+              <i className="ti ti-building nav-icon" aria-hidden="true"></i> Tenant Ops
             </NavLink>
             <NavLink to="/msp" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>🌐</span> MSP Fleet
-            </NavLink>
-            <NavLink to="/identity" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>🔒</span> Cond. Access
+              <i className="ti ti-users nav-icon" aria-hidden="true"></i> MSP Fleet
             </NavLink>
             <NavLink to="/settings" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>⚙️</span> Settings
+              <i className="ti ti-settings nav-icon" aria-hidden="true"></i> Settings
             </NavLink>
             <NavLink to="/billing" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-              <span>💳</span> Billing
+              <i className="ti ti-credit-card nav-icon" aria-hidden="true"></i> Billing
             </NavLink>
           </div>
         </div>
 
         {/* Footer */}
         <div className="sidebar-footer">
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             {!mockMode && (
-              <button className="btn btn-primary btn-sm" onClick={onScan} disabled={scanLoading} style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}>
-                {scanLoading ? <><span className="spin">⟳</span> Scanning...</> : '⟳ Run Scan'}
+              <button className="btn btn-primary btn-sm" onClick={onScan} disabled={scanLoading} style={{ flex: 1, justifyContent: 'center', fontSize: 11.5 }}>
+                <i className="ti ti-refresh" style={{ fontSize: 13 }}></i>
+                {scanLoading ? ' Scanning…' : ' Run Scan'}
               </button>
             )}
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setDrawerOpen(v => !v)}
-              style={{ position: 'relative', flexShrink: 0 }}
-            >
-              🔔
+            <button className="btn btn-ghost btn-sm" onClick={() => setDrawerOpen(v => !v)} style={{ position: 'relative', flexShrink: 0 }}>
+              <i className="ti ti-bell" style={{ fontSize: 15 }}></i>
               {unread > 0 && (
                 <span className="nav-badge" style={{ position: 'absolute', top: -4, right: -4, minWidth: 16, padding: '0 4px', fontSize: 9 }}>
                   {unread}
@@ -200,19 +204,21 @@ function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, on
           </div>
 
           {user ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div className="sidebar-avatar">
-                {(user.userName || user.userEmail || '?').charAt(0).toUpperCase()}
+            <div className="sidebar-tenant-pill">
+              <div className="sidebar-tenant-avatar">
+                {(user.tenantName || user.userEmail || '?').charAt(0).toUpperCase()}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.userName}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.userEmail}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.tenantName || user.userEmail}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>Pro plan</div>
               </div>
-              <a href="/api/auth/logout" className="btn btn-ghost btn-sm" style={{ fontSize: 11, flexShrink: 0 }}>↩</a>
+              <a href="/api/auth/logout" className="btn btn-ghost btn-sm" style={{ fontSize: 11, flexShrink: 0, padding: '4px 6px' }} title="Sign out">
+                <i className="ti ti-logout" style={{ fontSize: 13 }}></i>
+              </a>
             </div>
           ) : (
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              {mockMode ? '🟡 Mock Mode' : 'Not signed in'}
+              {mockMode ? <><i className="ti ti-circle-dot" style={{ color: '#C4902A' }}></i> Mock Mode</> : 'Not signed in'}
             </div>
           )}
         </div>
@@ -261,6 +267,11 @@ function AppShell() {
   }, []);
 
   useEffect(() => {
+    if (import.meta.env.VITE_DEV_MOCK === 'true') {
+      setMockMode(true);
+      setAuthLoading(false);
+      return;
+    }
     fetch('/api/health', { credentials: 'include' })
       .then(r => r.json())
       .then(d => {

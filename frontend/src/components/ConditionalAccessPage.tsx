@@ -667,9 +667,9 @@ export default function ConditionalAccessPage() {
   };
 
   const tabs: Array<{ id: CaTab; label: string; icon: string }> = [
-    { id: 'policies', label: 'Policies', icon: '🛡️' },
-    { id: 'quickactions', label: 'Quick Actions', icon: '⚡' },
-    { id: 'locations', label: 'Named Locations', icon: '📍' },
+    { id: 'policies', label: 'Policies', icon: 'ti-shield-lock' },
+    { id: 'quickactions', label: 'Quick Actions', icon: 'ti-bolt' },
+    { id: 'locations', label: 'Named Locations', icon: 'ti-map-pin' },
   ];
 
   return (
@@ -751,9 +751,9 @@ export default function ConditionalAccessPage() {
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`btn btn-sm ${tab === t.id ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ whiteSpace: 'nowrap' }}
+            style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}
           >
-            {t.icon} {t.label}
+            <i className={`ti ${t.icon}`} style={{ fontSize: 13 }}></i>{t.label}
           </button>
         ))}
       </div>
