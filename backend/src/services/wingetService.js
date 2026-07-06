@@ -13,7 +13,7 @@ const { getAccessTokenForTenant } = require('./graphService');
 
 const WINGET_CATALOG = [
   { names: ['google chrome', 'chrome'],             publishers: ['google'],          wingetId: 'Google.Chrome',                displayName: 'Google Chrome',         publisher: 'Google' },
-  { names: ['microsoft edge', 'edge'],              publishers: ['microsoft'],       wingetId: 'Microsoft.Edge',               displayName: 'Microsoft Edge',        publisher: 'Microsoft' },
+  { names: ['microsoft edge', 'edge', 'edge_chromium-based', 'edge_chromium', 'msedge'], publishers: ['microsoft'],       wingetId: 'Microsoft.Edge',               displayName: 'Microsoft Edge',        publisher: 'Microsoft' },
   { names: ['mozilla firefox', 'firefox'],          publishers: ['mozilla'],         wingetId: 'Mozilla.Firefox',              displayName: 'Mozilla Firefox',       publisher: 'Mozilla' },
   { names: ['7-zip', '7zip'],                       publishers: ['igor pavlov'],     wingetId: '7zip.7zip',                    displayName: '7-Zip',                 publisher: 'Igor Pavlov' },
   { names: ['notepad++', 'notepad plus'],           publishers: [],                  wingetId: 'Notepad++.Notepad++',          displayName: 'Notepad++',             publisher: 'Notepad++ Team' },

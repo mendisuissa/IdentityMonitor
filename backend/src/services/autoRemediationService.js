@@ -321,6 +321,10 @@ async function runAutoRemediation() {
         for (const a of s.actions.slice(0, 5)) {
           const icon = a.status === 'success' ? '✅' : a.status === 'skipped' ? '⏭' : '❌';
           msg += `  ${icon} ${escMd(a.cveId)} · ${escMd(a.productName || a.category)}\n`;
+          if (a.status === 'failed' && a.message) {
+            const errSnippet = String(a.message).slice(0, 120);
+            msg += `     _${escMd(errSnippet)}_\n`;
+          }
         }
         if (s.actions.length > 5) msg += `  \\.\\.\\. and ${s.actions.length - 5} more\n`;
         msg += '\n';
