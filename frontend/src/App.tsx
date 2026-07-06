@@ -46,7 +46,7 @@ function NotificationDrawer({ open, items, onClose, onAck, onApprove, onReject, 
 }) {
   if (!open) return null;
   return (
-    <div style={{ position: 'fixed', top: 60, right: 16, width: 420, maxWidth: '92vw', maxHeight: '72vh', overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 16, boxShadow: '0 24px 48px rgba(0,0,0,0.4)', zIndex: 400 }}>
+    <div style={{ position: 'fixed', top: 60, right: 16, width: 420, maxWidth: '92vw', maxHeight: '72vh', overflowY: 'auto', background: '#13131f', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 14, padding: 16, boxShadow: '0 24px 64px rgba(0,0,0,0.75)', zIndex: 400 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 14 }}>Notification Center</div>
