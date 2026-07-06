@@ -16,6 +16,7 @@ import AuditCenterPage from './components/AuditCenterPage';
 import CaseBoardPage from './components/CaseBoardPage';
 import TenantOpsPage from './components/TenantOpsPage';
 import RemediationPage from './components/RemediationPage';
+import DeviceActionsPanel from './components/DeviceActionsPanel';
 import ConditionalAccessPage from './components/ConditionalAccessPage';
 import SuperAdminPage from './components/SuperAdminPage';
 import PricingPage from './components/PricingPage';
@@ -155,6 +156,9 @@ function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, on
             </NavLink>
             <NavLink to="/remediation" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
               <i className="ti ti-tool nav-icon" aria-hidden="true"></i> Remediation
+            </NavLink>
+            <NavLink to="/device-actions" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+              <i className="ti ti-device-desktop nav-icon" aria-hidden="true"></i> Device Actions
             </NavLink>
             <NavLink to="/reports" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
               <i className="ti ti-chart-line nav-icon" aria-hidden="true"></i> Reports
@@ -401,6 +405,7 @@ function AppShell() {
             <Route path="/login" element={<LoginPage onLogin={() => navigate('/')} />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/remediation" element={<RemediationPage />} />
+            <Route path="/device-actions" element={<DeviceActionsPanel />} />
             <Route path="/identity" element={<ConditionalAccessPage />} />
             <Route path="/ca" element={<Navigate to="/identity" replace />} />
             <Route path="/conditional-access" element={<Navigate to="/identity" replace />} />

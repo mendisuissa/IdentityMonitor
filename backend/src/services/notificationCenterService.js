@@ -57,16 +57,20 @@ function formatTitle(item) {
   return typeLabel;
 }
 
+function isGuidLike(s) {
+  return /[0-9a-f]{8}-[0-9a-f]{4}/i.test(String(s || ''));
+}
+
 function formatSubtitle(item) {
   const meta = item.metadata || {};
   const parts = [];
   const entity = inferEntityLabel(item);
-  if (entity) parts.push(entity);
+  if (entity && !isGuidLike(entity)) parts.push(entity);
   if (item.severity) parts.push(String(item.severity).toUpperCase());
   if (meta.currentStepLabel) parts.push(meta.currentStepLabel);
   if (meta.owner) parts.push(`Owner: ${meta.owner}`);
   const caseLabel = inferCaseLabel(item);
-  if (caseLabel) parts.push(caseLabel);
+  if (caseLabel && !isGuidLike(caseLabel)) parts.push(caseLabel);
   return parts.slice(0, 4).join(' • ');
 }
 
