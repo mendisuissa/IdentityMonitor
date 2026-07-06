@@ -16,8 +16,12 @@ router.get('/', requirePermission('alerts.view'), async (req, res) => {
     const tenantId = req.session?.tenant?.tenantId;
     const isMock = process.env.MOCK_MODE === 'true';
 
-    if (isMock || !tenantId) {
+    if (isMock) {
       return res.json(MOCK_DEVICE_ACTIONS);
+    }
+
+    if (!tenantId) {
+      return res.json([]);
     }
 
     // In live mode — try Intune via Graph API
@@ -31,12 +35,10 @@ router.get('/', requirePermission('alerts.view'), async (req, res) => {
       if (Array.isArray(actions) && actions.length > 0) {
         return res.json(actions);
       }
-      // No real actions found — return mock with a flag so frontend can show it
-      console.log('[DeviceActions] no real Intune actions found, returning mock');
-      return res.json(MOCK_DEVICE_ACTIONS.map(a => ({ ...a, _isMock: true })));
+      return res.json([]);
     } catch (err) {
       console.error('[DeviceActions] unexpected error:', err?.message);
-      return res.json(MOCK_DEVICE_ACTIONS.map(a => ({ ...a, _isMock: true })));
+      return res.json([]);
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
