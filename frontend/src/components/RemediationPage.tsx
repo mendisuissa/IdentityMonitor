@@ -1256,8 +1256,14 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       if (result?.status === 'in-progress') {
         const cveId = resolvedFinding?.cveId || resolvedFinding?.id || '';
         const productName = (resolvedFinding?.productName || resolvedFinding?.displayProductName || '').toLowerCase();
-        const executeTime = Date.now();
-        const pollStart = executeTime;
+        const pollStart = Date.now();
+        // Snapshot of existing record IDs before polling — ignore pre-existing records
+        let knownIds = new Set<string>();
+        api.getRemediationHistory({ limit: 50 }).then((h: any) => {
+          const recs: any[] = Array.isArray(h) ? h : (h?.records || h?.items || []);
+          knownIds = new Set(recs.map((r: any) => r.id || r.cveId + r.executedAt));
+        }).catch(() => {});
+
         const poll = setInterval(async () => {
           if (Date.now() - pollStart > 120_000) {
             clearInterval(poll);
@@ -1267,12 +1273,11 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
           try {
             const hist = await api.getRemediationHistory({ limit: 20 });
             const records: any[] = Array.isArray(hist) ? hist : (hist?.records || hist?.items || []);
-            // Match by cveId OR productName, and only records created after we fired the execute
             const match = records.find(r => {
               const done = r.status === 'success' || r.status === 'failed';
               if (!done) return false;
-              const recordTime = r.executedAt ? new Date(r.executedAt).getTime() : 0;
-              if (recordTime < executeTime - 5000) return false; // older than execute call
+              const rid = r.id || r.cveId + r.executedAt;
+              if (knownIds.has(rid)) return false; // pre-existing record
               if (cveId && r.cveId === cveId) return true;
               if (productName && (r.productName || '').toLowerCase() === productName) return true;
               return false;
