@@ -1251,6 +1251,26 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       });
       setExecResult(result);
       setActiveTab('plan');
+
+      // If deployment is in-progress (async), poll history until result arrives
+      if (result?.status === 'in-progress') {
+        const cveId = resolvedFinding?.cveId || resolvedFinding?.id || '';
+        const pollStart = Date.now();
+        const poll = setInterval(async () => {
+          if (Date.now() - pollStart > 120_000) { clearInterval(poll); return; }
+          try {
+            const hist = await api.getRemediationHistory({ limit: 10 });
+            const records = Array.isArray(hist) ? hist : (hist?.records || hist?.items || []);
+            const match = records.find((r: any) =>
+              r.cveId === cveId && (r.status === 'success' || r.status === 'failed')
+            );
+            if (match) {
+              clearInterval(poll);
+              setExecResult({ ok: match.status === 'success', status: match.status, message: match.message, result: match });
+            }
+          } catch { /* ignore */ }
+        }, 4000);
+      }
     } catch (err: any) {
       setError(err?.message || 'Execution failed.');
       setTechnicalError(err?.details ? JSON.stringify(err.details, null, 2) : '');
@@ -2182,12 +2202,13 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
                     const r = execResult?.result ?? execResult;
                     const ok = r?.ok !== false && r?.status !== 'external-not-connected' && r?.status !== 'failed';
                     const statusLabel = r?.status ?? (ok ? 'success' : 'failed');
-                    const msg = r?.message || r?.details?.message || (ok ? 'Remediation dispatched successfully.' : 'Execution failed — check the external service.');
+                    const isPending = r?.status === 'in-progress';
+                    const msg = isPending ? 'Deploying via Intune — waiting for result…' : (r?.message || r?.details?.message || (ok ? 'Remediation dispatched successfully.' : 'Execution failed — check the external service.'));
                     return (
-                      <div className={`detail-summary-block compact ${ok ? 'success-block' : ''}`} style={{ marginTop: 16, borderLeft: `3px solid ${ok ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)'}` }}>
+                      <div className={`detail-summary-block compact ${ok && !isPending ? 'success-block' : ''}`} style={{ marginTop: 16, borderLeft: `3px solid ${isPending ? '#f59e0b' : ok ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)'}` }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                          <span style={{ fontSize: 20 }}>{ok ? '✅' : '❌'}</span>
-                          <h4 style={{ margin: 0 }}>Execution {ok ? 'dispatched' : 'failed'}</h4>
+                          <span style={{ fontSize: 20 }}>{isPending ? '⏳' : ok ? '✅' : '❌'}</span>
+                          <h4 style={{ margin: 0 }}>Execution {isPending ? 'in progress…' : ok ? 'dispatched' : 'failed'}</h4>
                           {statusLabel && <span className="role-tag" style={{ marginLeft: 'auto', textTransform: 'capitalize' }}>{statusLabel.replace(/-/g, ' ')}</span>}
                         </div>
                         <p style={{ margin: 0, fontSize: 13 }}>{msg}</p>
