@@ -551,7 +551,10 @@ router.get('/permission-status', async (req, res) => {
 
   async function probe(url) {
     try {
-      const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token }, signal: controller.signal });
+      clearTimeout(timer);
       if (r.status === 403 || r.status === 401) return false;
       return true;
     } catch { return false; }
