@@ -288,7 +288,7 @@ router.get('/admin-consent', (req, res) => {
   if (!tenantId) return res.status(401).json({ ok: false, error: 'No authenticated tenant session was found.' });
 
   // Allow callers to pass ?returnTo=/identity so we redirect back after consent
-  const ALLOWED_RETURN_PATHS = ['/remediation', '/identity', '/settings', '/'];
+  const ALLOWED_RETURN_PATHS = ['/remediation', '/identity', '/settings', '/onboarding', '/'];
   const rawReturnTo = String(req.query.returnTo || '/remediation');
   const returnTo = ALLOWED_RETURN_PATHS.includes(rawReturnTo) ? rawReturnTo : '/remediation';
 
