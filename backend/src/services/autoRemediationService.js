@@ -39,6 +39,33 @@ const _seenCves = new Map();
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, unknown: 4 };
 function sevRank(s) { return SEV_ORDER[String(s || '').toLowerCase()] ?? 4; }
 
+// ── Garbage product name detection ───────────────────────────────────────────
+// Defender TVM sometimes populates productName with fragment text scraped from
+// the CVE description instead of the actual software name. Detect and skip these.
+
+const GARBAGE_PHRASES = [
+  'is available at this time',
+  'a security update',
+  'an update',
+  'this update',
+  'the update',
+  'is not available',
+  'has been released',
+  'not applicable',
+  'n/a',
+];
+
+function isGarbageProductName(name) {
+  if (!name || name.trim().length < 2) return true;
+  const n = name.toLowerCase().trim();
+  // Contains sentence-like filler phrases
+  if (GARBAGE_PHRASES.some(p => n.includes(p))) return true;
+  // Looks like a sentence (contains 4+ words and common verbs) — not a product name
+  const words = n.split(/\s+/);
+  if (words.length >= 4 && /\b(is|are|was|has|have|not|this|that|the|an|a)\b/.test(n)) return true;
+  return false;
+}
+
 // ── Per-tenant remediation ────────────────────────────────────────────────────
 
 async function remediateTenant(tenantId, options = {}) {
@@ -94,7 +121,15 @@ async function remediateTenant(tenantId, options = {}) {
 
     summary.total++;
 
-    console.log(`[AutoRemediation] ${tenantId} ${cveId || '(no-id)'} product="${enriched.productName || vuln.productName || ''}" sev=${vuln.severity} → category=${category}`);
+    // ── 0. Garbage product name — skip finding, don't waste a remediation slot ─
+    const rawProductName = enriched.productName || vuln.productName || vuln.softwareName || '';
+    if (isGarbageProductName(rawProductName)) {
+      console.log(`[AutoRemediation] ${tenantId} ${cveId} — skipped (garbage product name: "${rawProductName}")`);
+      summary.skipped++;
+      continue;
+    }
+
+    console.log(`[AutoRemediation] ${tenantId} ${cveId || '(no-id)'} product="${rawProductName}" sev=${vuln.severity} → category=${category}`);
 
     // ── 1. Unsupported platform — just record, no action ─────────────────────
     if (category === 'unsupported-platform') {

@@ -28,6 +28,7 @@ const WINGET_CATALOG = [
   { names: ['python'],                              publishers: ['python'],          wingetId: 'Python.Python.3',              displayName: 'Python 3',              publisher: 'Python Software Foundation' },
   { names: ['nodejs', 'node.js', 'node js'],        publishers: ['node.js'],         wingetId: 'OpenJS.NodeJS.LTS',            displayName: 'Node.js LTS',           publisher: 'OpenJS Foundation' },
   { names: ['java runtime', 'jre', 'jdk', 'openjdk'], publishers: ['oracle', 'eclipse'], wingetId: 'EclipseAdoptium.Temurin.21.JRE', displayName: 'Eclipse Temurin JRE 21', publisher: 'Eclipse Adoptium' },
+  { names: ['openssl'],                              publishers: ['openssl', 'shining light'], wingetId: 'ShiningLight.OpenSSL',        displayName: 'OpenSSL',               publisher: 'Shining Light Productions' },
   { names: ['putty'],                               publishers: ['simon tatham'],    wingetId: 'PuTTY.PuTTY',                  displayName: 'PuTTY',                 publisher: 'Simon Tatham' },
   { names: ['winrar', 'win rar'],                   publishers: ['win.rar'],         wingetId: 'RARLab.WinRAR',                displayName: 'WinRAR',                publisher: 'RARLab' },
   { names: ['winzip'],                              publishers: ['corel'],           wingetId: 'Corel.WinZip',                 displayName: 'WinZip',                publisher: 'Corel' },
