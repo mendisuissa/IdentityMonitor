@@ -150,10 +150,16 @@ async function processNotification(tenantId, signInId, subscriptionId) {
         console.error('[Webhook] Email failed:', err.message);
       }
 
-      // Telegram playbook for medium+ severity
+      // Telegram playbook for medium+ severity — use tenant-configured credentials only
       if (['critical', 'high', 'medium'].includes(alert.severity)) {
         try {
-          await telegramService.sendAlertWithPlaybook(alert);
+          const settingsService = require('../services/settingsService');
+          const s = await settingsService.getSettingsAsync(tenantId).catch(() => ({}));
+          const telegramToken  = s?.notifications?.telegramBotToken;
+          const telegramChatId = s?.notifications?.telegramChatId;
+          if (telegramToken && telegramChatId) {
+            await telegramService.sendAlertWithPlaybook(alert, telegramToken, telegramChatId);
+          }
         } catch (err) {
           console.error('[Webhook] Telegram failed:', err.message);
         }

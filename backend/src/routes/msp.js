@@ -12,11 +12,8 @@ function isSuperAdmin(req) {
   return SUPERADMIN_EMAILS.includes(email);
 }
 
-// GET /api/msp/tenants — superadmin only
+// GET /api/msp/tenants — superadmin only (auth required even in MOCK_MODE)
 router.get('/tenants', async (req, res) => {
-  if (process.env.MOCK_MODE === 'true') {
-    return res.json(getMockTenants());
-  }
   if (!req.session?.tenant?.tenantId) {
     return res.status(401).json({ error: 'Authentication required' });
   }
@@ -56,14 +53,5 @@ router.get('/tenants', async (req, res) => {
     res.status(500).json({ error: 'Failed to load tenant list', detail: err.message });
   }
 });
-
-function getMockTenants() {
-  return [
-    { tenantId: 't1', tenantName: 'Contoso Ltd', userEmail: 'admin@contoso.com', connectedAt: new Date(Date.now() - 5*86400000).toISOString(), alertStats: { open: 3, critical: 1, high: 2, total: 12 }, riskScore: 72, lastAlertAt: new Date(Date.now() - 3600000).toISOString(), privilegedUsers: 4, trialStatus: 'trial', daysLeft: 9 },
-    { tenantId: 't2', tenantName: 'Fabrikam Inc', userEmail: 'it@fabrikam.com', connectedAt: new Date(Date.now() - 12*86400000).toISOString(), alertStats: { open: 0, critical: 0, high: 0, total: 3 }, riskScore: 8, lastAlertAt: null, privilegedUsers: 2, trialStatus: 'active', daysLeft: null },
-    { tenantId: 't3', tenantName: 'Northwind Corp', userEmail: 'admin@northwind.com', connectedAt: new Date(Date.now() - 2*86400000).toISOString(), alertStats: { open: 7, critical: 3, high: 3, total: 7 }, riskScore: 95, lastAlertAt: new Date(Date.now() - 1800000).toISOString(), privilegedUsers: 8, trialStatus: 'trial', daysLeft: 12 },
-    { tenantId: 't4', tenantName: 'Alpine Ski House', userEmail: 'secops@alpine.com', connectedAt: new Date(Date.now() - 30*86400000).toISOString(), alertStats: { open: 1, critical: 0, high: 1, total: 25 }, riskScore: 35, lastAlertAt: new Date(Date.now() - 7200000).toISOString(), privilegedUsers: 3, trialStatus: 'active', daysLeft: null },
-  ];
-}
 
 module.exports = router;

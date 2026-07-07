@@ -162,16 +162,22 @@ async function sendMessage(text, tokenOverride, chatIdOverride) {
   }
 }
 
-// ─── Send for a specific tenant (uses settings-based credentials with env fallback) ───
+// ─── Send for a specific tenant — uses ONLY tenant-configured credentials ───
+// Never falls back to env vars: each tenant must set their own Telegram bot in Settings.
+// This ensures alerts from tenant A never arrive in tenant B's (or the operator's) chat.
 async function sendMessageForTenant(tenantId, text) {
   try {
     const settingsService = require('./settingsService');
     const s = await settingsService.getSettingsAsync(tenantId).catch(() => ({}));
-    const token  = s?.notifications?.telegramBotToken  || TELEGRAM_BOT_TOKEN;
-    const chatId = s?.notifications?.telegramChatId    || TELEGRAM_CHAT_ID;
+    const token  = s?.notifications?.telegramBotToken;
+    const chatId = s?.notifications?.telegramChatId;
+    if (!token || !chatId) {
+      console.log(`[Telegram] Tenant ${tenantId} has no Telegram bot configured — skipping notification`);
+      return null;
+    }
     return sendMessage(text, token, chatId);
   } catch (_) {
-    return sendMessage(text); // fallback to env vars
+    return null; // never fall back to operator credentials
   }
 }
 
