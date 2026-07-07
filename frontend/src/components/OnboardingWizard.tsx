@@ -513,15 +513,13 @@ export default function OnboardingWizard({ tenantId, tenantName, onComplete }: P
                     color: 'var(--amber-400)',
                     lineHeight: 1.5,
                   }}>
-                    <strong>Action needed:</strong> Grant admin consent in Azure Entra ID then click Re-check.
+                    <strong>Action needed:</strong> A Global Administrator must grant consent for the required Microsoft Graph permissions.
                     <br />
                     <a
-                      href="https://portal.azure.com/#view/Microsoft_AAD_IAM/ConsentPoliciesMenuBlade"
-                      target="_blank"
-                      rel="noreferrer"
+                      href="/api/auth/admin-consent?returnTo=/onboarding"
                       style={{ color: '#F5A462', textDecoration: 'underline', fontSize: 12, marginTop: 4, display: 'inline-block' }}
                     >
-                      Open Azure Portal →
+                      Grant admin consent →
                     </a>
                   </div>
                 )}
