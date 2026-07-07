@@ -1255,15 +1255,28 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       // If deployment is in-progress (async), poll history until result arrives
       if (result?.status === 'in-progress') {
         const cveId = resolvedFinding?.cveId || resolvedFinding?.id || '';
-        const pollStart = Date.now();
+        const productName = (resolvedFinding?.productName || resolvedFinding?.displayProductName || '').toLowerCase();
+        const executeTime = Date.now();
+        const pollStart = executeTime;
         const poll = setInterval(async () => {
-          if (Date.now() - pollStart > 120_000) { clearInterval(poll); return; }
+          if (Date.now() - pollStart > 120_000) {
+            clearInterval(poll);
+            setExecResult({ ok: false, status: 'failed', message: 'Deployment timed out waiting for result. Check Remediation History.' });
+            return;
+          }
           try {
-            const hist = await api.getRemediationHistory({ limit: 10 });
-            const records = Array.isArray(hist) ? hist : (hist?.records || hist?.items || []);
-            const match = records.find((r: any) =>
-              r.cveId === cveId && (r.status === 'success' || r.status === 'failed')
-            );
+            const hist = await api.getRemediationHistory({ limit: 20 });
+            const records: any[] = Array.isArray(hist) ? hist : (hist?.records || hist?.items || []);
+            // Match by cveId OR productName, and only records created after we fired the execute
+            const match = records.find(r => {
+              const done = r.status === 'success' || r.status === 'failed';
+              if (!done) return false;
+              const recordTime = r.executedAt ? new Date(r.executedAt).getTime() : 0;
+              if (recordTime < executeTime - 5000) return false; // older than execute call
+              if (cveId && r.cveId === cveId) return true;
+              if (productName && (r.productName || '').toLowerCase() === productName) return true;
+              return false;
+            });
             if (match) {
               clearInterval(poll);
               setExecResult({ ok: match.status === 'success', status: match.status, message: match.message, result: match });
