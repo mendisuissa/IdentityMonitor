@@ -532,4 +532,48 @@ router.get('/access', (req, res) => {
   res.json(access);
 });
 
+// GET /api/auth/permission-status — live check of each required Graph permission
+router.get('/permission-status', async (req, res) => {
+  const tenantId = req.session?.tenant?.tenantId;
+  if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
+
+  const { getAccessTokenForTenant } = require('../services/graphService');
+
+  let token;
+  try {
+    token = await getAccessTokenForTenant(tenantId);
+  } catch (err) {
+    return res.json({ error: 'Could not acquire token: ' + err.message, permissions: [] });
+  }
+
+  async function probe(url) {
+    try {
+      const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+      if (r.status === 403 || r.status === 401) return false;
+      return true;
+    } catch { return false; }
+  }
+
+  const base = 'https://graph.microsoft.com';
+  const [auditLog, directory, riskyUser, secEvents, deviceApps, winUpdates] = await Promise.all([
+    probe(`${base}/v1.0/auditLogs/signIns?$top=1&$select=id`),
+    probe(`${base}/v1.0/users?$top=1&$select=id`),
+    probe(`${base}/v1.0/identityProtection/riskyUsers?$top=1&$select=id`),
+    probe(`${base}/v1.0/security/alerts_v2?$top=1&$select=id`),
+    probe(`${base}/beta/deviceAppManagement/mobileApps?$top=1&$select=id`),
+    probe(`${base}/beta/admin/windows/updates/deployments?$top=1`),
+  ]);
+
+  res.json({
+    permissions: [
+      { scope: 'AuditLog.Read.All',                    granted: auditLog,    desc: 'Read sign-in and audit logs' },
+      { scope: 'Directory.Read.All',                   granted: directory,   desc: 'Read users, groups, and roles' },
+      { scope: 'IdentityRiskyUser.Read.All',           granted: riskyUser,   desc: 'Read risky user signals from Entra ID Protection' },
+      { scope: 'SecurityEvents.Read.All',              granted: secEvents,   desc: 'Read Defender security alerts' },
+      { scope: 'DeviceManagementApps.ReadWrite.All',   granted: deviceApps,  desc: 'Deploy WinGet apps via Intune for auto-remediation' },
+      { scope: 'WindowsUpdates.ReadWrite.All',         granted: winUpdates,  desc: 'Deploy Windows Updates via WUfB Deployment Service' },
+    ]
+  });
+});
+
 module.exports = router;

@@ -359,44 +359,104 @@ export default function SettingsPage() {
 
       {tab === 'playbooks' && <PlaybooksPanel playbooks={playbooks} setPlaybooks={setPlaybooks} onSave={savePlaybooks} saving={saving} />}
 
-      {tab === 'permissions' && (
-        <div style={{ display: 'grid', gap: 16, maxWidth: 640 }}>
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">Microsoft Graph — Admin Consent</div>
-            </div>
-            <div className="text-muted" style={{ fontSize: 13, marginBottom: 16, lineHeight: 1.6 }}>
-              IdentityMonitor requires an admin in your tenant to grant consent for the required Microsoft Graph permissions.
-              Click the button below to open the Microsoft consent page. You must be a Global Administrator or Privileged Role Administrator to approve.
-            </div>
-            <div style={{ display: 'grid', gap: 8, marginBottom: 20 }}>
-              {[
-                { scope: 'AuditLog.Read.All', desc: 'Read sign-in and audit logs' },
-                { scope: 'Directory.Read.All', desc: 'Read users, groups, and roles' },
-                { scope: 'IdentityRiskyUser.Read.All', desc: 'Read risky user signals from Entra ID Protection' },
-                { scope: 'SecurityEvents.Read.All', desc: 'Read Defender security alerts' },
-                { scope: 'DeviceManagementApps.ReadWrite.All', desc: 'Deploy WinGet apps via Intune for auto-remediation' },
-                { scope: 'WindowsUpdates.ReadWrite.All', desc: 'Deploy Windows Updates via WUfB Deployment Service' },
-              ].map(({ scope, desc }) => (
-                <div key={scope} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13 }}>
-                  <i className="ti ti-circle-check" style={{ color: 'var(--indigo)', marginTop: 2, flexShrink: 0 }} />
-                  <div>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{scope}</span>
-                    <span className="text-muted"> — {desc}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button
-              className="btn btn-primary"
-              onClick={() => { window.location.href = '/api/auth/admin-consent?returnTo=/settings'; }}
-            >
-              <i className="ti ti-shield-lock" style={{ marginRight: 6 }} />
-              Grant admin consent
-            </button>
-          </div>
+      {tab === 'permissions' && <PermissionsTab />}
+    </div>
+  );
+}
+
+// ─── Permissions Tab ─────────────────────────────────────────────────────────
+
+type PermEntry = { scope: string; granted: boolean; desc: string };
+
+function PermissionsTab() {
+  const [perms, setPerms] = React.useState<PermEntry[] | null>(null);
+  const [checking, setChecking] = React.useState(false);
+  const [err, setErr] = React.useState('');
+
+  const check = React.useCallback(async () => {
+    setChecking(true);
+    setErr('');
+    try {
+      const res = await fetch('/api/auth/permission-status', { credentials: 'include' });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setPerms(data.permissions);
+    } catch (e: any) {
+      setErr(e.message || 'Check failed');
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
+  React.useEffect(() => { check(); }, [check]);
+
+  const allGranted = perms !== null && perms.every(p => p.granted);
+  const missing = perms?.filter(p => !p.granted) ?? [];
+
+  return (
+    <div style={{ display: 'grid', gap: 16, maxWidth: 640 }}>
+      <div className="card">
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="card-title">Microsoft Graph — Admin Consent</div>
+          <button className="btn btn-ghost btn-sm" onClick={check} disabled={checking} style={{ fontSize: 12 }}>
+            {checking ? 'Checking…' : '↻ Re-check'}
+          </button>
         </div>
-      )}
+
+        <div className="text-muted" style={{ fontSize: 13, marginBottom: 16, lineHeight: 1.6 }}>
+          IdentityMonitor requires a Global Administrator to grant consent for the required Microsoft Graph permissions.
+        </div>
+
+        {err && (
+          <div style={{ fontSize: 13, color: 'var(--red-critical)', marginBottom: 12 }}>{err}</div>
+        )}
+
+        <div style={{ display: 'grid', gap: 8, marginBottom: 20 }}>
+          {(perms ?? [
+            { scope: 'AuditLog.Read.All', granted: null as any, desc: 'Read sign-in and audit logs' },
+            { scope: 'Directory.Read.All', granted: null as any, desc: 'Read users, groups, and roles' },
+            { scope: 'IdentityRiskyUser.Read.All', granted: null as any, desc: 'Read risky user signals from Entra ID Protection' },
+            { scope: 'SecurityEvents.Read.All', granted: null as any, desc: 'Read Defender security alerts' },
+            { scope: 'DeviceManagementApps.ReadWrite.All', granted: null as any, desc: 'Deploy WinGet apps via Intune for auto-remediation' },
+            { scope: 'WindowsUpdates.ReadWrite.All', granted: null as any, desc: 'Deploy Windows Updates via WUfB Deployment Service' },
+          ]).map(({ scope, granted, desc }) => (
+            <div key={scope} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13 }}>
+              {checking || granted === null ? (
+                <i className="ti ti-loader-2" style={{ color: 'var(--text-muted)', marginTop: 2, flexShrink: 0, opacity: 0.5 }} />
+              ) : granted ? (
+                <i className="ti ti-circle-check" style={{ color: '#22c55e', marginTop: 2, flexShrink: 0 }} />
+              ) : (
+                <i className="ti ti-circle-x" style={{ color: '#ef4444', marginTop: 2, flexShrink: 0 }} />
+              )}
+              <div>
+                <span style={{ fontFamily: 'monospace', fontWeight: 600, color: granted === false ? '#ef4444' : undefined }}>{scope}</span>
+                <span className="text-muted"> — {desc}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {!allGranted && missing.length > 0 && (
+          <div style={{ fontSize: 13, padding: '10px 12px', borderRadius: 8, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', marginBottom: 14, color: 'var(--text-secondary)' }}>
+            <strong style={{ color: '#ef4444' }}>{missing.length} permission{missing.length > 1 ? 's' : ''} missing.</strong>
+            {' '}Add {missing.map(p => p.scope).join(', ')} as Application permissions in Azure Portal → App registrations, then click Grant admin consent below.
+          </div>
+        )}
+
+        {allGranted && perms !== null && (
+          <div style={{ fontSize: 13, padding: '10px 12px', borderRadius: 8, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.2)', marginBottom: 14, color: '#22c55e' }}>
+            ✓ All permissions granted
+          </div>
+        )}
+
+        <button
+          className="btn btn-primary"
+          onClick={() => { window.location.href = '/api/auth/admin-consent?returnTo=/settings'; }}
+        >
+          <i className="ti ti-shield-lock" style={{ marginRight: 6 }} />
+          Grant admin consent
+        </button>
+      </div>
     </div>
   );
 }
