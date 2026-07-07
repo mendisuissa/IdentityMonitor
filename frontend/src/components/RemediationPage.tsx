@@ -1226,6 +1226,16 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
     setExecuting(true);
     setError('');
     setTechnicalError('');
+
+    // Snapshot BEFORE execute so fast deployments don't slip past the filter
+    let knownIds = new Set<string>();
+    const executeTime = Date.now();
+    try {
+      const h: any = await api.getRemediationHistory({ limit: 50 });
+      const recs: any[] = Array.isArray(h) ? h : (h?.records || h?.items || []);
+      knownIds = new Set(recs.map((r: any) => r.id || r.cveId + r.executedAt));
+    } catch { /* best-effort */ }
+
     try {
       const result = await api.executeRemediation({
         tenantId,
@@ -1256,16 +1266,9 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
       if (result?.status === 'in-progress') {
         const cveId = resolvedFinding?.cveId || resolvedFinding?.id || '';
         const productName = (resolvedFinding?.productName || resolvedFinding?.displayProductName || '').toLowerCase();
-        const pollStart = Date.now();
-        // Snapshot of existing record IDs before polling — ignore pre-existing records
-        let knownIds = new Set<string>();
-        api.getRemediationHistory({ limit: 50 }).then((h: any) => {
-          const recs: any[] = Array.isArray(h) ? h : (h?.records || h?.items || []);
-          knownIds = new Set(recs.map((r: any) => r.id || r.cveId + r.executedAt));
-        }).catch(() => {});
 
         const poll = setInterval(async () => {
-          if (Date.now() - pollStart > 120_000) {
+          if (Date.now() - executeTime > 180_000) {
             clearInterval(poll);
             setExecResult({ ok: false, status: 'failed', message: 'Deployment timed out waiting for result. Check Remediation History.' });
             return;
@@ -1278,8 +1281,11 @@ export default function RemediationPage({ tenantId, tenantName }: Props) {
               if (!done) return false;
               const rid = r.id || r.cveId + r.executedAt;
               if (knownIds.has(rid)) return false; // pre-existing record
+              // Match by cveId, product name, or timestamp (any new record written after execute)
               if (cveId && r.cveId === cveId) return true;
-              if (productName && (r.productName || '').toLowerCase() === productName) return true;
+              if (productName && (r.productName || '').toLowerCase().includes(productName.split(' ')[0])) return true;
+              const recordTime = r.executedAt ? new Date(r.executedAt).getTime() : 0;
+              if (recordTime >= executeTime - 5000) return true;
               return false;
             });
             if (match) {
