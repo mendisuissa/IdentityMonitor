@@ -27,7 +27,8 @@ router.get('/', (req, res) => {
   const tenantId = requireAuth(req, res);
   if (!tenantId) return;
   const settings = settingsService.getSettings(tenantId);
-  const trial    = settingsService.getTrialStatus(tenantId);
+  const userEmail = req.session?.tenant?.userEmail || '';
+  const trial    = settingsService.getTrialStatus(tenantId, userEmail);
   res.json({ ...settings, trialStatus: trial });
 });
 
@@ -50,7 +51,7 @@ router.patch('/', requirePermission('settings.manage'), (req, res) => {
 router.get('/trial', (req, res) => {
   const tenantId = requireAuth(req, res);
   if (!tenantId) return;
-  res.json(settingsService.getTrialStatus(tenantId));
+  res.json(settingsService.getTrialStatus(tenantId, req.session?.tenant?.userEmail));
 });
 
 // POST /api/settings/admins — add admin
@@ -494,7 +495,8 @@ router.get('/plan-trial', (req, res) => {
   const tenantId = requireAuth(req, res);
   if (!tenantId) return;
   const s = settingsService.getSettings(tenantId);
-  res.json({ billing: s.billing || {}, trialStatus: settingsService.getTrialStatus(tenantId) });
+  const userEmail = req.session?.tenant?.userEmail || '';
+  res.json({ billing: s.billing || {}, trialStatus: settingsService.getTrialStatus(tenantId, userEmail) });
 });
 
 // PUT /api/settings/plan-trial
@@ -503,7 +505,7 @@ router.put('/plan-trial', requirePermission('settings.manage'), (req, res) => {
   if (!tenantId) return;
   const updated = settingsService.saveSettings(tenantId, { billing: req.body });
   auditLog.log(tenantId, auditLog.ACTIONS.SETTINGS_UPDATED, { sections: ['billing'] }, getActor(req));
-  res.json({ billing: updated.billing, trialStatus: settingsService.getTrialStatus(tenantId) });
+  res.json({ billing: updated.billing, trialStatus: settingsService.getTrialStatus(tenantId, req.session?.tenant?.userEmail) });
 });
 
 // GET /api/settings/telegram

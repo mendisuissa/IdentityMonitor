@@ -117,7 +117,14 @@ async function saveSettingsAsync(tenantId, updates) {
   return merged;
 }
 
-function getTrialStatus(tenantId) {
+const INTERNAL_DOMAINS = ['modernendpoint.tech', '365-poc.com'];
+
+function isInternalEmail(email) {
+  const e = (email || '').toLowerCase().trim();
+  return e !== '' && INTERNAL_DOMAINS.some(d => e.endsWith('@' + d));
+}
+
+function getTrialStatus(tenantId, userEmail) {
   // BILLING_DISABLED=true → always treat as active (useful for self-hosted / dev environments)
   if (process.env.BILLING_DISABLED === 'true') return { status: 'active', daysLeft: null };
 
@@ -127,15 +134,14 @@ function getTrialStatus(tenantId) {
     .split(',').map(s => s.trim()).filter(Boolean);
   if (ownerIds.includes(tenantId)) return { status: 'active', daysLeft: null };
 
-  // 2. Internal email domains — any tenant whose primary email matches is always Pro
-  const INTERNAL_DOMAINS = ['modernendpoint.tech', '365-poc.com'];
+  // 2. Email passed directly by caller (e.g. from session)
+  if (isInternalEmail(userEmail)) return { status: 'active', daysLeft: null };
+
+  // 3. Fall back to tenant registry primaryEmail
   try {
     const registry = require('./tenantRegistry');
     const entry = registry.getTenant(tenantId);
-    const email = (entry?.primaryEmail || '').toLowerCase();
-    if (email && INTERNAL_DOMAINS.some(d => email.endsWith('@' + d))) {
-      return { status: 'active', daysLeft: null };
-    }
+    if (isInternalEmail(entry?.primaryEmail)) return { status: 'active', daysLeft: null };
   } catch (_) { /* registry not available — fall through */ }
 
   const s = getSettings(tenantId);

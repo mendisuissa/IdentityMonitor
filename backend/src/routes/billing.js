@@ -191,6 +191,11 @@ router.get('/status', async (req, res) => {
   try {
     const settings = await settingsService.getSettingsAsync(tenantId);
     const billing  = settings?.billing || {};
+    const userEmail = (req.session?.tenant?.userEmail || '').toLowerCase();
+
+    // Owner check — use trial status which handles internal domain exemptions
+    const trialStatus = settingsService.getTrialStatus(tenantId, userEmail);
+    const effectivePlan = trialStatus.status === 'active' ? 'active' : (billing.plan || 'free');
 
     const trialEndsAt = billing.trialEndsAt || null;
     let daysLeft = null;
@@ -200,7 +205,7 @@ router.get('/status', async (req, res) => {
     }
 
     res.json({
-      plan:                  billing.plan     || 'trial',
+      plan:                  effectivePlan,
       trialEndsAt,
       daysLeft,
       activatedAt:           billing.activatedAt           || null,
