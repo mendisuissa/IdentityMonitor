@@ -537,7 +537,10 @@ router.get('/permission-status', async (req, res) => {
   const tenantId = req.session?.tenant?.tenantId;
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
 
-  const { getAccessTokenForTenant } = require('../services/graphService');
+  const { getAccessTokenForTenant, clearTokenCache } = require('../services/graphService');
+
+  // Always fetch a fresh token — cached token may predate a recent admin consent grant
+  clearTokenCache(tenantId);
 
   let token;
   try {
