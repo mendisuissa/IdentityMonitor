@@ -121,6 +121,10 @@ function getTrialStatus(tenantId) {
   // BILLING_DISABLED=true → always treat as active (useful for self-hosted / dev environments)
   if (process.env.BILLING_DISABLED === 'true') return { status: 'active', daysLeft: null };
 
+  // Owner tenant is always Pro
+  const ownerTenantId = (process.env.OWNER_TENANT_ID || '').trim();
+  if (ownerTenantId && tenantId === ownerTenantId) return { status: 'active', daysLeft: null };
+
   const s = getSettings(tenantId);
   const billing = s.billing || {};
   // Freemium model: 'active' = paid subscription, everything else = free tier
