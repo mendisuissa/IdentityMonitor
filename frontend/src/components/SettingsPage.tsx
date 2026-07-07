@@ -33,7 +33,8 @@ const RULE_LABELS: Record<string, string> = { NEW_IP: 'New IP', NEW_COUNTRY: 'Ne
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<SettingsShape>({});
-  const [tab, setTab] = useState<Tab>('trial');
+  const initialTab = (new URLSearchParams(window.location.search).get('tab') as Tab) || 'trial';
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState('');

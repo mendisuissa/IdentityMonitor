@@ -241,6 +241,34 @@ function Sidebar({ user, scanLoading, onScan, newAlertCount, mockMode, inbox, on
   );
 }
 
+function PermissionBanner({ missing, onDismiss }: { missing: string[]; onDismiss: () => void }) {
+  if (!missing.length) return null;
+  return (
+    <div style={{
+      background: 'linear-gradient(90deg, #7c3a00 0%, #5c2a00 100%)',
+      borderBottom: '1px solid rgba(255,140,0,0.35)',
+      padding: '8px 18px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12,
+      fontSize: 13,
+      flexWrap: 'wrap',
+    }}>
+      <i className="ti ti-alert-triangle" style={{ color: '#ffaa33', fontSize: 16, flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <strong style={{ color: '#ffcc77' }}>{missing.length} permission{missing.length > 1 ? 's' : ''} missing</strong>
+        <span style={{ color: 'rgba(255,255,255,0.75)', marginLeft: 6 }}>
+          — some features may not work correctly.
+        </span>
+      </span>
+      <a href="/settings?tab=permissions" style={{ color: '#ffcc77', fontWeight: 600, textDecoration: 'underline', whiteSpace: 'nowrap' }}>
+        Fix now →
+      </a>
+      <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 16, padding: '0 4px', lineHeight: 1 }}>✕</button>
+    </div>
+  );
+}
+
 function AppShell() {
   const [user, setUser] = useState<TenantUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -254,6 +282,8 @@ function AppShell() {
   const [showWizard, setShowWizard] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeWebappConnected, setWelcomeWebappConnected] = useState(false);
+  const [missingPerms, setMissingPerms] = useState<string[]>([]);
+  const [permBannerDismissed, setPermBannerDismissed] = useState(false);
   const navigate = useNavigate();
 
   // Detect first-login and webapp-connected URL params set by the backend
@@ -296,6 +326,23 @@ function AppShell() {
       if (!s?.onboarding?.wizardCompleted) setShowWizard(true);
     }).catch(() => {});
   }, [user]);
+
+  // Check permissions in the background after login — show banner if any are missing
+  useEffect(() => {
+    if (!user || mockMode) return;
+    const timer = setTimeout(() => {
+      fetch('/api/auth/permission-status', { credentials: 'include' })
+        .then(r => r.json())
+        .then(data => {
+          const missing = (data.permissions || [])
+            .filter((p: any) => !p.granted)
+            .map((p: any) => p.scope);
+          setMissingPerms(missing);
+        })
+        .catch(() => {});
+    }, 3000); // delay 3s so it doesn't compete with initial page load
+    return () => clearTimeout(timer);
+  }, [user, mockMode]);
 
   useEffect(() => {
     api.getNotificationInbox({ limit: 12, dedupe: true }).then((res: any) => setInbox(res.items || [])).catch(() => {});
@@ -380,6 +427,9 @@ function AppShell() {
               {showMockPanel ? '✕ Close' : '⚡ Trigger Test Alert'}
             </button>
           </div>
+        )}
+        {!permBannerDismissed && !mockMode && (
+          <PermissionBanner missing={missingPerms} onDismiss={() => setPermBannerDismissed(true)} />
         )}
         {showMockPanel && mockMode && (
           <MockPanel onAlertTriggered={() => setOpenAlerts(p => p + 1)} />
