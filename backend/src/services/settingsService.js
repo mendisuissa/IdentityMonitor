@@ -121,10 +121,22 @@ function getTrialStatus(tenantId) {
   // BILLING_DISABLED=true → always treat as active (useful for self-hosted / dev environments)
   if (process.env.BILLING_DISABLED === 'true') return { status: 'active', daysLeft: null };
 
-  // Owner/internal tenants are always Pro — comma-separated list in OWNER_TENANT_IDS
+  // Owner/internal tenants are always Pro
+  // 1. Explicit tenant ID list (env var, comma-separated)
   const ownerIds = (process.env.OWNER_TENANT_IDS || process.env.OWNER_TENANT_ID || '')
     .split(',').map(s => s.trim()).filter(Boolean);
   if (ownerIds.includes(tenantId)) return { status: 'active', daysLeft: null };
+
+  // 2. Internal email domains — any tenant whose primary email matches is always Pro
+  const INTERNAL_DOMAINS = ['modernendpoint.tech', '365-poc.com'];
+  try {
+    const registry = require('./tenantRegistry');
+    const entry = registry.getTenant(tenantId);
+    const email = (entry?.primaryEmail || '').toLowerCase();
+    if (email && INTERNAL_DOMAINS.some(d => email.endsWith('@' + d))) {
+      return { status: 'active', daysLeft: null };
+    }
+  } catch (_) { /* registry not available — fall through */ }
 
   const s = getSettings(tenantId);
   const billing = s.billing || {};
