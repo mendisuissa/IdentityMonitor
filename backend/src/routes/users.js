@@ -45,7 +45,7 @@ router.get('/', async (req, res) => {
     res.json(enriched);
   } catch (err) {
     console.error('[API] GET /users:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -58,12 +58,12 @@ router.get('/:userId/signins', async (req, res) => {
     const signIns = await graphService.getUserSignIns(tenantId, req.params.userId, 72);
     res.json(signIns);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // POST /api/users/:userId/revoke
-router.post('/:userId/revoke', async (req, res) => {
+router.post('/:userId/revoke', requirePermission('users.respond'), async (req, res) => {
   try {
     if (isMock()) return res.json({ success: true, message: '[MOCK] Sessions revoked.' });
     const tenantId = requireTenant(req, res);
@@ -71,7 +71,7 @@ router.post('/:userId/revoke', async (req, res) => {
     await graphService.revokeUserSessions(tenantId, req.params.userId);
     res.json({ success: true, message: 'Sessions revoked. User will need MFA on next sign-in.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -86,7 +86,7 @@ router.post('/:userId/disable', requirePermission('users.respond'), async (req, 
     auditLog.log(tenantId, auditLog.ACTIONS.USER_DISABLED, { userId: req.params.userId }, getActor(req));
     res.json({ success: true, message: 'User account disabled.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -99,7 +99,7 @@ router.post('/:userId/enable', requirePermission('users.respond'), async (req, r
     auditLog.log(tenantId, 'response.user_enabled', { userId: req.params.userId }, getActor(req));
     res.json({ success: true, message: 'User account enabled.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

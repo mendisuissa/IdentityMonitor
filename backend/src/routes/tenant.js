@@ -21,7 +21,7 @@ router.get('/health', requirePermission('ops.view'), (req, res) => {
       mockMode: settings.mockMode || false,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -42,7 +42,7 @@ router.get('/ops-dashboard', requirePermission('ops.view'), (req, res) => {
       criticalOpen: cases.filter(c => c.severity === 'critical' && c.status === 'open').length,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -54,7 +54,7 @@ router.get('/roles-matrix', requirePermission('ops.view'), (req, res) => {
     const settings = settingsService.getSettings(tenantId);
     res.json({ roles: settings.admins || [], tenantId });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -66,7 +66,7 @@ router.post('/orchestrate', requirePermission('ops.view'), (req, res) => {
     const { action, comment } = req.body;
     res.json({ ok: true, action, tenantId, comment, timestamp: new Date().toISOString() });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

@@ -286,7 +286,7 @@ router.post('/scan', requirePermission('alerts.respond'), async (req, res) => {
     });
   } catch (err) {
     console.error('[Scan] Unexpected error:', err.message);
-    res.status(500).json({ error: err.message, code: 'SCAN_FAILED' });
+    res.status(500).json({ error: "Internal server error", code: "SCAN_FAILED" });
   }
 });
 
@@ -350,7 +350,7 @@ router.delete('/baseline/:userId', requirePermission('settings.manage'), async (
     auditLog.log(tenantId, 'baseline.reset', { userId, detail: 'Behavioral baseline cleared — will re-learn on next scan' }, getActor(req));
     res.json({ ok: true, userId, message: 'Baseline cleared — system will re-learn on next scan' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

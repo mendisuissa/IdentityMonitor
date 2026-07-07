@@ -41,7 +41,7 @@ router.get('/', requirePermission('alerts.view'), async (req, res) => {
       return res.json([]);
     }
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

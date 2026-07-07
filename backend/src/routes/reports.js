@@ -14,7 +14,7 @@ router.get('/risk-posture', requirePermission('alerts.view'), (req, res) => {
     const posture = riskPostureService.getRiskPosture(tenantId);
     res.json(posture);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -57,7 +57,7 @@ router.get('/executive-snapshot', requirePermission('alerts.view'), (req, res) =
       overdueCount: cases.filter(c => c.isOverdue).length,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -79,7 +79,7 @@ router.get('/executive/export', requirePermission('alerts.view'), (req, res) => 
       res.json(alerts);
     }
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

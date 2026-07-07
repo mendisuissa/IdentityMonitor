@@ -24,14 +24,13 @@ router.get('/', async (req, res) => {
         return res.status(403).json({
           error: 'Access denied to sign-in logs',
           hint:  'AuditLog.Read.All permission requires Entra ID P1 or P2 license. Ensure admin consent was granted and the tenant has the required license.',
-          graphError: msg
         });
       }
       throw graphErr;
     }
   } catch (err) {
     console.error('[API] GET /signins:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to fetch sign-in logs. Check server logs for details.' });
   }
 });
 

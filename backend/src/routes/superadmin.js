@@ -8,14 +8,13 @@ const settingsService = require('../services/settingsService');
 const tableStorage   = require('../services/tableStorage');
 const jobRunner      = require('../services/jobRunner');
 
-const SUPERADMIN_EMAILS = [
-  'menahem@modernendpoint.tech',
-  'menahem@365-poc.com'
-];
+const SUPERADMIN_EMAILS = (process.env.SUPERADMIN_EMAILS || '')
+  .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
 
 function isSuperAdmin(req) {
+  if (!SUPERADMIN_EMAILS.length) return false;
   const email = (req.session?.tenant?.userEmail || '').toLowerCase().trim();
-  return SUPERADMIN_EMAILS.map(e => e.toLowerCase()).includes(email);
+  return SUPERADMIN_EMAILS.includes(email);
 }
 
 // GET /api/superadmin/tenants
@@ -84,7 +83,7 @@ router.get('/tenants', async (req, res) => {
     res.json({ tenants: enriched, count: enriched.length, asOf: new Date().toISOString() });
   } catch (err) {
     console.error('[SuperAdmin] Error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

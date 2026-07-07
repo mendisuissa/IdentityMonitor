@@ -43,7 +43,7 @@ router.patch('/', requirePermission('settings.manage'), (req, res) => {
     }, getActor(req));
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -65,7 +65,7 @@ router.post('/admins', requirePermission('settings.manage'), async (req, res) =>
     auditLog.log(tenantId, auditLog.ACTIONS.ADMIN_ADDED, { email, role }, getActor(req));
     res.json(updated.admins);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -78,7 +78,7 @@ router.delete('/admins/:email', requirePermission('settings.manage'), async (req
     auditLog.log(tenantId, auditLog.ACTIONS.ADMIN_REMOVED, { email: req.params.email }, getActor(req));
     res.json(updated.admins);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -127,12 +127,21 @@ module.exports = router;
 
 // ─── SIEM Configuration ────────────────────────────────────────────────────
 
-// GET /api/settings/siem
+// GET /api/settings/siem — sharedKey is masked; never returned to browser
 router.get('/siem', (req, res) => {
   const tenantId = requireAuth(req, res);
   if (!tenantId) return;
   const s = settingsService.getSettings(tenantId);
-  res.json(s.siem || { logAnalytics: { enabled: false }, webhooks: [] });
+  const siem = s.siem || { logAnalytics: { enabled: false }, webhooks: [] };
+  const masked = {
+    ...siem,
+    logAnalytics: siem.logAnalytics ? {
+      ...siem.logAnalytics,
+      sharedKey: siem.logAnalytics.sharedKey ? '***configured***' : '',
+      sharedKeySet: !!siem.logAnalytics.sharedKey,
+    } : { enabled: false },
+  };
+  res.json(masked);
 });
 
 // PATCH /api/settings/siem
@@ -155,7 +164,7 @@ router.post('/siem/test', async (req, res) => {
     auditLog.log(tenantId, auditLog.ACTIONS.TEST_SENT, { type: 'siem_log_analytics' }, getActor(req));
     res.json(result);
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
@@ -508,13 +517,19 @@ router.put('/plan-trial', requirePermission('settings.manage'), (req, res) => {
   res.json({ billing: updated.billing, trialStatus: settingsService.getTrialStatus(tenantId, req.session?.tenant?.userEmail) });
 });
 
-// GET /api/settings/telegram
+// GET /api/settings/telegram — token is masked; only indicates if configured
 router.get('/telegram', (req, res) => {
   const tenantId = requireAuth(req, res);
   if (!tenantId) return;
   const s = settingsService.getSettings(tenantId);
   const n = s.notifications || {};
-  res.json({ telegramBotToken: n.telegramBotToken || '', telegramChatId: n.telegramChatId || '', telegramOnSeverity: n.telegramOnSeverity || ['critical', 'high'] });
+  const rawToken = n.telegramBotToken || '';
+  res.json({
+    telegramBotToken: rawToken ? '***configured***' : '',
+    telegramBotTokenSet: !!rawToken,
+    telegramChatId: n.telegramChatId || '',
+    telegramOnSeverity: n.telegramOnSeverity || ['critical', 'high'],
+  });
 });
 
 // PUT /api/settings/telegram
@@ -545,7 +560,7 @@ router.post('/telegram/test', async (req, res) => {
     auditLog.log(tenantId, auditLog.ACTIONS.TEST_SENT || 'test.sent', { type: 'telegram' }, getActor(req));
     res.json({ ok: true, message: 'Test message sent' });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: "Internal server error" });
   }
 });
 
@@ -619,7 +634,7 @@ router.delete('/tenant-data', requirePermission('settings.manage'), async (req, 
 
     res.json({ ok: true, message: 'All tenant data has been permanently deleted.', deleted });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -634,6 +649,6 @@ router.post('/siem/test-log-analytics', async (req, res) => {
     auditLog.log(tenantId, auditLog.ACTIONS.TEST_SENT || 'test.sent', { type: 'siem_log_analytics' }, getActor(req));
     res.json(result);
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });

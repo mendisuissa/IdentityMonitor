@@ -319,7 +319,7 @@ router.get('/debug-token', async (req, res) => {
       caApiCall: caCallResult
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -380,7 +380,7 @@ router.get('/debug-session-token', async (req, res) => {
       caApiCall: caCallResult
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

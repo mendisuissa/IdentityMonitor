@@ -49,7 +49,17 @@ function buildAdminConsentUrl(tenantId, state) {
 // GET /api/auth/status
 router.get('/status', (req, res) => {
   if (req.session && req.session.tenant) {
-    return res.json({ authenticated: true, tenant: req.session.tenant });
+    const t = req.session.tenant;
+    return res.json({
+      authenticated: true,
+      tenant: {
+        tenantId:    t.tenantId,
+        tenantName:  t.tenantName,
+        userEmail:   t.userEmail,
+        userName:    t.userName,
+        connectedAt: t.connectedAt,
+      },
+    });
   }
   res.json({ authenticated: false });
 });

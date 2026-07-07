@@ -19,7 +19,7 @@ router.get('/analyze', async (req, res) => {
     const result = await pimService.analyzePimStatus(tenantId);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

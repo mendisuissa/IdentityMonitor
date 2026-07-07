@@ -105,18 +105,20 @@ router.get('/checkout', (req, res) => {
     res.json({ url });
   } catch (err) {
     console.error('[Billing] /checkout error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // ---------------------------------------------------------------------------
 // POST /api/billing/gumroad-webhook
 // Gumroad sends application/x-www-form-urlencoded — NOT JSON.
-// Verify with ?secret=GUMROAD_WEBHOOK_SECRET in the webhook URL.
+// Secret is verified via X-Webhook-Secret header (set in Gumroad Ping settings).
+// Never pass secrets as URL query parameters — they appear in server logs.
 // ---------------------------------------------------------------------------
 router.post('/gumroad-webhook', express.urlencoded({ extended: true }), async (req, res) => {
-  // Secret check
-  if (GUMROAD_WEBHOOK_SECRET && req.query.secret !== GUMROAD_WEBHOOK_SECRET) {
+  // Accept secret from header (preferred) or query param for backwards-compat
+  const providedSecret = req.headers['x-webhook-secret'] || req.query.secret;
+  if (GUMROAD_WEBHOOK_SECRET && providedSecret !== GUMROAD_WEBHOOK_SECRET) {
     console.warn('[Billing] Gumroad webhook: invalid secret from', req.ip);
     return res.status(403).json({ error: 'Invalid secret' });
   }
@@ -215,7 +217,7 @@ router.get('/status', async (req, res) => {
     });
   } catch (err) {
     console.error('[Billing] /status error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

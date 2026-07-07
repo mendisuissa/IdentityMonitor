@@ -45,6 +45,8 @@ const superadminRoutes = require('./routes/superadmin');
 const billingRoutes    = require('./routes/billing');
 const internalRoutes   = require('./routes/internal');
 
+const rateLimit = require('express-rate-limit');
+
 const app    = express();
 const server = http.createServer(app);
 const PORT   = process.env.PORT || 3001;
@@ -52,6 +54,35 @@ const MOCK   = process.env.MOCK_MODE === 'true';
 
 app.set('trust proxy', 1);
 app.use(express.json());
+
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+// Auth endpoints: 20 requests per 15 min per IP (brute-force protection)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+  skip: () => MOCK,
+});
+// General API: 300 requests per 15 min per IP
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+  skip: () => MOCK,
+});
+// Remediation/action endpoints: 30 per 15 min (prevent abuse)
+const actionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+  skip: () => MOCK,
+});
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true
@@ -70,7 +101,16 @@ app.use(session({
   store: process.env.AZURE_STORAGE_CONNECTION_STRING
     ? new AzureTableSessionStore({ ttl: SESSION_TTL_SEC })
     : new FileStore({ path: sessionDir, ttl: SESSION_TTL_SEC, retries: 1, logFn: () => {} }),
-  secret: process.env.SESSION_SECRET || 'priv-monitor-dev-secret',
+  secret: (() => {
+    if (!process.env.SESSION_SECRET) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[FATAL] SESSION_SECRET env var is not set. Refusing to start in production.');
+        process.exit(1);
+      }
+      return 'priv-monitor-dev-secret-DO-NOT-USE-IN-PROD';
+    }
+    return process.env.SESSION_SECRET;
+  })(),
   resave: false,
   saveUninitialized: false,
   rolling: true, // extend session on every request — keeps active users logged in
@@ -91,7 +131,7 @@ app.use((req, res, next) => {
     const timeoutMs = isLongRunning ? 5 * 60 * 1000 : isDefender ? 90 * 1000 : 30000;
     const timer = setTimeout(() => {
       if (!res.headersSent) {
-        res.status(503).json({ error: 'Request timeout', path: req.path });
+        res.status(503).json({ error: 'Request timeout' });
       }
     }, timeoutMs);
     res.on('finish', () => clearTimeout(timer));
@@ -110,23 +150,23 @@ app.use((req, res, next) => {
 });
 
 // API Routes
-app.use('/api/auth',    authRoutes);
-app.use('/api/users',   usersRoutes);
-app.use('/api/signins', signinsRoutes);
-app.use('/api/alerts',  alertsRoutes);
-app.use('/api/mock',    mockRoutes);
-app.use('/api/webhook', webhookRoutes);
-app.use('/api/pim',     pimRoutes);
-app.use('/api/reports', reportsRoutes);
-app.use('/api/tenant',  tenantRoutes);
-app.use('/api/remediation', remediationRouter);
-app.use('/api/audit',     auditRoutes);
-app.use('/api/device-actions', deviceActionsRoutes);
-app.use('/api/defender',  defenderVulnerabilityRoutes);
-app.use('/api/msp',       mspRoutes);
-app.use('/api/identity',  identityRoutes);
-app.use('/api/superadmin', superadminRoutes);
-app.use('/api/billing',   billingRoutes);
+app.use('/api/auth',         authLimiter,   authRoutes);
+app.use('/api/users',        apiLimiter,    usersRoutes);
+app.use('/api/signins',      apiLimiter,    signinsRoutes);
+app.use('/api/alerts',       apiLimiter,    alertsRoutes);
+app.use('/api/mock',                        mockRoutes);
+app.use('/api/webhook',                     webhookRoutes);
+app.use('/api/pim',          apiLimiter,    pimRoutes);
+app.use('/api/reports',      apiLimiter,    reportsRoutes);
+app.use('/api/tenant',       apiLimiter,    tenantRoutes);
+app.use('/api/remediation',  actionLimiter, remediationRouter);
+app.use('/api/audit',        apiLimiter,    auditRoutes);
+app.use('/api/device-actions', actionLimiter, deviceActionsRoutes);
+app.use('/api/defender',     apiLimiter,    defenderVulnerabilityRoutes);
+app.use('/api/msp',          apiLimiter,    mspRoutes);
+app.use('/api/identity',     apiLimiter,    identityRoutes);
+app.use('/api/superadmin',   apiLimiter,    superadminRoutes);
+app.use('/api/billing',      apiLimiter,    billingRoutes);
 
 // Gumroad webhook alias — matches the URL configured in Gumroad Ping settings
 // Accepts both /api/billing/gumroad-webhook and /api/webhooks/gumroad
@@ -145,19 +185,7 @@ try {
 app.use('/api/internal', internalRoutes);
 
 app.get('/api/health', (req, res) => {
-  res.json({
-    status:        'ok',
-    timestamp:     new Date().toISOString(),
-    mockMode:      MOCK,
-    version:       '2.0.0',
-    activeTenants: tenantRegistry.getActiveTenants().length,
-    features:      {
-      webhooks:          !!process.env.WEBHOOK_NOTIFICATION_URL,
-      telegram:          !!process.env.TELEGRAM_BOT_TOKEN,
-      tableStorage:      !!process.env.AZURE_STORAGE_CONNECTION_STRING,
-      autoRemediation:   autoRemediationService.isEnabled(),
-    }
-  });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // GET /api/posture — Composite security posture score for the current tenant

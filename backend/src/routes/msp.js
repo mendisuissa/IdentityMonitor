@@ -4,10 +4,24 @@ const tenantRegistry = require('../services/tenantRegistry');
 const alertsStore    = require('../services/alertsStore');
 const settingsService = require('../services/settingsService');
 
-// GET /api/msp/tenants
+const SUPERADMIN_EMAILS = (process.env.SUPERADMIN_EMAILS || '')
+  .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+
+function isSuperAdmin(req) {
+  const email = (req.session?.tenant?.userEmail || '').toLowerCase().trim();
+  return SUPERADMIN_EMAILS.includes(email);
+}
+
+// GET /api/msp/tenants — superadmin only
 router.get('/tenants', async (req, res) => {
   if (process.env.MOCK_MODE === 'true') {
     return res.json(getMockTenants());
+  }
+  if (!req.session?.tenant?.tenantId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (!isSuperAdmin(req)) {
+    return res.status(403).json({ error: 'Access denied' });
   }
   try {
     const tenants = await tenantRegistry.getAllTenants();

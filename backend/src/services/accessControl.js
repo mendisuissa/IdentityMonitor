@@ -23,8 +23,13 @@ function getRoleForRequest(req) {
   if (!tenantId) return 'viewer';
   const email = (getActor(req) || '').toLowerCase();
   const admins = settingsService.getAdmins(tenantId) || [];
+
+  // If no admins configured yet, grant owner to the session user —
+  // they are the first person to connect this tenant (the actual owner).
+  if (!admins.length) return 'owner';
+
   const matched = admins.find(a => String(a.email || '').toLowerCase() === email);
-  return matched?.role || 'owner';
+  return matched?.role || 'viewer';
 }
 
 function getAccessForRequest(req) {
