@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low';
-type Tab = 'trial' | 'detection' | 'actions' | 'admins' | 'notifications' | 'automation' | 'whitelist' | 'siem' | 'audit' | 'hours' | 'playbooks';
+type Tab = 'trial' | 'detection' | 'actions' | 'admins' | 'notifications' | 'automation' | 'whitelist' | 'siem' | 'audit' | 'hours' | 'playbooks' | 'permissions';
 
 const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DEFAULT_HOURS = DAYS.map((day, i) => ({ day, enabled: i >= 1 && i <= 5, start: '08:00', end: '18:00' }));
@@ -173,7 +173,8 @@ export default function SettingsPage() {
     { id: 'hours', label: 'Business Hours', icon: 'ti-clock' },
     { id: 'siem', label: 'SIEM & Logs', icon: 'ti-database' },
     { id: 'audit', label: 'Audit Log', icon: 'ti-file-search' },
-    { id: 'playbooks', label: 'Playbooks', icon: 'ti-list-check' }
+    { id: 'playbooks', label: 'Playbooks', icon: 'ti-list-check' },
+    { id: 'permissions', label: 'Permissions', icon: 'ti-lock-check' }
   ];
 
   if (loading) return <div className="loading-state"><div className="loading-spinner" /><div className="loading-text">Loading settings…</div></div>;
@@ -357,6 +358,45 @@ export default function SettingsPage() {
       {tab === 'audit' && <div className="card"><div className="card-header"><div className="card-title">Audit log</div></div><div className="stats-grid" style={{ marginBottom: 14 }}><div className="stat-card neutral"><div className="stat-value">{audit.stats?.total ?? 0}</div><div className="stat-label">Total</div></div><div className="stat-card amber"><div className="stat-value">{audit.stats?.today ?? 0}</div><div className="stat-label">Today</div></div></div><div style={{ display: 'grid', gap: 8 }}>{(audit.entries || []).map((entry: any, index: number) => <div key={index} className="detail-card"><div style={{ fontWeight: 700 }}>{entry.action || 'event'}</div><div className="text-muted" style={{ fontSize: 12 }}>{entry.actor || 'system'} · {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '-'}</div><pre className="json-box" style={{ marginTop: 10 }}>{JSON.stringify(entry.details || entry, null, 2)}</pre></div>)}</div></div>}
 
       {tab === 'playbooks' && <PlaybooksPanel playbooks={playbooks} setPlaybooks={setPlaybooks} onSave={savePlaybooks} saving={saving} />}
+
+      {tab === 'permissions' && (
+        <div style={{ display: 'grid', gap: 16, maxWidth: 640 }}>
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Microsoft Graph — Admin Consent</div>
+            </div>
+            <div className="text-muted" style={{ fontSize: 13, marginBottom: 16, lineHeight: 1.6 }}>
+              IdentityMonitor requires an admin in your tenant to grant consent for the required Microsoft Graph permissions.
+              Click the button below to open the Microsoft consent page. You must be a Global Administrator or Privileged Role Administrator to approve.
+            </div>
+            <div style={{ display: 'grid', gap: 8, marginBottom: 20 }}>
+              {[
+                { scope: 'AuditLog.Read.All', desc: 'Read sign-in and audit logs' },
+                { scope: 'Directory.Read.All', desc: 'Read users, groups, and roles' },
+                { scope: 'IdentityRiskyUser.Read.All', desc: 'Read risky user signals from Entra ID Protection' },
+                { scope: 'SecurityEvents.Read.All', desc: 'Read Defender security alerts' },
+                { scope: 'DeviceManagementApps.ReadWrite.All', desc: 'Deploy WinGet apps via Intune for auto-remediation' },
+                { scope: 'WindowsUpdates.ReadWrite.All', desc: 'Deploy Windows Updates via WUfB Deployment Service' },
+              ].map(({ scope, desc }) => (
+                <div key={scope} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13 }}>
+                  <i className="ti ti-circle-check" style={{ color: 'var(--indigo)', marginTop: 2, flexShrink: 0 }} />
+                  <div>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{scope}</span>
+                    <span className="text-muted"> — {desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={() => { window.location.href = '/api/auth/admin-consent?returnTo=/settings'; }}
+            >
+              <i className="ti ti-shield-lock" style={{ marginRight: 6 }} />
+              Grant admin consent
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
