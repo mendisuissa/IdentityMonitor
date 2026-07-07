@@ -105,6 +105,30 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ─── WinGet Intune operations ─────────────────────────────────────────────────
 
+/**
+ * Find an existing WinGet app in Intune by packageIdentifier.
+ * Returns the app object ({ id, publishingState, ... }) or null.
+ */
+async function findExistingWinGetApp(accessToken, packageIdentifier) {
+  try {
+    const encoded = encodeURIComponent(`packageIdentifier eq '${packageIdentifier}'`);
+    const data = await graphGet(
+      accessToken,
+      `/beta/deviceAppManagement/mobileApps?$filter=${encoded}&$select=id,displayName,publishingState,packageIdentifier`
+    );
+    const items = data?.value || [];
+    // Also check without filter (some tenants don't support OData filter on this endpoint)
+    if (!items.length) {
+      const all = await graphGet(accessToken, `/beta/deviceAppManagement/mobileApps?$select=id,displayName,publishingState,packageIdentifier&$top=100`);
+      const match = (all?.value || []).find(a => norm(a.packageIdentifier) === norm(packageIdentifier));
+      return match || null;
+    }
+    return items[0] || null;
+  } catch {
+    return null;
+  }
+}
+
 async function createWinGetApp(accessToken, { packageIdentifier, displayName, publisher, runAsAccount = 'system', updateMode = 'auto' }) {
   return graphPost(accessToken, '/beta/deviceAppManagement/mobileApps', {
     '@odata.type': '#microsoft.graph.winGetApp',
@@ -200,25 +224,32 @@ async function deployRemediationForFinding(tenantId, finding) {
     };
   }
 
-  // 3. Create WinGet app in Intune
+  // 3. Check if app already exists in Intune — avoid duplicate deployments
   let app;
-  try {
-    app = await createWinGetApp(accessToken, { packageIdentifier: wingetId, displayName, publisher });
-  } catch (err) {
-    // If it's a permissions error, give a clear message
-    if (err.status === 403 || err.status === 401) {
+  let alreadyExisted = false;
+  const existing = await findExistingWinGetApp(accessToken, wingetId);
+  if (existing) {
+    console.log(`[wingetService] ${wingetId} already exists in Intune (id=${existing.id}) — reusing`);
+    app = existing;
+    alreadyExisted = true;
+  } else {
+    try {
+      app = await createWinGetApp(accessToken, { packageIdentifier: wingetId, displayName, publisher });
+    } catch (err) {
+      if (err.status === 403 || err.status === 401) {
+        return {
+          ok: false,
+          message: `Intune permission missing: DeviceManagementApps.ReadWrite.All must be granted. Error: ${err.message}`,
+          executor: 'local-winget',
+          permissionError: true,
+        };
+      }
       return {
         ok: false,
-        message: `Intune permission missing: DeviceManagementApps.ReadWrite.All must be granted. Error: ${err.message}`,
+        message: `Failed to create Intune WinGet app for ${displayName}: ${err.message}`,
         executor: 'local-winget',
-        permissionError: true,
       };
     }
-    return {
-      ok: false,
-      message: `Failed to create Intune WinGet app for ${displayName}: ${err.message}`,
-      executor: 'local-winget',
-    };
   }
 
   const appId = String(app.id || '').trim();
@@ -226,8 +257,12 @@ async function deployRemediationForFinding(tenantId, finding) {
     return { ok: false, message: 'Intune app creation returned no app ID.', executor: 'local-winget' };
   }
 
-  // 4. Wait for Intune to finish publishing
-  const { published, publishingState } = await waitForPublished(accessToken, appId);
+  // 4. Wait for Intune to finish publishing (skip if already published)
+  let published = alreadyExisted && String(app.publishingState || '').toLowerCase() === 'published';
+  let publishingState = app.publishingState || 'unknown';
+  if (!published) {
+    ({ published, publishingState } = await waitForPublished(accessToken, appId));
+  }
 
   // 5. Assign to All Devices
   let assigned = false;
@@ -237,7 +272,6 @@ async function deployRemediationForFinding(tenantId, finding) {
       assigned = true;
     } catch (err) {
       console.error('[wingetService] assignment failed:', err.message);
-      // Don't fail — app was created, assignment can be done manually
     }
   }
 
@@ -252,10 +286,10 @@ async function deployRemediationForFinding(tenantId, finding) {
     assigned,
     timedOut: !published,
     message: assigned
-      ? `WinGet app "${displayName}" (${wingetId}) created and assigned to All Devices via Intune.`
+      ? `WinGet app "${displayName}" (${wingetId}) ${alreadyExisted ? 'already in Intune — re-assigned' : 'created and assigned'} to All Devices.`
       : published
-        ? `WinGet app "${displayName}" created and published. Assignment failed — assign manually in Intune.`
-        : `WinGet app "${displayName}" created. Intune is still publishing it (assignment pending — check Intune portal).`,
+        ? `WinGet app "${displayName}" ${alreadyExisted ? 'already exists' : 'created'} and published. Assignment failed — assign manually in Intune.`
+        : `WinGet app "${displayName}" ${alreadyExisted ? 'already exists' : 'created'}. Intune is still publishing it (assignment pending).`,
   };
 }
 
