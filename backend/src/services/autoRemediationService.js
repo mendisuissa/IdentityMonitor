@@ -199,21 +199,29 @@ async function remediateTenant(tenantId, options = {}) {
         }
 
       } else if (category === 'windows-update' || category === 'platform') {
-        result  = await executeNativeRemediation({
-          tenantId,
-          finding: enrichedDeep,
-          classification: enrichedDeep.classification || { type: 'windows-update', family: 'platform' },
-          options: {
-            updateType:          'security',
-            rebootBehavior:      'ifRequired',
-            deviceIds:           [],
-            affectedDeviceNames: enrichedDeep.affectedMachines || [],
-          },
-        });
-        const ok = result?.ok !== false;
-        status  = ok ? 'success' : 'failed';
-        message = result?.message || (ok ? 'Windows Update deployed.' : 'Windows Update failed.');
-        if (ok) summary.success++; else summary.failed++;
+        const affectedMachines = enrichedDeep.affectedMachines || [];
+        if (!affectedMachines.length) {
+          // WUfB Deployment Service requires device IDs — skip until enrichment resolves them
+          status  = 'skipped';
+          message = `Windows Update skipped — no affected device names available for ${cveId || 'this finding'}. Will retry when device data is enriched.`;
+          summary.skipped++;
+        } else {
+          result  = await executeNativeRemediation({
+            tenantId,
+            finding: enrichedDeep,
+            classification: enrichedDeep.classification || { type: 'windows-update', family: 'platform' },
+            options: {
+              updateType:          'security',
+              rebootBehavior:      'ifRequired',
+              deviceIds:           [],
+              affectedDeviceNames: affectedMachines,
+            },
+          });
+          const ok = result?.ok !== false;
+          status  = ok ? 'success' : 'failed';
+          message = result?.message || (ok ? 'Windows Update deployed.' : 'Windows Update failed.');
+          if (ok) summary.success++; else summary.failed++;
+        }
 
       } else {
         // identity, intune-policy, script — not auto-remediable yet
