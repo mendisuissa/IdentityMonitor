@@ -263,24 +263,25 @@ router.post('/execute', async (req, res) => {
     }
 
     if (plan.executor === 'local-winget' || plan.executor === 'webapp' || classification.type === 'application') {
-      try {
-        const result = await executeApplicationRemediation({ tenantId, approvalId, finding: enrichedFinding, devices, plan, options });
-        const ok = result?.ok !== false && result?.status !== 'failed';
-        saveHistory(ok ? 'success' : 'failed', result?.message || '', result);
-        return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'local-winget', result });
-      } catch (execError) {
-        console.error('[Remediation/execute] local-winget failed:', execError?.message, execError?.status);
-        const isNotSupported = execError?.status === 400 || execError?.status === 403;
-        const failResult = {
-          supported: false,
-          status: isNotSupported ? 'unsupported-application' : 'execution-error',
-          executionMode: 'guided-manual',
-          message: execError?.message || 'Remediation execution failed.',
-          details: execError?.details || null,
-        };
-        saveHistory('failed', failResult.message, failResult);
-        return res.json({ ok: true, tenantId, approvalId, forwardedTo: 'local-winget', result: failResult });
-      }
+      // Fire-and-forget: start deployment, respond immediately to avoid Azure 230s gateway timeout
+      res.json({ ok: true, tenantId, approvalId, forwardedTo: 'local-winget', status: 'in-progress', message: 'Deployment started — check remediation history for result.' });
+
+      executeApplicationRemediation({ tenantId, approvalId, finding: enrichedFinding, devices, plan, options })
+        .then(result => {
+          const ok = result?.ok !== false && result?.status !== 'failed';
+          saveHistory(ok ? 'success' : 'failed', result?.message || '', result);
+        })
+        .catch(execError => {
+          console.error('[Remediation/execute] local-winget failed:', execError?.message, execError?.status);
+          const isNotSupported = execError?.status === 400 || execError?.status === 403;
+          saveHistory('failed', execError?.message || 'Remediation execution failed.', {
+            supported: false,
+            status: isNotSupported ? 'unsupported-application' : 'execution-error',
+            executionMode: 'guided-manual',
+            message: execError?.message || 'Remediation execution failed.',
+          });
+        });
+      return;
     }
 
     // Immediate Windows Update (Update Now button)
