@@ -116,8 +116,7 @@ router.get('/checkout', (req, res) => {
 // Never pass secrets as URL query parameters — they appear in server logs.
 // ---------------------------------------------------------------------------
 router.post('/gumroad-webhook', express.urlencoded({ extended: true }), async (req, res) => {
-  // Accept secret from header (preferred) or query param for backwards-compat
-  const providedSecret = req.headers['x-webhook-secret'] || req.query.secret;
+  const providedSecret = req.headers['x-webhook-secret'];
   if (GUMROAD_WEBHOOK_SECRET && providedSecret !== GUMROAD_WEBHOOK_SECRET) {
     console.warn('[Billing] Gumroad webhook: invalid secret from', req.ip);
     return res.status(403).json({ error: 'Invalid secret' });

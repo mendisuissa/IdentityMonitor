@@ -4,8 +4,17 @@ const path = require('path');
 const DIR = process.env.NODE_ENV === 'production' ? '/home/delivery-tracker' : path.join(__dirname, '../../../delivery-tracker');
 if (!fs.existsSync(DIR)) fs.mkdirSync(DIR, { recursive: true });
 
+function sanitizeTenantId(tenantId) {
+  if (!tenantId || typeof tenantId !== 'string') return null;
+  const safe = tenantId.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 128);
+  if (safe.includes('..') || safe.startsWith('.')) return null;
+  return safe;
+}
+
 function filePath(tenantId) {
-  return path.join(DIR, `${tenantId}.json`);
+  const safe = sanitizeTenantId(tenantId);
+  if (!safe) throw new Error('Invalid tenantId');
+  return path.join(DIR, `${safe}.json`);
 }
 
 function readStore(tenantId) {

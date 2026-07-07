@@ -118,7 +118,7 @@ app.use(session({
     secure:   process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge:   SESSION_TTL_SEC * 1000,
-    sameSite: 'lax'
+    sameSite: 'strict'
   }
 }));
 

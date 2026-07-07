@@ -226,7 +226,7 @@ async function getUserSignIns(tenantId, userId, hoursBack) {
   try {
     const result = await client
       .api('/auditLogs/signIns')
-      .filter("userId eq '" + userId + "' and createdDateTime ge " + since)
+      .filter("userId eq '" + String(userId).replace(/'/g, "''") + "' and createdDateTime ge " + since)
       .select('id,createdDateTime,userDisplayName,userPrincipalName,userId,ipAddress,location,deviceDetail,status,conditionalAccessStatus,riskLevelAggregated,clientAppUsed,appDisplayName')
       .orderby('createdDateTime desc')
       .top(100)
@@ -248,7 +248,7 @@ async function getUserAuditActions(tenantId, userId, hoursBack) {
   try {
     const result = await client
       .api('/auditLogs/directoryAudits')
-      .filter(`initiatedBy/user/id eq '${userId}' and activityDateTime ge ${since}`)
+      .filter(`initiatedBy/user/id eq '${String(userId).replace(/'/g, "''")}' and activityDateTime ge ${since}`)
       .select('id,activityDateTime,activityDisplayName,category,operationType,result,initiatedBy,targetResources,loggedByService')
       .orderby('activityDateTime desc')
       .top(200)

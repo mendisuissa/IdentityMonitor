@@ -21,6 +21,16 @@ function requireTenant(req, res) {
   return tenantId;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function requireUserId(req, res) {
+  const id = req.params.userId;
+  if (!UUID_RE.test(id)) {
+    res.status(400).json({ error: 'Invalid userId format' });
+    return null;
+  }
+  return id;
+}
+
 // GET /api/users
 router.get('/', async (req, res) => {
   try {
@@ -53,9 +63,9 @@ router.get('/', async (req, res) => {
 router.get('/:userId/signins', async (req, res) => {
   try {
     if (isMock()) return res.json(MOCK_SIGN_INS.filter(s => s.userId === req.params.userId));
-    const tenantId = requireTenant(req, res);
-    if (!tenantId) return;
-    const signIns = await graphService.getUserSignIns(tenantId, req.params.userId, 72);
+    const tenantId = requireTenant(req, res); if (!tenantId) return;
+    const userId = requireUserId(req, res);   if (!userId) return;
+    const signIns = await graphService.getUserSignIns(tenantId, userId, 72);
     res.json(signIns);
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
@@ -66,24 +76,23 @@ router.get('/:userId/signins', async (req, res) => {
 router.post('/:userId/revoke', requirePermission('users.respond'), async (req, res) => {
   try {
     if (isMock()) return res.json({ success: true, message: '[MOCK] Sessions revoked.' });
-    const tenantId = requireTenant(req, res);
-    if (!tenantId) return;
-    await graphService.revokeUserSessions(tenantId, req.params.userId);
+    const tenantId = requireTenant(req, res); if (!tenantId) return;
+    const userId = requireUserId(req, res);   if (!userId) return;
+    await graphService.revokeUserSessions(tenantId, userId);
     res.json({ success: true, message: 'Sessions revoked. User will need MFA on next sign-in.' });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-
 // POST /api/users/:userId/disable
 router.post('/:userId/disable', requirePermission('users.respond'), async (req, res) => {
   try {
     if (isMock()) return res.json({ success: true, message: '[MOCK] User disabled.' });
-    const tenantId = requireTenant(req, res);
-    if (!tenantId) return;
-    await graphService.disableUser(tenantId, req.params.userId);
-    auditLog.log(tenantId, auditLog.ACTIONS.USER_DISABLED, { userId: req.params.userId }, getActor(req));
+    const tenantId = requireTenant(req, res); if (!tenantId) return;
+    const userId = requireUserId(req, res);   if (!userId) return;
+    await graphService.disableUser(tenantId, userId);
+    auditLog.log(tenantId, auditLog.ACTIONS.USER_DISABLED, { userId }, getActor(req));
     res.json({ success: true, message: 'User account disabled.' });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
@@ -93,10 +102,10 @@ router.post('/:userId/disable', requirePermission('users.respond'), async (req, 
 router.post('/:userId/enable', requirePermission('users.respond'), async (req, res) => {
   try {
     if (isMock()) return res.json({ success: true, message: '[MOCK] User enabled.' });
-    const tenantId = requireTenant(req, res);
-    if (!tenantId) return;
-    await graphService.enableUser(tenantId, req.params.userId);
-    auditLog.log(tenantId, 'response.user_enabled', { userId: req.params.userId }, getActor(req));
+    const tenantId = requireTenant(req, res); if (!tenantId) return;
+    const userId = requireUserId(req, res);   if (!userId) return;
+    await graphService.enableUser(tenantId, userId);
+    auditLog.log(tenantId, 'response.user_enabled', { userId }, getActor(req));
     res.json({ success: true, message: 'User account enabled.' });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });

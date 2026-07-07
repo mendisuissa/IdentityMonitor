@@ -9,7 +9,16 @@ const wsService       = require('../services/wsService');
 const tableStorage    = require('../services/tableStorage');
 const graphService    = require('../services/graphService');
 
-const CLIENT_STATE = process.env.WEBHOOK_CLIENT_STATE || 'priv-monitor-secret';
+const CLIENT_STATE = (() => {
+  if (!process.env.WEBHOOK_CLIENT_STATE) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[FATAL] WEBHOOK_CLIENT_STATE env var is not set. Refusing to start in production.');
+      process.exit(1);
+    }
+    return 'priv-monitor-dev-webhook-DO-NOT-USE-IN-PROD';
+  }
+  return process.env.WEBHOOK_CLIENT_STATE;
+})();
 
 // ─── GET /api/webhook/notify — validation (Microsoft calls this on subscription create) ──
 router.get('/notify', (req, res) => {

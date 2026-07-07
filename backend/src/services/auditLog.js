@@ -12,6 +12,16 @@ const AUDIT_DIR = process.env.NODE_ENV === 'production'
 
 if (!fs.existsSync(AUDIT_DIR)) fs.mkdirSync(AUDIT_DIR, { recursive: true });
 
+// Only allow tenant IDs that are safe to use as file names (UUIDs, domains, alphanumeric).
+// Blocks path traversal: '../', '../../etc/passwd', etc.
+function sanitizeTenantId(tenantId) {
+  if (!tenantId || typeof tenantId !== 'string') return null;
+  const safe = tenantId.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 128);
+  // Reject anything that still looks like a traversal after sanitization
+  if (safe.includes('..') || safe.startsWith('.')) return null;
+  return safe;
+}
+
 // ── In-memory cache ───────────────────────────────────────────────────────────
 // Keeps recent entries in memory to avoid repeated synchronous disk reads.
 const _memCache  = new Map(); // tenantId → entry[]
@@ -34,7 +44,9 @@ function _ensureCache(tenantId) {
 // Reads the JSONL file asynchronously so it never freezes the event loop.
 async function warmCache(tenantId) {
   if (!tenantId) return;
-  const filePath = path.join(AUDIT_DIR, tenantId + '.jsonl');
+  const safe = sanitizeTenantId(tenantId);
+  if (!safe) return;
+  const filePath = path.join(AUDIT_DIR, safe + '.jsonl');
   try {
     await fs.promises.access(filePath);
     const content = await fs.promises.readFile(filePath, 'utf8');
@@ -77,24 +89,25 @@ const ACTIONS = {
 };
 
 function log(tenantId, action, details = {}, actor = 'system') {
-  if (!tenantId) return;
+  const safe = sanitizeTenantId(tenantId);
+  if (!safe) return;
   const entry = {
     timestamp: new Date().toISOString(),
-    tenantId,
+    tenantId: safe,
     action,
     actor,  // email or 'system' or 'auto'
     ...details
   };
 
   // Update in-memory cache immediately (no disk read needed)
-  _ensureCache(tenantId);
-  const cached = _memCache.get(tenantId) || [];
+  _ensureCache(safe);
+  const cached = _memCache.get(safe) || [];
   cached.push(entry);
   if (cached.length > CACHE_MAX) cached.splice(0, cached.length - CACHE_MAX);
-  _memCache.set(tenantId, cached);
+  _memCache.set(safe, cached);
 
   // Async fire-and-forget — never blocks the event loop
-  const filePath = path.join(AUDIT_DIR, tenantId + '.jsonl');
+  const filePath = path.join(AUDIT_DIR, safe + '.jsonl');
   fs.appendFile(filePath, JSON.stringify(entry) + '\n', err => {
     if (err) console.error('[AuditLog] Write error:', err.message);
   });

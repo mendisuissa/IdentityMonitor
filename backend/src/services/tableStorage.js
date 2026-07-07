@@ -56,13 +56,23 @@ async function saveAlert(alert) {
   await client.upsertEntity(entity, 'Replace');
 }
 
+const VALID_STATUSES  = new Set(['open', 'resolved', 'dismissed', 'acknowledged']);
+const VALID_SEVERITIES = new Set(['critical', 'high', 'medium', 'low', 'informational']);
+
+function escapeOData(value) {
+  // Escape single quotes in OData string literals
+  return String(value || '').replace(/'/g, "''");
+}
+
 async function getAlerts(tenantId, filters = {}) {
   const client = getClient(TABLES.ALERTS);
-  const pk = tenantId || 'default';
+  const pk = escapeOData(tenantId || 'default');
   let query = `PartitionKey eq '${pk}'`;
 
-  if (filters.status)   query += ` and status eq '${filters.status}'`;
-  if (filters.severity) query += ` and severity eq '${filters.severity}'`;
+  if (filters.status && VALID_STATUSES.has(filters.status))
+    query += ` and status eq '${filters.status}'`;
+  if (filters.severity && VALID_SEVERITIES.has(filters.severity))
+    query += ` and severity eq '${filters.severity}'`;
 
   const results = [];
   const iter = client.listEntities({ queryOptions: { filter: query } });

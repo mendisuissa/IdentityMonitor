@@ -88,6 +88,8 @@ router.get('/mock-login', (req, res) => {
 router.get('/login', (req, res) => {
   if (!CLIENT_ID) return res.status(500).json({ error: 'CLIENT_ID not configured' });
 
+  const oauthNonce = crypto.randomBytes(16).toString('hex');
+  req.session.oauthNonce = oauthNonce;
   req.session.save((err) => {
     if (err) return res.status(500).json({ error: 'Session error' });
     const params = new URLSearchParams({
@@ -96,7 +98,7 @@ router.get('/login', (req, res) => {
       response_type: 'code',
       scope:         'openid profile email offline_access ' + REQUIRED_SCOPES,
       response_mode: 'query',
-      state:         'login',
+      state:         'login:' + oauthNonce,
     });
     res.redirect('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?' + params.toString());
   });
@@ -105,6 +107,17 @@ router.get('/login', (req, res) => {
 // GET /api/auth/callback
 router.get('/callback', async (req, res) => {
   const { code, error, error_description, admin_consent, tenant, state } = req.query;
+
+  // Verify OAuth state nonce to prevent CSRF on the login callback
+  if (code && String(state || '').startsWith('login:')) {
+    const returnedNonce = String(state).slice('login:'.length);
+    const expectedNonce = req.session?.oauthNonce;
+    if (!expectedNonce || returnedNonce !== expectedNonce) {
+      console.warn('[Auth] OAuth state nonce mismatch — possible CSRF attempt');
+      return res.redirect(FRONTEND_URL + '/login?error=state_mismatch');
+    }
+    delete req.session.oauthNonce;
+  }
 
   // Handle admin consent that landed here because ADMIN_CONSENT_REDIRECT_URI = REDIRECT_URI
   if (!code && String(admin_consent).toLowerCase() === 'true' && tenant) {
@@ -549,8 +562,9 @@ router.get('/permission-status', async (req, res) => {
 
   const { getAccessTokenForTenant, clearTokenCache } = require('../services/graphService');
 
-  // Always fetch a fresh token — cached token may predate a recent admin consent grant
+  // Clear both token caches — graphService and nativeRemediationExecutor maintain separate caches
   clearTokenCache(tenantId);
+  clearGraphTokenCache(tenantId);
 
   let token;
   try {
