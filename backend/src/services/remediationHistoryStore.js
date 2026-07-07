@@ -60,18 +60,22 @@ async function saveRemediationRecord(record) {
     executedAt:  now,
   };
 
+  // Always write to in-memory so polling can find the record immediately,
+  // even if the Azure write is slow or fails.
+  const key = record.tenantId;
+  if (!IN_MEMORY.has(key)) IN_MEMORY.set(key, []);
+  IN_MEMORY.get(key).unshift({ id: rowKey, ...entity });
+  const list = IN_MEMORY.get(key);
+  if (list.length > 500) list.splice(500);
+
   const client = getTableClient();
   if (client) {
-    await ensureTable();
-    await client.createEntity({ partitionKey: record.tenantId, rowKey, ...entity });
-  } else {
-    // in-memory fallback
-    const key = record.tenantId;
-    if (!IN_MEMORY.has(key)) IN_MEMORY.set(key, []);
-    IN_MEMORY.get(key).unshift({ id: rowKey, ...entity });
-    // cap at 500 entries in-memory
-    const list = IN_MEMORY.get(key);
-    if (list.length > 500) list.splice(500);
+    try {
+      await ensureTable();
+      await client.createEntity({ partitionKey: record.tenantId, rowKey, ...entity });
+    } catch (azErr) {
+      console.error('[remediationHistoryStore] Azure write failed (record kept in-memory):', azErr?.message);
+    }
   }
 
   return { id: rowKey, ...entity };
@@ -85,35 +89,42 @@ async function saveRemediationRecord(record) {
 async function getRemediationHistory(tenantId, options = {}) {
   const limit = Number(options.limit || 200);
 
+  // Always include in-memory records (written immediately on save, even when Azure is configured)
+  const memRecords = IN_MEMORY.get(tenantId) || [];
+  const memIds = new Set(memRecords.map(r => r.id));
+
   const client = getTableClient();
   if (!client) {
-    const list = IN_MEMORY.get(tenantId) || [];
-    return limit > 0 ? list.slice(0, limit) : list;
+    return limit > 0 ? memRecords.slice(0, limit) : memRecords;
   }
 
   // No ensureTable() here — table is guaranteed to exist after startup init.
-  // Calling ensureTable() on every read adds a slow HTTP round-trip to Azure.
-  const records = [];
-  const fetchLimit = limit > 0 ? limit * 3 : 600; // over-fetch so we can sort, then slice
-  const iterator = client.listEntities({
-    queryOptions: { filter: `PartitionKey eq '${tenantId.replace(/'/g, "''")}'` }
-  });
-  for await (const e of iterator) {
-    records.push({
-      id:          e.rowKey,
-      tenantId:    e.partitionKey,
-      cveId:       e.cveId       || '',
-      productName: e.productName || '',
-      category:    e.category    || '',
-      severity:    e.severity    || '',
-      status:      e.status      || '',
-      executor:    e.executor    || '',
-      triggeredBy: e.triggeredBy || '',
-      message:     e.message     || '',
-      result:      (() => { try { return JSON.parse(e.result || '{}'); } catch { return {}; } })(),
-      executedAt:  e.executedAt  || '',
+  const records = [...memRecords];
+  const fetchLimit = limit > 0 ? limit * 3 : 600;
+  try {
+    const iterator = client.listEntities({
+      queryOptions: { filter: `PartitionKey eq '${tenantId.replace(/'/g, "''")}'` }
     });
-    if (records.length >= fetchLimit) break;
+    for await (const e of iterator) {
+      if (memIds.has(e.rowKey)) continue; // skip duplicates already in-memory
+      records.push({
+        id:          e.rowKey,
+        tenantId:    e.partitionKey,
+        cveId:       e.cveId       || '',
+        productName: e.productName || '',
+        category:    e.category    || '',
+        severity:    e.severity    || '',
+        status:      e.status      || '',
+        executor:    e.executor    || '',
+        triggeredBy: e.triggeredBy || '',
+        message:     e.message     || '',
+        result:      (() => { try { return JSON.parse(e.result || '{}'); } catch { return {}; } })(),
+        executedAt:  e.executedAt  || '',
+      });
+      if (records.length >= fetchLimit) break;
+    }
+  } catch (azErr) {
+    console.error('[remediationHistoryStore] Azure read failed, returning in-memory only:', azErr?.message);
   }
 
   records.sort((a, b) => b.executedAt.localeCompare(a.executedAt));

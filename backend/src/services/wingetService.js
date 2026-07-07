@@ -67,8 +67,15 @@ function lookupCatalog(productName, publisher) {
 
 // ─── Graph helpers ────────────────────────────────────────────────────────────
 
+function fetchWithTimeout(url, options, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
 async function graphPost(accessToken, path, body) {
-  const res = await fetch(`https://graph.microsoft.com${path}`, {
+  const res = await fetchWithTimeout(`https://graph.microsoft.com${path}`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -88,7 +95,7 @@ async function graphPost(accessToken, path, body) {
 }
 
 async function graphGet(accessToken, path) {
-  const res = await fetch(`https://graph.microsoft.com${path}`, {
+  const res = await fetchWithTimeout(`https://graph.microsoft.com${path}`, {
     headers: { 'Authorization': `Bearer ${accessToken}` },
   });
   const data = await res.json().catch(() => ({}));
