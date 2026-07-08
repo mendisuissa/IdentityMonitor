@@ -185,7 +185,7 @@ try {
 app.use('/api/internal', internalRoutes);
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: require('../package.json').version });
 });
 
 // GET /api/posture — Composite security posture score for the current tenant
