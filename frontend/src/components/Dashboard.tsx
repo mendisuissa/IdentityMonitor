@@ -176,12 +176,16 @@ export default function Dashboard() {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Privileged Security Overview</div>
-          <div className="page-subtitle">Real-time posture across active threats, privileged exposure, and response readiness</div>
+          <div className="page-title">Dashboard</div>
+          <div className="page-subtitle">Privileged security overview</div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => setShowWizard(true)}>Setup guide</button>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>Last refresh · {new Date().toLocaleString()}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 99, background: 'rgba(62,204,143,0.08)', border: '1px solid rgba(62,204,143,0.18)', fontSize: 11, fontWeight: 600, color: 'rgba(62,204,143,0.85)' }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#3ECC8F', display: 'inline-block' }}></span>
+            Live
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowWizard(true)}><i className="ti ti-circle-check" style={{ fontSize: 13, marginRight: 4 }}></i>Setup guide</button>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
         </div>
       </div>
 
@@ -218,23 +222,41 @@ export default function Dashboard() {
 
       {/* ── KPI Row ── */}
       <div className="stats-grid">
-        <div className="stat-card critical clickable" onClick={() => navigate('/alerts?severity=critical')}>
-          <div className="stat-value">{stats?.critical ?? 0}</div><div className="stat-label">Critical Threats</div><div className="stat-arrow">→</div>
+        <div className="stat-card critical" onClick={() => navigate('/alerts?severity=critical')} style={{ cursor: 'pointer' }}>
+          <i className="ti ti-alert-octagon stat-icon" aria-hidden="true"></i>
+          <div className="stat-value">{stats?.critical ?? 0}</div>
+          <div className="stat-label">Critical</div>
+          <span className="stat-delta">{(stats?.critical ?? 0) === 0 ? '— clear' : `↑ active`}</span>
         </div>
-        <div className="stat-card high clickable" onClick={() => navigate('/alerts?severity=high')}>
-          <div className="stat-value">{stats?.high ?? 0}</div><div className="stat-label">High Priority</div><div className="stat-arrow">→</div>
+        <div className="stat-card high" onClick={() => navigate('/alerts?severity=high')} style={{ cursor: 'pointer' }}>
+          <i className="ti ti-alert-triangle stat-icon" aria-hidden="true"></i>
+          <div className="stat-value">{stats?.high ?? 0}</div>
+          <div className="stat-label">High</div>
+          <span className="stat-delta">{(stats?.high ?? 0) === 0 ? '— clear' : `↑ active`}</span>
         </div>
-        <div className="stat-card medium clickable" onClick={() => navigate('/alerts')}>
-          <div className="stat-value">{stats?.open ?? 0}</div><div className="stat-label">Active Threats</div><div className="stat-arrow">→</div>
+        <div className="stat-card medium" onClick={() => navigate('/alerts')} style={{ cursor: 'pointer' }}>
+          <i className="ti ti-flame stat-icon" aria-hidden="true"></i>
+          <div className="stat-value">{stats?.open ?? 0}</div>
+          <div className="stat-label">Active Threats</div>
+          <span className="stat-delta">{(stats?.open ?? 0) > 0 ? `↑ needs review` : '— clear'}</span>
         </div>
-        <div className="stat-card amber clickable" onClick={() => navigate('/users')}>
-          <div className="stat-value">{posture?.summary?.monitoredPrivilegedAccounts ?? users.length}</div><div className="stat-label">Privileged Accounts</div><div className="stat-arrow">→</div>
+        <div className="stat-card neutral" onClick={() => navigate('/users')} style={{ cursor: 'pointer' }}>
+          <i className="ti ti-user-shield stat-icon" aria-hidden="true"></i>
+          <div className="stat-value">{posture?.summary?.monitoredPrivilegedAccounts ?? users.length}</div>
+          <div className="stat-label">Privileged Accts</div>
+          <span className="stat-delta">— stable</span>
         </div>
-        <div className="stat-card clean clickable" onClick={() => navigate('/reports')}>
-          <div className="stat-value">{postureScore.score}</div><div className="stat-label">Posture Score</div><div className="stat-arrow">→</div>
+        <div className="stat-card clean" onClick={() => navigate('/reports')} style={{ cursor: 'pointer' }}>
+          <i className="ti ti-shield-check stat-icon" aria-hidden="true"></i>
+          <div className="stat-value">{postureScore.score}</div>
+          <div className="stat-label">Posture Score</div>
+          <span className={`stat-delta ${postureScore.delta >= 0 ? 'down' : 'up'}`}>{postureScore.delta >= 0 ? `↑ +${postureScore.delta} this week` : `↓ ${postureScore.delta}`}</span>
         </div>
-        <div className="stat-card neutral clickable" onClick={() => navigate('/reports')}>
-          <div className="stat-value" style={{ color: scoreColor(avgRiskScore) }}>{avgRiskScore}</div><div className="stat-label">Avg Risk Score</div><div className="stat-arrow">→</div>
+        <div className="stat-card neutral" onClick={() => navigate('/reports')} style={{ cursor: 'pointer' }}>
+          <i className="ti ti-chart-bar stat-icon" aria-hidden="true"></i>
+          <div className="stat-value" style={{ color: scoreColor(avgRiskScore) }}>{avgRiskScore}</div>
+          <div className="stat-label">Avg Risk</div>
+          <span className="stat-delta down">↓ improving</span>
         </div>
       </div>
 
