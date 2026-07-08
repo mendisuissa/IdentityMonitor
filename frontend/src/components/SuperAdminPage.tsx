@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 
 interface TenantRow {
   tenantId: string;
@@ -51,6 +51,131 @@ function PlanBadge({ plan }: { plan: string }) {
     </span>
   );
 }
+
+// ── Supervisor Panel ───────────────────────────────────────────────────────────
+
+interface SupervisorRun {
+  ran_at: string;
+  issues_found: number;
+  auto_fixed: number;
+  claude_resolved: number;
+  escalated: boolean;
+}
+
+interface SupervisorData {
+  ok?: boolean;
+  error?: string;
+  running?: boolean;
+  lastCheck?: number;
+  recentRuns?: SupervisorRun[];
+  summary?: {
+    stuckMissions: number;
+    openCriticals: number;
+    lastEscalated: boolean;
+    totalRuns: number;
+  };
+}
+
+function SupervisorPanel() {
+  const [data, setData]       = useState<SupervisorData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch('/api/superadmin/supervisor', { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => { setData({ ok: false, error: 'Failed to reach supervisor' }); setLoading(false); });
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const pill = () => {
+    if (!data || loading)          return { label: '…',        bg: '#374151', color: '#9ca3af' };
+    if (data.error || data.ok === false) return { label: '⚠ Offline', bg: '#450a0a', color: '#fca5a5' };
+    if (data.summary?.lastEscalated)     return { label: '🔴 Escalated', bg: '#450a0a', color: '#fca5a5' };
+    if ((data.summary?.openCriticals ?? 0) > 0) return { label: '🟡 Issues', bg: '#422006', color: '#fcd34d' };
+    return { label: '🟢 All Clear', bg: '#052e16', color: '#86efac' };
+  };
+
+  const p = pill();
+  const runs = data?.recentRuns ?? [];
+  const s    = data?.summary;
+
+  return (
+    <div className="card" style={{ marginBottom: 20, padding: '16px 20px' }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 18 }}>🤖</span>
+          <span style={{ fontWeight: 700, fontSize: 14 }}>Supervisor Agent</span>
+          <span style={{ background: p.bg, color: p.color, borderRadius: 20, padding: '2px 12px', fontSize: 12, fontWeight: 700 }}>
+            {p.label}
+          </span>
+          {data?.running && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>● running now</span>
+          )}
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={load}>↻</button>
+      </div>
+
+      {loading ? (
+        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading…</div>
+      ) : data?.error ? (
+        <div style={{ color: '#fca5a5', fontSize: 12 }}>{data.error}</div>
+      ) : (
+        <>
+          {/* Summary stats */}
+          <div style={{ display: 'flex', gap: 24, marginBottom: 14, flexWrap: 'wrap' }}>
+            {[
+              { label: 'Total runs',     value: s?.totalRuns      ?? '—' },
+              { label: 'Open criticals', value: s?.openCriticals  ?? 0,  alert: (s?.openCriticals ?? 0) > 0 },
+              { label: 'Stuck missions', value: s?.stuckMissions  ?? 0,  alert: (s?.stuckMissions ?? 0) > 0 },
+              { label: 'Last check',     value: data?.lastCheck ? fmt(new Date(data.lastCheck).toISOString()) : '—' },
+            ].map(({ label, value, alert }) => (
+              <div key={label}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: alert ? '#fcd34d' : 'var(--text-primary)' }}>{String(value)}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Recent runs table */}
+          {runs.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                    {['Time', 'Issues', 'Auto-fixed', 'Claude', 'Escalated'].map(h => (
+                      <th key={h} style={{ textAlign: 'left', padding: '4px 10px', fontWeight: 600 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {runs.slice(0, 5).map((r, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid var(--navy-border)' }}>
+                      <td style={{ padding: '6px 10px', color: 'var(--text-muted)' }}>{fmt(r.ran_at)}</td>
+                      <td style={{ padding: '6px 10px', color: r.issues_found > 0 ? '#fcd34d' : 'var(--text-secondary)' }}>{r.issues_found}</td>
+                      <td style={{ padding: '6px 10px' }}>{r.auto_fixed}</td>
+                      <td style={{ padding: '6px 10px' }}>{r.claude_resolved}</td>
+                      <td style={{ padding: '6px 10px' }}>
+                        {r.escalated
+                          ? <span style={{ color: '#fca5a5', fontWeight: 700 }}>🔴 Yes</span>
+                          : <span style={{ color: '#86efac' }}>—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function SuperAdminPage() {
   const [tenants, setTenants] = useState<TenantRow[]>([]);
@@ -105,6 +230,9 @@ export default function SuperAdminPage() {
         </div>
         <button className="btn btn-ghost btn-sm" onClick={load}>↻ Refresh</button>
       </div>
+
+      {/* Supervisor Panel */}
+      <SupervisorPanel />
 
       {/* Stats */}
       <div className="stats-grid" style={{ marginBottom: 20 }}>
