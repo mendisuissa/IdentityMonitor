@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [scanRunning, setScanRunning] = useState(false);
   const [pimStats, setPimStats] = useState<{ score: number; permanentCritical: number; globalAdmins: number; pimEnabled: boolean } | null>(null);
   const [cveStats, setCveStats] = useState<{ total: number; critical: number; high: number; medium: number; low: number; remediationStats: any } | null>(null);
+  const [supervisorStatus, setSupervisorStatus] = useState<any>(null);
 
   async function loadDashboardState() {
     const [s, a, u, h, rp] = await Promise.all([
@@ -67,6 +68,10 @@ export default function Dashboard() {
         low:      bySev('low'),
         remediationStats: remStats?.stats || null,
       });
+    }).catch(() => {});
+    // Load supervisor status in background — non-blocking
+    api.getSupervisorStatus().then((sv: any) => {
+      if (sv) setSupervisorStatus(sv);
     }).catch(() => {});
     // Load PIM stats in background — non-blocking
     api.getPimAnalysis().then((pim: any) => {
@@ -412,6 +417,11 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── Supervisor Agent Status ── */}
+      {supervisorStatus && (
+        <SupervisorPanel status={supervisorStatus} />
+      )}
+
       {/* ── Recent Threats + Trend ── */}
       <div className="two-col" style={{ marginBottom: 20 }}>
         <div className="card">
@@ -519,6 +529,114 @@ export default function Dashboard() {
 
 function HealthPill({ label, ok }: { label: string; ok: boolean }) {
   return <div className={`health-pill ${ok ? 'ok' : 'warn'}`}><span className="health-pill-dot" /><span>{label}</span></div>;
+}
+
+function SupervisorPanel({ status }: { status: any }) {
+  const { summary, recentRuns = [], lastCheck, running } = status;
+  const lastRun = recentRuns[0] || null;
+  const lastRunIssues: any[] = lastRun?.issues || [];
+  const stuckIssues   = lastRunIssues.filter((i: any) => !i.resolved && i.severity === 'critical');
+  const autoFixed     = lastRunIssues.filter((i: any) => i.resolved && i.autoFixAction);
+  const claudeFixed   = lastRunIssues.filter((i: any) => i.resolved && i.claudeHandling);
+  const allClear      = lastRunIssues.length === 0 || lastRunIssues.every((i: any) => i.resolved);
+
+  const statusColor = !status.ok
+    ? '#ff3b3b'
+    : stuckIssues.length > 0
+    ? '#ff6b35'
+    : summary?.lastEscalated
+    ? '#f5a623'
+    : '#2ecc71';
+
+  const statusLabel = !status.ok
+    ? 'Offline'
+    : stuckIssues.length > 0
+    ? `${stuckIssues.length} stuck`
+    : summary?.lastEscalated
+    ? 'Escalated'
+    : running
+    ? 'Running…'
+    : 'All clear';
+
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="card-header">
+        <div>
+          <div className="card-title">🤖 Supervisor Agent</div>
+          <div className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>
+            {lastCheck ? `Last check: ${formatDistanceToNow(new Date(lastCheck), { addSuffix: true })}` : 'Not yet run'}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 99, background: `${statusColor}18`, border: `1px solid ${statusColor}40`, fontSize: 11, fontWeight: 600, color: statusColor }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: statusColor, display: 'inline-block' }} />
+            {statusLabel}
+          </div>
+        </div>
+      </div>
+
+      {/* Summary row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 14 }}>
+        {[
+          { label: 'Runs tracked',   value: recentRuns.length,           color: 'var(--text-primary)' },
+          { label: 'Auto-fixed',     value: autoFixed.length + claudeFixed.length, color: '#2ecc71' },
+          { label: 'Stuck critical', value: stuckIssues.length,          color: stuckIssues.length > 0 ? '#ff3b3b' : 'var(--text-muted)' },
+          { label: 'Escalated',      value: summary?.lastEscalated ? 'Yes' : 'No', color: summary?.lastEscalated ? '#f5a623' : '#2ecc71' },
+        ].map(s => (
+          <div key={s.label} style={{ textAlign: 'center', padding: '8px 6px', borderRadius: 8, background: 'var(--surface-alt, rgba(255,255,255,0.03))', border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Stuck missions — highlighted when present */}
+      {stuckIssues.length > 0 && (
+        <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(255,59,59,0.06)', border: '1px solid rgba(255,59,59,0.2)' }}>
+          <div style={{ fontWeight: 700, fontSize: 12, color: '#ff6b6b', marginBottom: 6 }}>⚠️ Stuck — needs attention</div>
+          {stuckIssues.map((issue: any, i: number) => (
+            <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
+              <span style={{ color: '#ff6b6b', fontWeight: 600 }}>[{issue.area}]</span> {issue.title}
+              {issue.autoFixAction && <span style={{ color: 'var(--text-muted)', fontSize: 11 }}> — tried: {issue.autoFixAction}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Last run issues table */}
+      {lastRunIssues.length > 0 ? (
+        <table className="data-table">
+          <thead>
+            <tr><th>Area</th><th>Issue</th><th>Resolution</th><th>Sev</th></tr>
+          </thead>
+          <tbody>
+            {lastRunIssues.map((issue: any, i: number) => {
+              const resolution = issue.resolved
+                ? issue.claudeHandling
+                  ? '🧠 Claude'
+                  : issue.autoFixAction
+                  ? `🔧 Auto`
+                  : '✅ Fixed'
+                : '🔴 Open';
+              return (
+                <tr key={i}>
+                  <td><span className="role-tag">{issue.area}</span></td>
+                  <td style={{ fontSize: 12 }}>{issue.title}</td>
+                  <td style={{ fontSize: 11, color: issue.resolved ? '#2ecc71' : '#ff6b6b' }}>{resolution}</td>
+                  <td><span style={{ fontSize: 11, fontWeight: 600, color: issue.severity === 'critical' ? '#ff3b3b' : '#f5a623' }}>{issue.severity}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : allClear ? (
+        <div className="empty-state">
+          <div className="empty-icon">✅</div>
+          <div className="empty-text" style={{ fontSize: 12 }}>All systems clear — no issues in last run</div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function MetricRow({ label, value }: { label: string; value: number }) {

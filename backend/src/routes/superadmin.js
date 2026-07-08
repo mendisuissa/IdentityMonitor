@@ -87,4 +87,27 @@ router.get('/tenants', async (req, res) => {
   }
 });
 
+// GET /api/superadmin/supervisor — proxy to cloud-relay supervisor status
+router.get('/supervisor', async (req, res) => {
+  if (!isSuperAdmin(req)) return res.status(403).json({ error: 'Access denied' });
+
+  const relayUrl   = process.env.CLOUD_RELAY_URL;
+  const relayToken = process.env.KERNEL_API_SECRET;
+  if (!relayUrl || !relayToken) {
+    return res.json({ ok: false, error: 'CLOUD_RELAY_URL or KERNEL_API_SECRET not configured', recentRuns: [], summary: { stuckMissions: 0, openCriticals: 0, lastEscalated: false } });
+  }
+
+  try {
+    const r = await fetch(`${relayUrl}/api/supervisor/status`, {
+      headers: { Authorization: `Bearer ${relayToken}` },
+      signal:  AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return res.json({ ok: false, error: `Relay returned ${r.status}`, recentRuns: [], summary: { stuckMissions: 0, openCriticals: 0, lastEscalated: false } });
+    const data = await r.json();
+    res.json(data);
+  } catch (err) {
+    res.json({ ok: false, error: err.message, recentRuns: [], summary: { stuckMissions: 0, openCriticals: 0, lastEscalated: false } });
+  }
+});
+
 module.exports = router;

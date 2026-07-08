@@ -637,6 +637,10 @@ export const api = {
   /** Returns a Gumroad URL pre-filled with the user's email. Falls back to plain Gumroad link. */
   getCheckoutUrl: () =>
     apiFetch<{ url: string }>('/billing/checkout'),
+
+  // ── Supervisor Agent (cloud-relay proxy) ──────────────────────────────────
+  getSupervisorStatus: () =>
+    apiFetch<any>('/superadmin/supervisor'),
 };
 
 export default api;
