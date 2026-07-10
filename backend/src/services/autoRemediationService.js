@@ -34,6 +34,45 @@ let _running = false;
 // Map<tenantId, Set<cveId>>
 const _seenCves = new Map();
 
+// ── Run history — exposed to supervisor via /api/health-deep ─────────────────
+const _runHistory = [];   // last 20 runs, newest first
+const MAX_HISTORY = 20;
+
+function _recordRun(summaries) {
+  const rec = {
+    runAt:        new Date().toISOString(),
+    totalSuccess: summaries.reduce((a, s) => a + (s.success || 0), 0),
+    totalFailed:  summaries.reduce((a, s) => a + (s.failed  || 0), 0),
+    totalSkipped: summaries.reduce((a, s) => a + (s.skipped || 0), 0),
+    errors:       summaries.filter(s => s.error).map(s => ({ tenantId: s.tenantId, error: s.error })),
+    failedActions: summaries.flatMap(s =>
+      (s.actions || []).filter(a => a.status === 'failed').map(a => ({
+        tenantId:    s.tenantId,
+        cveId:       a.cveId,
+        productName: a.productName,
+        message:     a.message,
+      }))
+    ).slice(0, 20),
+  };
+  _runHistory.unshift(rec);
+  if (_runHistory.length > MAX_HISTORY) _runHistory.pop();
+  return rec;
+}
+
+function getRunStats() {
+  const last24h = Date.now() - 24 * 60 * 60 * 1000;
+  const recent  = _runHistory.filter(r => new Date(r.runAt).getTime() > last24h);
+  return {
+    lastRunAt:       _runHistory[0]?.runAt || null,
+    runsLast24h:     recent.length,
+    failedLast24h:   recent.reduce((a, r) => a + r.totalFailed, 0),
+    successLast24h:  recent.reduce((a, r) => a + r.totalSuccess, 0),
+    recentErrors:    recent.flatMap(r => r.errors).slice(0, 5),
+    recentFailedActions: recent.flatMap(r => r.failedActions).slice(0, 10),
+    history:         _runHistory.slice(0, 5),
+  };
+}
+
 // ── Severity sort order ───────────────────────────────────────────────────────
 
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, unknown: 4 };
@@ -343,6 +382,8 @@ async function runAutoRemediation() {
 
   _running = false;
 
+  _recordRun(allSummaries);
+
   const totalSuccess = allSummaries.reduce((a, s) => a + s.success, 0);
   const totalFailed  = allSummaries.reduce((a, s) => a + s.failed, 0);
   const totalSkipped = allSummaries.reduce((a, s) => a + s.skipped, 0);
@@ -437,4 +478,4 @@ function stop() {
 
 function isEnabled() { return ENABLED(); }
 
-module.exports = { start, stop, runAutoRemediation, runForTenant, isEnabled };
+module.exports = { start, stop, runAutoRemediation, runForTenant, isEnabled, getRunStats };

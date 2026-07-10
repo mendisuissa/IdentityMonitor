@@ -188,6 +188,38 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: require('../package.json').version });
 });
 
+// GET /api/health-deep — supervisor-only endpoint, requires SUPERVISOR_SECRET header
+app.get('/api/health-deep', (req, res) => {
+  const secret = process.env.SUPERVISOR_SECRET;
+  if (secret && req.headers['x-supervisor-secret'] !== secret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const autoRem = require('./services/autoRemediationService');
+    const remStats = autoRem.getRunStats();
+    const tenantCount = (() => {
+      try { return tenantRegistry.getAllTenantIds().length; } catch { return null; }
+    })();
+    res.json({
+      status:      'ok',
+      timestamp:   new Date().toISOString(),
+      version:     require('../package.json').version,
+      tenantCount,
+      autoRemediation: {
+        enabled:            autoRem.isEnabled(),
+        lastRunAt:          remStats.lastRunAt,
+        runsLast24h:        remStats.runsLast24h,
+        failedLast24h:      remStats.failedLast24h,
+        successLast24h:     remStats.successLast24h,
+        recentErrors:       remStats.recentErrors,
+        recentFailedActions: remStats.recentFailedActions,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
+});
+
 // GET /api/posture — Composite security posture score for the current tenant
 app.get('/api/posture', (req, res) => {
   try {
