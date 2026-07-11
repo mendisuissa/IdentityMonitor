@@ -15,7 +15,7 @@ const { listTenantVulnerabilities, enrichTenantVulnerability } = require('./tena
 const { enrichFinding, classifyFinding }                       = require('./remediationCatalog');
 const { executeApplicationRemediation, getExternalHealth }     = require('./webappExecutionClient');
 const { executeNativeRemediation }                             = require('./nativeRemediationExecutor');
-const { saveRemediationRecord, getRecentSuccessForCve }        = require('./remediationHistoryStore');
+const { saveRemediationRecord, getRecentSuccessForCve, getRecentAttemptForCve } = require('./remediationHistoryStore');
 const { sendRemediationNotification }                          = require('./emailService');
 const tenantRegistry                                           = require('./tenantRegistry');
 const telegramService                                          = require('./telegramService');
@@ -99,6 +99,8 @@ function isGarbageProductName(name) {
   const n = name.toLowerCase().trim();
   // Contains sentence-like filler phrases
   if (GARBAGE_PHRASES.some(p => n.includes(p))) return true;
+  // CVE/TVM ID used as product name instead of actual software name
+  if (/^(cve|tvm)-\d{4}-\d+$/i.test(name.trim())) return true;
   // Looks like a sentence (contains 4+ words and common verbs) — not a product name
   const words = n.split(/\s+/);
   if (words.length >= 4 && /\b(is|are|was|has|have|not|this|that|the|an|a)\b/.test(n)) return true;
@@ -191,6 +193,13 @@ async function remediateTenant(tenantId, options = {}) {
       const recent = await getRecentSuccessForCve(tenantId, cveId, 24).catch(() => null);
       if (recent) {
         console.log(`[AutoRemediation] ${tenantId} ${cveId} — skipped (fixed within 24h)`);
+        summary.skipped++;
+        continue;
+      }
+      // Also skip if attempted within 6h — prevents hourly spam on permanently-failing CVEs
+      const recentAttempt = await getRecentAttemptForCve(tenantId, cveId, 6).catch(() => null);
+      if (recentAttempt) {
+        console.log(`[AutoRemediation] ${tenantId} ${cveId} — skipped (attempted within 6h, status=${recentAttempt.status})`);
         summary.skipped++;
         continue;
       }
@@ -305,11 +314,19 @@ async function remediateTenant(tenantId, options = {}) {
       }
 
     } catch (execErr) {
-      status  = 'failed';
       message = execErr?.message || 'Execution error.';
       result  = { error: message };
-      summary.failed++;
-      console.error(`[AutoRemediation] ${tenantId} ${cveId} execute error:`, message);
+      // "No WinGet package found" is a permanent lookup miss — not a retriable failure.
+      // Mark as unsupported so it doesn't trigger Telegram alerts on every run.
+      if (message.includes('No WinGet package found')) {
+        status = 'unsupported';
+        summary.unsupported++;
+        console.log(`[AutoRemediation] ${tenantId} ${cveId} — unsupported (WinGet lookup miss): ${message}`);
+      } else {
+        status = 'failed';
+        summary.failed++;
+        console.error(`[AutoRemediation] ${tenantId} ${cveId} execute error:`, message);
+      }
     }
 
     const action = {

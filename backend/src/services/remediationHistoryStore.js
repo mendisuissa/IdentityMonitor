@@ -189,4 +189,34 @@ async function getRecentSuccessForCve(tenantId, cveId, withinHours = 24) {
   return null;
 }
 
-module.exports = { saveRemediationRecord, getRemediationHistory, getRemediationStats, getRecentSuccessForCve, ensureTable };
+/**
+ * Check if a CVE was attempted (any status) within `withinHours` hours.
+ * Used to suppress hourly retries of permanently-failing findings.
+ */
+async function getRecentAttemptForCve(tenantId, cveId, withinHours = 6) {
+  const cutoff    = Date.now() - withinHours * 60 * 60 * 1000;
+  const safeCveId = String(cveId || '').toUpperCase();
+
+  const client = getTableClient();
+  if (!client) {
+    const list = IN_MEMORY.get(tenantId) || [];
+    return list.find(r =>
+      r.cveId.toUpperCase() === safeCveId &&
+      new Date(r.executedAt).getTime() >= cutoff
+    ) || null;
+  }
+
+  await ensureTable();
+  const tISO     = new Date(cutoff).toISOString();
+  const safeTid  = tenantId.replace(/'/g, "''");
+  const safeCve  = safeCveId.replace(/'/g, "''");
+  const iterator = client.listEntities({
+    queryOptions: {
+      filter: `PartitionKey eq '${safeTid}' and cveId eq '${safeCve}' and executedAt ge '${tISO}'`
+    }
+  });
+  for await (const e of iterator) return e;
+  return null;
+}
+
+module.exports = { saveRemediationRecord, getRemediationHistory, getRemediationStats, getRecentSuccessForCve, getRecentAttemptForCve, ensureTable };

@@ -98,6 +98,18 @@ function classifyFinding(finding = {}) {
     return { type: 'unsupported-platform', family: 'non-windows' };
   }
 
+  // Mac / iOS / Android — WinGet cannot remediate these regardless of category
+  if (
+    / on mac(os)?$/i.test(productName) ||
+    / on ios$/i.test(productName) ||
+    / on android$/i.test(productName) ||
+    /\bmacos\b/.test(productName) ||
+    /\bios \d/i.test(productName) ||
+    publisher === 'apple'
+  ) {
+    return { type: 'unsupported-platform', family: 'non-windows' };
+  }
+
   // ── Application check FIRST — prevents description keywords from overriding
   // a correct 'application' classification that inferCategory already computed.
   // Known third-party apps also take priority over all other heuristics.
