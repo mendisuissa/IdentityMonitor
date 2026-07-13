@@ -175,6 +175,19 @@ async function assignToAllDevices(accessToken, appId, installIntent = 'required'
  * Returns { ok, wingetId, displayName, publisher, source } or { ok: false, reason }.
  */
 function resolveWingetId(finding) {
+  // Guard: non-Windows products cannot be deployed via WinGet/Intune
+  const productRaw = String(finding.displayProductName || finding.productName || finding.softwareName || finding.name || '');
+  if (
+    / on mac(os)?$/i.test(productRaw) ||
+    / on ios$/i.test(productRaw) ||
+    / on android$/i.test(productRaw) ||
+    /\bmacos\b/i.test(productRaw) ||
+    String(finding.publisher || '').toLowerCase() === 'apple' ||
+    finding.classification?.family === 'non-windows'
+  ) {
+    return { ok: false, reason: `Non-Windows product "${productRaw}" — WinGet remediation not applicable.` };
+  }
+
   // Priority 1: already-enriched winget ID
   if (finding.suggestedWingetId) {
     return {

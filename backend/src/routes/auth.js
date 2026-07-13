@@ -579,9 +579,17 @@ router.get('/permission-status', async (req, res) => {
       const timer = setTimeout(() => controller.abort(), 8000);
       const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token }, signal: controller.signal });
       clearTimeout(timer);
-      if (r.status === 403 || r.status === 401) return false;
-      return true;
-    } catch { return false; }
+      const granted = r.status !== 403 && r.status !== 401;
+      if (!granted) {
+        let body = '';
+        try { body = await r.text(); } catch {}
+        console.warn(`[permission-probe] ${r.status} for ${url} — ${body.slice(0, 300)}`);
+      }
+      return granted;
+    } catch (err) {
+      console.warn(`[permission-probe] error for ${url} — ${err.message}`);
+      return false;
+    }
   }
 
   const base = 'https://graph.microsoft.com';

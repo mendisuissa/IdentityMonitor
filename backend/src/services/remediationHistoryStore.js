@@ -7,7 +7,7 @@
 const { TableClient, TableServiceClient } = require('@azure/data-tables');
 
 const TABLE_NAME = 'remediationHistory';
-const IN_MEMORY  = new Map(); // fallback when Azure Storage is not configured
+const IN_MEMORY  = new Map(); // warm cache (lost on restart — see SQLite fallback below)
 
 // ── Azure helpers ────────────────────────────────────────────────────────────
 
@@ -15,6 +15,39 @@ function getTableClient() {
   const conn = process.env.AZURE_STORAGE_CONNECTION_STRING;
   if (!conn) return null;
   return TableClient.fromConnectionString(conn, TABLE_NAME);
+}
+
+// ── SQLite fallback — persists between Railway deploys when Azure Storage is not configured ──
+let _sqliteDb = null;
+function _getSqlite() {
+  if (_sqliteDb) return _sqliteDb;
+  try {
+    const Database = require('better-sqlite3');
+    const path     = require('path');
+    const dbPath   = process.env.REMEDIATION_DB_PATH || path.join(__dirname, '..', '..', 'data', 'remediation.db');
+    require('fs').mkdirSync(path.dirname(dbPath), { recursive: true });
+    _sqliteDb = new Database(dbPath);
+    _sqliteDb.exec(`CREATE TABLE IF NOT EXISTS remediation_history (
+      id TEXT PRIMARY KEY,
+      tenantId TEXT NOT NULL,
+      cveId TEXT NOT NULL,
+      productName TEXT,
+      category TEXT,
+      severity TEXT,
+      status TEXT,
+      executor TEXT,
+      triggeredBy TEXT,
+      message TEXT,
+      result TEXT,
+      executedAt TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_rh_tenant_cve ON remediation_history(tenantId, cveId);
+    CREATE INDEX IF NOT EXISTS idx_rh_execAt ON remediation_history(executedAt);`);
+  } catch (err) {
+    console.warn('[remediationHistoryStore] SQLite fallback unavailable:', err.message);
+    _sqliteDb = null;
+  }
+  return _sqliteDb;
 }
 
 async function ensureTable() {
@@ -75,6 +108,21 @@ async function saveRemediationRecord(record) {
       await client.createEntity({ partitionKey: record.tenantId, rowKey, ...entity });
     } catch (azErr) {
       console.error('[remediationHistoryStore] Azure write failed (record kept in-memory):', azErr?.message);
+    }
+  } else {
+    // No Azure — write to SQLite so cooldown survives Railway restarts
+    const db = _getSqlite();
+    if (db) {
+      try {
+        db.prepare(`INSERT OR REPLACE INTO remediation_history
+          (id, tenantId, cveId, productName, category, severity, status, executor, triggeredBy, message, result, executedAt)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+          .run(rowKey, entity.tenantId, entity.cveId, entity.productName, entity.category,
+               entity.severity, entity.status, entity.executor, entity.triggeredBy,
+               entity.message, entity.result, entity.executedAt);
+      } catch (sqlErr) {
+        console.error('[remediationHistoryStore] SQLite write failed:', sqlErr?.message);
+      }
     }
   }
 
@@ -197,13 +245,27 @@ async function getRecentAttemptForCve(tenantId, cveId, withinHours = 6) {
   const cutoff    = Date.now() - withinHours * 60 * 60 * 1000;
   const safeCveId = String(cveId || '').toUpperCase();
 
+  // Check in-memory first (fastest, survives within a process lifetime)
+  const memList = IN_MEMORY.get(tenantId) || [];
+  const memHit = memList.find(r =>
+    r.cveId.toUpperCase() === safeCveId &&
+    new Date(r.executedAt).getTime() >= cutoff
+  );
+  if (memHit) return memHit;
+
   const client = getTableClient();
   if (!client) {
-    const list = IN_MEMORY.get(tenantId) || [];
-    return list.find(r =>
-      r.cveId.toUpperCase() === safeCveId &&
-      new Date(r.executedAt).getTime() >= cutoff
-    ) || null;
+    // No Azure — check SQLite fallback
+    const db = _getSqlite();
+    if (db) {
+      try {
+        const row = db.prepare(
+          `SELECT * FROM remediation_history WHERE tenantId=? AND cveId=? AND executedAt>=? LIMIT 1`
+        ).get(tenantId, safeCveId, new Date(cutoff).toISOString());
+        if (row) return row;
+      } catch (_) {}
+    }
+    return null;
   }
 
   await ensureTable();
