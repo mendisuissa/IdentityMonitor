@@ -116,7 +116,7 @@ function detectAnomalies(tenantId, userId, signIn, baseline, settings) {
   const deviceName = signIn.deviceDetail && signIn.deviceDetail.displayName;
 
   // Skip whitelisted sign-ins entirely
-  if (settingsService.isWhitelisted(settings, signIn, null)) return [];
+  if (settingsService.isWhitelisted(settings, signIn)) return [];
 
   if (ip && baseline.knownIPs.size > 0 && !baseline.knownIPs.has(ip) &&
       settingsService.isRuleEnabled(settings, 'NEW_IP')) {

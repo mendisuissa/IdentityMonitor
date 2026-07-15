@@ -376,6 +376,7 @@ async function getDeviceActions(tenantId) {
 }
 
 module.exports = {
+  graphGetAllNoPaging,
   getClientForTenant,
   getClientFromToken,
   getAccessTokenForTenant,

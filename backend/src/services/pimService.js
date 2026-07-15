@@ -3,6 +3,7 @@
 // Recommends: converting to Eligible, enabling PIM, reducing admin count
 
 const graphService = require('./graphService');
+const { graphGetAllNoPaging } = graphService;
 
 // ─── Analyze PIM status for a tenant ─────────────────────────────────────
 async function analyzePimStatus(tenantId) {
@@ -221,12 +222,8 @@ async function analyzePimStatus(tenantId) {
 // ─── Get permanent role assignments ──────────────────────────────────────
 async function getPermanentAssignments(client) {
   try {
-    const result = await client
-      .api('/roleManagement/directory/roleAssignments')
-      .select('id,principalId,roleDefinitionId,startDateTime,endDateTime,directoryScopeId')
-      .top(100)
-      .get();
-    return (result.value || []).filter(a => !a.endDateTime); // no end = permanent
+    const all = await graphGetAllNoPaging(client, '/roleManagement/directory/roleAssignments', 'id,principalId,roleDefinitionId,directoryScopeId');
+    return all.filter(a => !a.endDateTime); // no end = permanent
   } catch (err) {
     console.warn('[PIM] Could not fetch role assignments:', err.message);
     return [];
@@ -236,26 +233,16 @@ async function getPermanentAssignments(client) {
 // ─── Get Eligible (JIT) assignments ──────────────────────────────────────
 async function getEligibleAssignments(client) {
   try {
-    const result = await client
-      .api('/roleManagement/directory/roleEligibilitySchedules')
-      .select('id,principalId,roleDefinitionId,scheduleInfo')
-      .top(100)
-      .get();
-    return result.value || [];
+    return await graphGetAllNoPaging(client, '/roleManagement/directory/roleEligibilitySchedules', 'id,principalId,roleDefinitionId,scheduleInfo');
   } catch (err) {
-    // PIM not licensed or not configured
-    return [];
+    return []; // PIM not licensed or not configured
   }
 }
 
 // ─── Get role definitions ─────────────────────────────────────────────────
 async function getRoleDefinitions(client) {
   try {
-    const result = await client
-      .api('/roleManagement/directory/roleDefinitions')
-      .select('id,displayName,isBuiltIn')
-      .get();
-    return result.value || [];
+    return await graphGetAllNoPaging(client, '/roleManagement/directory/roleDefinitions', 'id,displayName,isBuiltIn');
   } catch (err) {
     return [];
   }
@@ -340,9 +327,6 @@ function scoreToGrade(score) {
   return             { letter: 'F', label: 'Critical',  color: '#ff3b3b' };
 }
 
-module.exports = { analyzePimStatus };
-
-
 function scoreToPriority(level) {
   return level;
 }
@@ -352,3 +336,5 @@ function mergeRecommendations(riskRecommendations = [], bestPracticeRecommendati
   const normalizedBest = bestPracticeRecommendations.map(item => ({ ...item, type: item.type || 'best-practice' }));
   return [...normalizedRisk, ...normalizedBest];
 }
+
+module.exports = { analyzePimStatus };
