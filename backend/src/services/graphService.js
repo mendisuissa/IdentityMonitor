@@ -164,10 +164,10 @@ async function getPrivilegedUsers(tenantId) {
   try {
     // PIM endpoints (roleEligibilitySchedules) require Azure AD P2 — fall back to [] if unavailable
     const [roleDefinitions, activeAssignments, eligibleAssignments, activatedRoles] = await Promise.all([
-      graphGetAll(client, '/roleManagement/directory/roleDefinitions?$select=id,displayName,isBuiltIn'),
+      graphGetAllNoPaging(client, '/roleManagement/directory/roleDefinitions', 'id,displayName,isBuiltIn').catch(() => []),
       graphGetAllNoPaging(client, '/roleManagement/directory/roleAssignments', 'id,principalId,roleDefinitionId').catch(() => []),
       graphGetAllNoPaging(client, '/roleManagement/directory/roleEligibilitySchedules', 'id,principalId,roleDefinitionId').catch(() => []),
-      graphGetAll(client, '/directoryRoles?$select=id,displayName'),
+      graphGetAllNoPaging(client, '/directoryRoles', 'id,displayName').catch(() => []),
     ]);
 
     const roleMap = new Map((roleDefinitions || []).map(r => [r.id, r.displayName]));
