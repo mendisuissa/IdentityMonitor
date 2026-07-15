@@ -192,7 +192,7 @@ async function getPrivilegedUsers(tenantId) {
 
     for (const role of (activatedRoles || []).filter(r => isPrivilegedRoleName(r.displayName))) {
       try {
-        const members = await graphGetAll(client, `/directoryRoles/${role.id}/members?$select=id,displayName,userPrincipalName,mail,accountEnabled`);
+        const members = await graphGetAllNoPaging(client, `/directoryRoles/${role.id}/members`, 'id,displayName,userPrincipalName,mail,accountEnabled');
         for (const user of members) {
           if (!user?.id) continue;
           const entry = principalRoles.get(user.id) || new Set();

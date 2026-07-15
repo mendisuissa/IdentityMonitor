@@ -5,6 +5,8 @@
 //   Anomaly base score × App weight × Context multipliers = Final Risk Score
 //   Risk Score → Severity: <25=low, 25-50=medium, 50-75=high, 75+=critical
 
+const settingsService = require('./settingsService');
+
 // ─── Country Risk Categories ──────────────────────────────────────────────
 const COUNTRY_RISK = {
   // Tier 3 — Nation-state threat actors, common source of attacks
@@ -128,7 +130,6 @@ function scoreSignIn(signIn, baseline, settings) {
   // ── Factor 5: Off-Hours ───────────────────────────────────────────────
   const wh = settings?.workHours;
   if (wh) {
-    const settingsService = require('./settingsService');
     if (settingsService.isOffHours(settings, signIn.createdDateTime)) {
       const offScore = 10;
       baseScore += offScore;
