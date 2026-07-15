@@ -185,7 +185,7 @@ try {
 app.use('/api/internal', internalRoutes);
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: require('../package.json').version });
+  res.json({ ok: true, status: 'ok', service: 'identity-monitor', timestamp: new Date().toISOString(), version: require('../package.json').version });
 });
 
 // GET /api/health-deep — supervisor-only endpoint, requires SUPERVISOR_SECRET header
