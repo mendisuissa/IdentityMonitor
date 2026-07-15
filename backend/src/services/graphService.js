@@ -120,6 +120,18 @@ async function graphGetAll(client, apiPath, pageSize = 999) {
   return items;
 }
 
+// For endpoints that reject custom page sizes (roleAssignments, roleEligibilitySchedules)
+async function graphGetAllNoPaging(client, apiPath) {
+  const items = [];
+  let url = apiPath;
+  while (url) {
+    const page = await client.api(url).get();
+    items.push(...(page.value || []));
+    url = page['@odata.nextLink'] || null;
+  }
+  return items;
+}
+
 function isPrivilegedRoleName(name) {
   const value = String(name || '').toLowerCase();
   if (!value) return false;
@@ -152,8 +164,8 @@ async function getPrivilegedUsers(tenantId) {
     // PIM endpoints (roleEligibilitySchedules) require Azure AD P2 — fall back to [] if unavailable
     const [roleDefinitions, activeAssignments, eligibleAssignments, activatedRoles] = await Promise.all([
       graphGetAll(client, '/roleManagement/directory/roleDefinitions?$select=id,displayName,isBuiltIn'),
-      graphGetAll(client, '/roleManagement/directory/roleAssignments?$select=id,principalId,roleDefinitionId'),
-      graphGetAll(client, '/roleManagement/directory/roleEligibilitySchedules?$select=id,principalId,roleDefinitionId').catch(() => []),
+      graphGetAllNoPaging(client, '/roleManagement/directory/roleAssignments?$select=id,principalId,roleDefinitionId'),
+      graphGetAllNoPaging(client, '/roleManagement/directory/roleEligibilitySchedules?$select=id,principalId,roleDefinitionId').catch(() => []),
       graphGetAll(client, '/directoryRoles?$select=id,displayName'),
     ]);
 
