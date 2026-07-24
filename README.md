@@ -112,13 +112,14 @@ npm run dev
 Set these in **Configuration → Application settings**:
 
 ```
-TENANT_ID          = your-tenant-id
-CLIENT_ID          = your-client-id
-CLIENT_SECRET      = your-client-secret
-ALERT_SENDER_EMAIL = alerts@yourdomain.com
-ALERT_ADMIN_EMAIL  = secops@yourdomain.com
-NODE_ENV           = production
-SESSION_SECRET     = (generate a random 32+ char string)
+TENANT_ID                = your-tenant-id
+CLIENT_ID                = your-client-id
+CLIENT_SECRET            = your-client-secret
+ALERT_SENDER_EMAIL       = alerts@yourdomain.com
+ALERT_ADMIN_EMAIL        = secops@yourdomain.com
+NODE_ENV                 = production
+SESSION_SECRET           = (generate a random 32+ char string)
+IDENTITY_MONITOR_TOKEN   = (generate a random secret token for internal API auth)
 ```
 
 ### Deploy
