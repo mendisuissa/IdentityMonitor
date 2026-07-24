@@ -345,9 +345,10 @@ function AppShell() {
   }, [user, mockMode]);
 
   useEffect(() => {
+    if (!user && !mockMode) return; // avoid needless 401s for anonymous/logged-out visitors
     api.getNotificationInbox({ limit: 12, dedupe: true }).then((res: any) => setInbox(res.items || [])).catch(() => {});
     api.getAlertStats().then((stats: any) => setOpenAlerts(stats.open || stats.active || stats.totalOpen || 0)).catch(() => {});
-  }, []);
+  }, [user, mockMode]);
 
   const handleScan = async () => {
     setScanLoading(true);
@@ -376,6 +377,7 @@ function AppShell() {
     // Public pages — accessible without login
     const publicPaths: Record<string, React.ReactElement> = {
       '/':        <LandingPage />,
+      '/login':   <LoginPage onLogin={() => navigate('/')} />,
       '/pricing': <PricingPage />,
       '/terms':   <TermsPage />,
       '/privacy': <PrivacyPage />,
