@@ -12,6 +12,10 @@ concurrency:
 env:
   APP_URL: https://identitymonitor.modernendpoint.tech
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -19,6 +23,36 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ── Disable the built-in SCM/GitHub deployment source ──────────
+      # Same root cause confirmed on EnrollmentFlowMonitor-Wa: when
+      # scmType is GitHubAction, Azure's own Deployment Center pipeline
+      # also tries to deploy on every push, races with our OneDeploy
+      # call and causes Conflict (409) — every commit since 2026-07-15
+      # failed here for exactly this reason (10 consecutive failures,
+      # including after a Portal Stop/Start, confirming it isn't just a
+      # stuck lock like it was on EnrollmentFlow — the racing source was
+      # still configured and re-triggering deploys of its own).
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Disable built-in GitHubAction deployment source
+        run: |
+          APP_NAME="${{ secrets.AZURE_APP_NAME }}"
+          RG=$(az resource list --name "$APP_NAME" --resource-type Microsoft.Web/sites --query "[0].resourceGroup" -o tsv)
+          echo "Resource group: $RG"
+          SCM_TYPE=$(az webapp config show --name "$APP_NAME" --resource-group "$RG" --query "scmType" -o tsv)
+          echo "Current scmType: $SCM_TYPE"
+          if [ "$SCM_TYPE" != "None" ]; then
+            echo "Setting scmType=None to release the deployment lock..."
+            az webapp deployment source delete --name "$APP_NAME" --resource-group "$RG"
+          else
+            echo "scmType already None — nothing to do."
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
