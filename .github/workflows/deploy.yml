@@ -185,9 +185,13 @@ jobs:
 
       - name: Remediation route mounted
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$APP_URL/api/remediation")
-          [ "$STATUS" != "404" ] || { echo "❌ /api/remediation returned 404 — route not mounted"; exit 1; }
-          echo "✅ /api/remediation mounted ($STATUS)"
+          # remediation.js never defines the bare '/' path, only sub-routes
+          # (/health, /catalog/*, /plan, ...) — checking the bare mount point
+          # 404s even when the router is correctly mounted. /health is the
+          # router's own unauthenticated liveness endpoint.
+          BODY=$(curl -fsS --max-time 15 "$APP_URL/api/remediation/health")
+          echo "$BODY" | grep -q '"ok":true' || { echo "❌ /api/remediation/health missing ok:true"; exit 1; }
+          echo "✅ /api/remediation mounted (health: $BODY)"
 
       - name: Frontend loads
         run: |
