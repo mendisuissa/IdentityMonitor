@@ -111,8 +111,13 @@ jobs:
       - name: Wait before retry 1
         if: steps.deploy-1.outcome == 'failure'
         run: |
-          echo "Attempt 1 failed — waiting 90s before retry..."
-          sleep 90
+          # 90s wasn't enough here (unlike EnrollmentFlow/MeGuard) — Kudu
+          # deployment history for this app shows every recent deployment
+          # eventually reaches complete:true, just not within 90s. Bumped
+          # to 4 minutes to give OneDeploy's own lock time to clear before
+          # the next attempt collides with it.
+          echo "Attempt 1 failed — waiting 240s before retry..."
+          sleep 240
 
       - name: Deploy to Azure App Service (attempt 2)
         id: deploy-2
@@ -127,8 +132,8 @@ jobs:
       - name: Wait before retry 2
         if: steps.deploy-1.outcome == 'failure' && steps.deploy-2.outcome == 'failure'
         run: |
-          echo "Attempt 2 failed — waiting 90s before retry..."
-          sleep 90
+          echo "Attempt 2 failed — waiting 240s before retry..."
+          sleep 240
 
       - name: Deploy to Azure App Service (attempt 3)
         id: deploy-3
