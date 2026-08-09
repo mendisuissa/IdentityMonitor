@@ -46,7 +46,48 @@ jobs:
         run: npm install --omit=dev
 
       # ── Deploy backend folder (includes public/) ──────────────────
-      - name: Deploy to Azure App Service
+      # Single-attempt azure/webapps-deploy@v3 was hitting OneDeploy
+      # Conflict (CODE: 409) from Kudu — same failure class confirmed on
+      # EnrollmentFlowMonitor-Wa and MEGuard (same Azure subscription) in
+      # 2026-08-04/09. Root cause on EnrollmentFlow: a stuck/contending Kudu
+      # deployment state a single-shot deploy can't recover from, but a
+      # retry with real backoff usually clears. Discovered here 2026-08-09:
+      # every commit since 2026-07-15 failed to actually ship. Retrying 3x
+      # instead of failing on the first conflict.
+      - name: Deploy to Azure App Service (attempt 1)
+        id: deploy-1
+        uses: azure/webapps-deploy@v3
+        continue-on-error: true
+        with:
+          app-name: ${{ secrets.AZURE_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
+          package: ./backend
+
+      - name: Wait before retry 1
+        if: steps.deploy-1.outcome == 'failure'
+        run: |
+          echo "Attempt 1 failed — waiting 90s before retry..."
+          sleep 90
+
+      - name: Deploy to Azure App Service (attempt 2)
+        id: deploy-2
+        if: steps.deploy-1.outcome == 'failure'
+        uses: azure/webapps-deploy@v3
+        continue-on-error: true
+        with:
+          app-name: ${{ secrets.AZURE_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
+          package: ./backend
+
+      - name: Wait before retry 2
+        if: steps.deploy-1.outcome == 'failure' && steps.deploy-2.outcome == 'failure'
+        run: |
+          echo "Attempt 2 failed — waiting 90s before retry..."
+          sleep 90
+
+      - name: Deploy to Azure App Service (attempt 3)
+        id: deploy-3
+        if: steps.deploy-1.outcome == 'failure' && steps.deploy-2.outcome == 'failure'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ secrets.AZURE_APP_NAME }}
