@@ -54,17 +54,6 @@ jobs:
             echo "scmType already None — nothing to do."
           fi
 
-      - name: Diagnose — what does Kudu think is happening
-        run: |
-          APP_NAME="${{ secrets.AZURE_APP_NAME }}"
-          RG=$(az resource list --name "$APP_NAME" --resource-type Microsoft.Web/sites --query "[0].resourceGroup" -o tsv)
-          echo "── Site state ──"
-          az webapp show --name "$APP_NAME" --resource-group "$RG" --query "{state:state, availabilityState:availabilityState, usageState:usageState}" -o json || true
-          echo "── Recent Kudu deployment history (is one stuck in-progress?) ──"
-          az webapp log deployment list --name "$APP_NAME" --resource-group "$RG" --query "[0:5].{id:id, status:status, message:message, complete:complete, receivedTime:receivedTime}" -o json || true
-          echo "── Relevant app settings ──"
-          az webapp config appsettings list --name "$APP_NAME" --resource-group "$RG" --query "[?name=='WEBSITE_RUN_FROM_PACKAGE' || name=='SCM_DO_BUILD_DURING_DEPLOYMENT' || name=='WEBSITES_ENABLE_APP_SERVICE_STORAGE']" -o json || true
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -90,59 +79,59 @@ jobs:
         working-directory: backend
         run: npm install --omit=dev
 
-      # ── Deploy backend folder (includes public/) ──────────────────
-      # Single-attempt azure/webapps-deploy@v3 was hitting OneDeploy
-      # Conflict (CODE: 409) from Kudu — same failure class confirmed on
-      # EnrollmentFlowMonitor-Wa and MEGuard (same Azure subscription) in
-      # 2026-08-04/09. Root cause on EnrollmentFlow: a stuck/contending Kudu
-      # deployment state a single-shot deploy can't recover from, but a
-      # retry with real backoff usually clears. Discovered here 2026-08-09:
-      # every commit since 2026-07-15 failed to actually ship. Retrying 3x
-      # instead of failing on the first conflict.
-      - name: Deploy to Azure App Service (attempt 1)
-        id: deploy-1
-        uses: azure/webapps-deploy@v3
-        continue-on-error: true
-        with:
-          app-name: ${{ secrets.AZURE_APP_NAME }}
-          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
-          package: ./backend
-
-      - name: Wait before retry 1
-        if: steps.deploy-1.outcome == 'failure'
+      # ── Deploy via WEBSITE_RUN_FROM_PACKAGE, bypassing Kudu/OneDeploy ──
+      # azure/webapps-deploy@v3 (OneDeploy) hit Conflict (CODE: 409) on every
+      # single attempt since 2026-07-15 — 12+ consecutive failures across
+      # scmType fix, Portal Stop/Start, and 4-minute backoff, all the
+      # standard remedies confirmed to have worked on EnrollmentFlowMonitor-Wa
+      # and MEGuard. Kudu deployment history showed no stuck lock and the
+      # site itself was healthy throughout, so something about this specific
+      # app's OneDeploy path is broken in a way retries can't fix. Run-from-
+      # package sidesteps Kudu's deploy pipeline entirely: upload the built
+      # zip to blob storage, point the site at it via an app setting, Azure
+      # mounts it read-only on restart. No OneDeploy call, no lock to race.
+      - name: Zip backend package
         run: |
-          # 90s wasn't enough here (unlike EnrollmentFlow/MeGuard) — Kudu
-          # deployment history for this app shows every recent deployment
-          # eventually reaches complete:true, just not within 90s. Bumped
-          # to 4 minutes to give OneDeploy's own lock time to clear before
-          # the next attempt collides with it.
-          echo "Attempt 1 failed — waiting 240s before retry..."
-          sleep 240
+          cd backend
+          zip -r "$RUNNER_TEMP/deploy.zip" . -x ".git/*" >/dev/null
+          cd ..
+          unzip -l "$RUNNER_TEMP/deploy.zip" | tail -5
 
-      - name: Deploy to Azure App Service (attempt 2)
-        id: deploy-2
-        if: steps.deploy-1.outcome == 'failure'
-        uses: azure/webapps-deploy@v3
-        continue-on-error: true
-        with:
-          app-name: ${{ secrets.AZURE_APP_NAME }}
-          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
-          package: ./backend
-
-      - name: Wait before retry 2
-        if: steps.deploy-1.outcome == 'failure' && steps.deploy-2.outcome == 'failure'
+      - name: Upload package to Blob Storage
+        id: upload
         run: |
-          echo "Attempt 2 failed — waiting 240s before retry..."
-          sleep 240
+          ACCOUNT="identitymonitor"
+          CONTAINER="deploy-packages"
+          BLOB="backend-${{ github.sha }}.zip"
 
-      - name: Deploy to Azure App Service (attempt 3)
-        id: deploy-3
-        if: steps.deploy-1.outcome == 'failure' && steps.deploy-2.outcome == 'failure'
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ secrets.AZURE_APP_NAME }}
-          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
-          package: ./backend
+          KEY=$(az storage account keys list --account-name "$ACCOUNT" --query "[0].value" -o tsv)
+
+          az storage container create \
+            --account-name "$ACCOUNT" --account-key "$KEY" \
+            --name "$CONTAINER" --public-access off >/dev/null
+
+          az storage blob upload \
+            --account-name "$ACCOUNT" --account-key "$KEY" \
+            --container-name "$CONTAINER" --name "$BLOB" \
+            --file "$RUNNER_TEMP/deploy.zip" --overwrite >/dev/null
+
+          EXPIRY=$(date -u -d "+10 years" '+%Y-%m-%dT%H:%MZ')
+          SAS=$(az storage blob generate-sas \
+            --account-name "$ACCOUNT" --account-key "$KEY" \
+            --container-name "$CONTAINER" --name "$BLOB" \
+            --permissions r --expiry "$EXPIRY" -o tsv)
+
+          BLOB_URL="https://${ACCOUNT}.blob.core.windows.net/${CONTAINER}/${BLOB}?${SAS}"
+          echo "::add-mask::$BLOB_URL"
+          echo "blob_url=$BLOB_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Point WEBSITE_RUN_FROM_PACKAGE at the new package
+        run: |
+          APP_NAME="${{ secrets.AZURE_APP_NAME }}"
+          RG=$(az resource list --name "$APP_NAME" --resource-type Microsoft.Web/sites --query "[0].resourceGroup" -o tsv)
+          az webapp config appsettings set --name "$APP_NAME" --resource-group "$RG" --settings \
+            WEBSITE_RUN_FROM_PACKAGE="${{ steps.upload.outputs.blob_url }}" >/dev/null
+          echo "✅ WEBSITE_RUN_FROM_PACKAGE updated — app restarts and mounts the new package"
 
       # ── Clean up old artifacts to stay within 0.5 GB storage limit ─
       - name: Delete old artifacts
