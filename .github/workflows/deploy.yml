@@ -54,6 +54,17 @@ jobs:
             echo "scmType already None — nothing to do."
           fi
 
+      - name: Diagnose — what does Kudu think is happening
+        run: |
+          APP_NAME="${{ secrets.AZURE_APP_NAME }}"
+          RG=$(az resource list --name "$APP_NAME" --resource-type Microsoft.Web/sites --query "[0].resourceGroup" -o tsv)
+          echo "── Site state ──"
+          az webapp show --name "$APP_NAME" --resource-group "$RG" --query "{state:state, availabilityState:availabilityState, usageState:usageState}" -o json
+          echo "── Recent Kudu deployment history (is one stuck in-progress?) ──"
+          az webapp deployment list --name "$APP_NAME" --resource-group "$RG" --query "[0:5].{id:id, status:status, message:message, complete:complete, receivedTime:receivedTime}" -o json
+          echo "── Relevant app settings ──"
+          az webapp config appsettings list --name "$APP_NAME" --resource-group "$RG" --query "[?name=='WEBSITE_RUN_FROM_PACKAGE' || name=='SCM_DO_BUILD_DURING_DEPLOYMENT' || name=='WEBSITES_ENABLE_APP_SERVICE_STORAGE']" -o json
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
