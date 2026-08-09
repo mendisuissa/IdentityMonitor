@@ -168,11 +168,14 @@ jobs:
           [ "$STATUS" = "401" ] || { echo "❌ /api/alerts returned $STATUS (expected 401)"; exit 1; }
           echo "✅ /api/alerts gate OK"
 
-      - name: Auth gate — PIM status (must return 401 or 403)
+      - name: Auth gate — PIM analyze (must return 401 or 403)
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$APP_URL/api/pim/status")
-          [ "$STATUS" = "401" ] || [ "$STATUS" = "403" ] || { echo "❌ /api/pim/status returned $STATUS (expected 401/403)"; exit 1; }
-          echo "✅ /api/pim/status gate OK"
+          # There is no /api/pim/status route — pim.js only exposes /analyze
+          # (confirmed by reading backend/src/routes/pim.js). This check was
+          # testing a route that never existed.
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$APP_URL/api/pim/analyze")
+          [ "$STATUS" = "401" ] || [ "$STATUS" = "403" ] || { echo "❌ /api/pim/analyze returned $STATUS (expected 401/403)"; exit 1; }
+          echo "✅ /api/pim/analyze gate OK"
 
       - name: No 500 on unknown route
         run: |
