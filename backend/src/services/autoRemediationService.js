@@ -224,10 +224,18 @@ async function remediateTenant(tenantId, options = {}) {
 
     actioned++;
 
-    // ── 3. Approval gate for Critical CVEs ──────────────────────────────────
-    const isCritical = String(vuln.severity || '').toLowerCase() === 'critical';
-    if (isCritical && REQUIRE_APPROVAL()) {
-      console.log(`[AutoRemediation] ${tenantId} ${cveId} — Critical CVE, requesting Telegram approval`);
+    // ── 3. Approval gate ──────────────────────────────────────────────────
+    // Was gated to Critical severity only, regardless of REQUIRE_APPROVAL()'s
+    // own setting — found live (2026-08-11) via a company-wide sweep for
+    // unguarded-automation bugs: AUTO_REMEDIATION_REQUIRE_APPROVAL defaults
+    // to true (the tenant's explicit opt-in to "don't auto-remediate without
+    // a human check"), yet High/Medium/Low CVEs — 3 of 4 severity tiers —
+    // silently bypassed that setting entirely and deployed to the whole
+    // fleet unattended, based on Defender TVM data this same file's own
+    // isGarbageProductName() admits is sometimes dirty. Now honors the
+    // setting for every severity, matching what its name promises.
+    if (REQUIRE_APPROVAL()) {
+      console.log(`[AutoRemediation] ${tenantId} ${cveId} — ${vuln.severity || 'unknown'} severity CVE, requesting Telegram approval`);
       let decision = 'approved';
       try {
         decision = await telegramService.requestCveApproval(tenantId, cveId, enriched, APPROVAL_TIMEOUT());

@@ -377,9 +377,11 @@ async function sendNewCveAlert(tenantId, newCves) {
   }
 }
 
-// ─── Request CVE remediation approval (Critical CVEs) ────────────────────
+// ─── Request CVE remediation approval ─────────────────────────────────────
 /**
- * Sends a Telegram message with [✅ Approve] [⏭ Skip] buttons for a critical CVE.
+ * Sends a Telegram message with [✅ Approve] [⏭ Skip] buttons for a CVE
+ * (any severity — the caller's approval-gate decides which severities call
+ * this, see autoRemediationService.js).
  * Returns a Promise that resolves to 'approved' or 'skipped'.
  * Auto-resolves to 'skipped' after timeoutMs (default 5 min).
  */
@@ -388,17 +390,19 @@ async function requestCveApproval(tenantId, cveId, cveData, timeoutMs = 5 * 60 *
   const chatId = TELEGRAM_CHAT_ID;
   if (!token || !chatId) return 'approved'; // no bot → proceed automatically
 
-  const key     = shortId();
-  const prod    = escMd(cveData.displayProductName || cveData.productName || '?');
-  const cveSafe = escMd(cveId);
-  const sevSafe = escMd(String(cveData.severity || '').toUpperCase());
+  const key       = shortId();
+  const prod      = escMd(cveData.displayProductName || cveData.productName || '?');
+  const cveSafe   = escMd(cveId);
+  const severity  = String(cveData.severity || '').toLowerCase();
+  const sevSafe   = escMd(severity.toUpperCase() || 'UNKNOWN');
+  const sevEmoji  = { critical: '🔴', high: '🟠', medium: '🟡', low: '🔵' }[severity] || '⚪';
 
   const text = [
     `🚨 *Auto\\-Remediation Approval Required*`,
     ``,
-    `A *Critical* CVE is queued for automatic remediation\\.`,
+    `A *${sevSafe}* CVE is queued for automatic remediation\\.`,
     ``,
-    `🔴 *${cveSafe}* · ${sevSafe}`,
+    `${sevEmoji} *${cveSafe}* · ${sevSafe}`,
     `📦 Product: ${prod}`,
     `🏢 Tenant: \`${escMd(String(tenantId).substring(0, 8))}…\``,
     ``,
