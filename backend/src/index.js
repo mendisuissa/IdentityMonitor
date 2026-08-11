@@ -189,7 +189,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // GET /api/health-deep — supervisor-only endpoint, requires SUPERVISOR_SECRET header
-app.get('/api/health-deep', (req, res) => {
+app.get('/api/health-deep', async (req, res) => {
   const secret = process.env.SUPERVISOR_SECRET;
   if (secret && req.headers['x-supervisor-secret'] !== secret) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -197,14 +197,33 @@ app.get('/api/health-deep', (req, res) => {
   try {
     const autoRem = require('./services/autoRemediationService');
     const remStats = autoRem.getRunStats();
-    const tenantCount = (() => {
-      try { return tenantRegistry.getAllTenantIds().length; } catch { return null; }
+    const tenantIds = (() => {
+      try { return tenantRegistry.getAllTenantIds(); } catch { return []; }
     })();
+
+    // Outcome check for the new-CVE alert path, not just "is the cron alive" —
+    // added 2026-08-11 after the in-memory _seenCves bug went undetected for
+    // weeks despite the scanner itself reporting healthy the whole time.
+    // tenantsWithBaseline < totalTenants (once runsLast24h is high enough that
+    // every tenant should have scanned at least once) means the persisted
+    // baseline isn't sticking — the exact failure mode that bug had.
+    const tableStorage = require('./services/tableStorage');
+    let tenantsWithBaseline = 0;
+    let lastAlertSentAt = null;
+    for (const tid of tenantIds) {
+      try {
+        const seen = await tableStorage.getSeenCves(tid);
+        if (seen !== null) tenantsWithBaseline++;
+        const alertAt = await tableStorage.getLastCveAlertAt(tid);
+        if (alertAt && (!lastAlertSentAt || alertAt > lastAlertSentAt)) lastAlertSentAt = alertAt;
+      } catch (_) { /* one tenant's storage error shouldn't blank the whole report */ }
+    }
+
     res.json({
       status:      'ok',
       timestamp:   new Date().toISOString(),
       version:     require('../package.json').version,
-      tenantCount,
+      tenantCount: tenantIds.length,
       autoRemediation: {
         enabled:            autoRem.isEnabled(),
         lastRunAt:          remStats.lastRunAt,
@@ -213,6 +232,11 @@ app.get('/api/health-deep', (req, res) => {
         successLast24h:     remStats.successLast24h,
         recentErrors:       remStats.recentErrors,
         recentFailedActions: remStats.recentFailedActions,
+      },
+      cveTracking: {
+        tenantsWithBaseline,
+        totalTenants: tenantIds.length,
+        lastAlertSentAt,
       },
     });
   } catch (err) {

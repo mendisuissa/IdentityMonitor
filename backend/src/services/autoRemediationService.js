@@ -141,22 +141,28 @@ async function remediateTenant(tenantId, options = {}) {
       console.error(`[AutoRemediation] ${tenantId} — getSeenCves failed, treating as first run:`, err.message);
       return null;
     });
+    let newOnes = [];
     if (seenIds) {
-      const newOnes = vulns.filter(v => {
+      newOnes = vulns.filter(v => {
         const id = (v.cveId || v.id || '').toUpperCase();
         return id && !seenIds.has(id);
       });
-      if (newOnes.length > 0) {
-        console.log(`[AutoRemediation] ${tenantId} — ${newOnes.length} new CVE(s) detected, sending Telegram alert`);
-        telegramService.sendNewCveAlert(tenantId, newOnes).catch(() => {});
-      }
     } else {
       console.log(`[AutoRemediation] ${tenantId} — first scan ever for this tenant, seeding baseline of ${currentIds.size} CVE(s) without alerting`);
     }
-    // Always persist the seen set after each run — survives restarts now
+    // Persist the seen set BEFORE marking the alert timestamp — saveSeenCves
+    // writes in 'Replace' mode (see below) and would otherwise wipe lastAlertAt
+    // if it ran second; markCveAlertSent uses 'Merge' so it layers on safely.
     await tableStorage.saveSeenCves(tenantId, currentIds).catch(err =>
       console.error(`[AutoRemediation] ${tenantId} — saveSeenCves failed:`, err.message)
     );
+    if (newOnes.length > 0) {
+      console.log(`[AutoRemediation] ${tenantId} — ${newOnes.length} new CVE(s) detected, sending Telegram alert`);
+      telegramService.sendNewCveAlert(tenantId, newOnes).catch(() => {});
+      await tableStorage.markCveAlertSent(tenantId).catch(err =>
+        console.error(`[AutoRemediation] ${tenantId} — markCveAlertSent failed:`, err.message)
+      );
+    }
   }
 
   // Sort: Critical first, then High, Medium, Low

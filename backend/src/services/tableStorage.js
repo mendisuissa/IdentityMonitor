@@ -158,6 +158,30 @@ async function getSeenCves(tenantId) {
   }
 }
 
+// Records that a new-CVE alert was actually attempted for this tenant — lets
+// /api/health-deep expose "is the alert-generating logic still firing" as an
+// outcome signal (not just "is the scan cron alive"), so a supervisor check
+// can catch a regression of the exact silent-suppression bug this replaced,
+// instead of only ever noticing after another human report.
+async function markCveAlertSent(tenantId) {
+  const client = getClient(TABLES.SEENCVES);
+  await client.upsertEntity({
+    partitionKey: tenantId,
+    rowKey:       'seen',
+    lastAlertAt:  new Date().toISOString()
+  }, 'Merge');
+}
+
+async function getLastCveAlertAt(tenantId) {
+  const client = getClient(TABLES.SEENCVES);
+  try {
+    const entity = await client.getEntity(tenantId, 'seen');
+    return entity.lastAlertAt || null;
+  } catch (err) {
+    return null;
+  }
+}
+
 async function saveSeenCves(tenantId, cveIdSet) {
   const client = getClient(TABLES.SEENCVES);
   await client.upsertEntity({
@@ -361,7 +385,7 @@ module.exports = {
   initTables,
   saveAlert, getAlerts, updateAlertStatus,
   getBaseline, saveBaseline,
-  getSeenCves, saveSeenCves,
+  getSeenCves, saveSeenCves, markCveAlertSent, getLastCveAlertAt,
   saveWebhookSubscription, getWebhookSubscriptions, deleteWebhookSubscription,
   saveTenantSettings, getTenantSettings,
   saveTenantProfile, getAllTenantProfiles,

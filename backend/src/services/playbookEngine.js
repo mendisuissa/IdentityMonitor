@@ -81,6 +81,24 @@ function evaluatePlaybook(playbook, alert) {
   return conditions.every(c => evaluateCondition(c, alert));
 }
 
+// Minimum corroborating risk factors required before a playbook is allowed to
+// autonomously revoke sessions or disable a user — no human approval gate
+// exists on this path (unlike the Telegram approve/dismiss buttons). Added
+// 2026-08-11: confirmed live that a single factor (most likely Impossible
+// Travel, which depends on IP geolocation accuracy — a well-known source of
+// false positives from mobile carriers/VPN exit-node jumps) can already
+// score >=75/critical on its own once combined with a high-tier app-access
+// multiplier in behavioralEngine.js. Two real users got auto-disconnected
+// this way. This does not weaken detection or alerting — it only requires a
+// second independent signal before an irreversible-to-the-user action fires
+// with nobody in the loop; a tenant can still configure lower-severity
+// playbooks for sendTelegram/notifyAdmin/createCase without this gate.
+const MIN_FACTORS_FOR_DESTRUCTIVE_ACTION = 2;
+
+function _hasCorroboration(alert) {
+  return (alert.riskFactors || []).length >= MIN_FACTORS_FOR_DESTRUCTIVE_ACTION;
+}
+
 // ─── Execute actions for a triggered playbook ─────────────────────────────
 async function executePlaybookActions(playbook, alert, tenantId) {
   const results = [];
@@ -92,6 +110,11 @@ async function executePlaybookActions(playbook, alert, tenantId) {
     try {
       switch (type) {
         case 'revokeSessions': {
+          if (!_hasCorroboration(alert)) {
+            console.warn(`[Playbook] ${playbook.name} — revokeSessions blocked for ${alert.userDisplayName || alert.userId}: only ${(alert.riskFactors || []).length} risk factor(s), need ${MIN_FACTORS_FOR_DESTRUCTIVE_ACTION}`);
+            results.push({ action: type, status: 'blocked_low_confidence', error: `Needs ${MIN_FACTORS_FOR_DESTRUCTIVE_ACTION}+ corroborating risk factors, alert has ${(alert.riskFactors || []).length}` });
+            break;
+          }
           try {
             await require('./graphService').revokeUserSessions(tenantId, alert.userId);
             results.push({ action: type, status: 'ok' });
@@ -102,6 +125,11 @@ async function executePlaybookActions(playbook, alert, tenantId) {
         }
 
         case 'disableUser': {
+          if (!_hasCorroboration(alert)) {
+            console.warn(`[Playbook] ${playbook.name} — disableUser blocked for ${alert.userDisplayName || alert.userId}: only ${(alert.riskFactors || []).length} risk factor(s), need ${MIN_FACTORS_FOR_DESTRUCTIVE_ACTION}`);
+            results.push({ action: type, status: 'blocked_low_confidence', error: `Needs ${MIN_FACTORS_FOR_DESTRUCTIVE_ACTION}+ corroborating risk factors, alert has ${(alert.riskFactors || []).length}` });
+            break;
+          }
           try {
             await require('./graphService').disableUser(tenantId, alert.userId);
             results.push({ action: type, status: 'ok' });

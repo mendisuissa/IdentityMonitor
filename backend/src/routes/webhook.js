@@ -6,7 +6,6 @@ const router  = express.Router();
 const anomalyService = require('../services/anomalyService');
 const telegramService = require('../services/telegramService');
 const wsService       = require('../services/wsService');
-const tableStorage    = require('../services/tableStorage');
 const graphService    = require('../services/graphService');
 
 const CLIENT_STATE = (() => {
@@ -118,27 +117,37 @@ async function processNotification(tenantId, signInId, subscriptionId) {
 
     console.log('[Webhook] Privileged user sign-in detected (userId:', signIn.userId, ')');
 
-    // Get user's baseline
-    const baseline = await tableStorage.getBaseline(tenantId, signIn.userId);
+    // Run anomaly detection on this single sign-in via the same pipeline the
+    // periodic scan uses (anomalyService.scanUser → behavioralEngine.scoreSignIn).
+    //
+    // This used to call detectAnomaliesOnSignIn()/buildAlert() — neither
+    // function exists anywhere in this codebase (confirmed 2026-08-11), so
+    // every real-time privileged-user sign-in notification threw a silent
+    // TypeError here, caught by the outer try/catch below, and did nothing.
+    // Real-time detection has been dead code since whenever those functions
+    // were refactored away; only the 60s-interval periodic scan (jobRunner.js)
+    // was actually catching anomalies.
+    //
+    // This block also used to unconditionally revoke sessions on any single
+    // 'critical'-scored sign-in with zero human involvement and zero
+    // corroboration — more dangerous than the (now-fixed) 15-minute
+    // Telegram-approval auto-revoke below, which at least gives a human a
+    // window to intervene. Removed in favor of routing through
+    // sendAlertWithPlaybook, whose auto-revoke now requires 2+ corroborating
+    // risk factors (see telegramService.js) before acting autonomously.
+    const settingsService = require('../services/settingsService');
+    const settings = await settingsService.getSettingsAsync(tenantId).catch(() => ({ whitelist: {} }));
+    const user = privilegedUsers.get(signIn.userId);
 
-    // Run anomaly detection on this single sign-in
-    const { detectAnomaliesOnSignIn, buildAlert } = require('../services/anomalyService');
-    const anomalies = detectAnomaliesOnSignIn(signIn, baseline);
+    // scanUser() itself has no whitelist check — runFullScan() (the periodic
+    // path) filters whitelisted users before calling it, so this path needs
+    // the same guard or a whitelisted user's real-time sign-in would bypass
+    // whitelisting entirely.
+    if (settings.whitelist?.users?.includes(user?.userPrincipalName)) return;
 
-    if (anomalies.length === 0) {
-      // Normal sign-in — update baseline
-      updateBaselineFromSignIn(baseline, signIn);
-      await tableStorage.saveBaseline(tenantId, signIn.userId, baseline);
-      return;
-    }
+    const newAlerts = await anomalyService.scanUser(tenantId, user, [signIn], settings);
 
-    // Anomalies detected!
-    for (const anomaly of anomalies) {
-      const alert = buildAlert(tenantId, signIn, anomaly, privilegedUsers.get(signIn.userId));
-
-      // Save to Table Storage
-      await tableStorage.saveAlert(alert);
-
+    for (const alert of newAlerts) {
       // Push to dashboard live
       wsService.broadcastNewAlert(alert);
 
@@ -153,10 +162,8 @@ async function processNotification(tenantId, signInId, subscriptionId) {
       // Telegram playbook for medium+ severity — use tenant-configured credentials only
       if (['critical', 'high', 'medium'].includes(alert.severity)) {
         try {
-          const settingsService = require('../services/settingsService');
-          const s = await settingsService.getSettingsAsync(tenantId).catch(() => ({}));
-          const telegramToken  = s?.notifications?.telegramBotToken;
-          const telegramChatId = s?.notifications?.telegramChatId;
+          const telegramToken  = settings?.notifications?.telegramBotToken;
+          const telegramChatId = settings?.notifications?.telegramChatId;
           if (telegramToken && telegramChatId) {
             await telegramService.sendAlertWithPlaybook(alert, telegramToken, telegramChatId);
           }
@@ -164,21 +171,6 @@ async function processNotification(tenantId, signInId, subscriptionId) {
           console.error('[Webhook] Telegram failed:', err.message);
         }
       }
-
-      // Auto-actions for critical
-      if (alert.severity === 'critical') {
-        try {
-          await graphService.revokeUserSessions(tenantId, signIn.userId);
-          alert.actionsTriggered.push({ action: 'sessions_revoked', timestamp: new Date().toISOString() });
-          console.log('[Webhook] 🔒 Auto-revoked sessions for', signIn.userPrincipalName);
-        } catch (err) {
-          console.error('[Webhook] Auto-revoke failed:', err.message);
-        }
-      }
-
-      // Update baseline after alert
-      updateBaselineFromSignIn(baseline, signIn);
-      await tableStorage.saveBaseline(tenantId, signIn.userId, baseline);
     }
 
   } catch (err) {
@@ -196,24 +188,6 @@ async function getPrivilegedUserIds(tenantId) {
   const userMap = new Map(users.map(u => [u.id, u]));
   _privCache.set(tenantId, { users: userMap, expiresAt: Date.now() + 5 * 60 * 1000 });
   return userMap;
-}
-
-function updateBaselineFromSignIn(baseline, signIn) {
-  if (signIn.ipAddress) {
-    if (!baseline.knownIPs.includes(signIn.ipAddress)) baseline.knownIPs.push(signIn.ipAddress);
-  }
-  if (signIn.location?.countryOrRegion) {
-    if (!baseline.knownCountries.includes(signIn.location.countryOrRegion)) baseline.knownCountries.push(signIn.location.countryOrRegion);
-  }
-  if (signIn.deviceDetail?.deviceId) {
-    if (!baseline.knownDevices.includes(signIn.deviceDetail.deviceId)) baseline.knownDevices.push(signIn.deviceDetail.deviceId);
-  }
-  baseline.recentSignIns.push({
-    time: signIn.createdDateTime,
-    lat:  signIn.location?.geoCoordinates?.latitude,
-    lon:  signIn.location?.geoCoordinates?.longitude,
-    ip:   signIn.ipAddress
-  });
 }
 
 module.exports = router;

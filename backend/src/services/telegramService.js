@@ -83,9 +83,20 @@ async function sendAlertWithPlaybook(alert, tokenOverride, chatIdOverride) {
 
     console.log('[Telegram] ✅ Alert sent, message_id:', data.result.message_id);
 
-    // For critical alerts — auto-revoke if no action within 15 min
-    if (alert.severity === 'critical') {
+    // For critical alerts — auto-revoke if no action within 15 min, but only
+    // when corroborated by 2+ independent risk factors. A single factor
+    // (e.g. Impossible Travel alone, which depends on IP geolocation
+    // accuracy — a well-known false-positive source from mobile carriers/VPN
+    // exit-node jumps) can already reach 'critical' via behavioralEngine's
+    // app-tier multiplier. Confirmed live (2026-08-11): this let one noisy
+    // signal autonomously disable a real user with nobody in the loop. Still
+    // alerts + still lets a human act via the buttons below — this only
+    // removes the fully-autonomous action for single-factor cases.
+    const factorCount = (alert.riskFactors || []).length;
+    if (alert.severity === 'critical' && factorCount >= 2) {
       scheduleAutoRevoke(alert, data.result.message_id, token, chatId);
+    } else if (alert.severity === 'critical') {
+      console.log(`[Telegram] Critical alert for ${alert.userDisplayName} has only ${factorCount} risk factor(s) — skipping auto-revoke, human decision required`);
     }
 
     return data.result.message_id;
