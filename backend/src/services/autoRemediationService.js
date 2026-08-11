@@ -20,6 +20,7 @@ const { sendRemediationNotification }                          = require('./emai
 const tenantRegistry                                           = require('./tenantRegistry');
 const telegramService                                          = require('./telegramService');
 const { fmtTime }                                              = require('./telegramService');
+const tableStorage                                             = require('./tableStorage');
 
 const ENABLED           = () => process.env.AUTO_REMEDIATION_ENABLED === 'true';
 const INTERVAL_MS       = () => Math.max(5, Number(process.env.AUTO_REMEDIATION_INTERVAL_MINUTES || 60)) * 60 * 1000;
@@ -30,9 +31,12 @@ const REQUIRE_APPROVAL  = () => process.env.AUTO_REMEDIATION_REQUIRE_APPROVAL !=
 let _timer   = null;
 let _running = false;
 
-// In-memory: tracks which CVE IDs we have already seen per tenant (for new-CVE alerts)
-// Map<tenantId, Set<cveId>>
-const _seenCves = new Map();
+// Persisted (tableStorage.getSeenCves/saveSeenCves) — tracks which CVE IDs we've
+// already seen per tenant, for new-CVE Telegram alerts. Was an in-memory Map here
+// until 2026-08-11: it reset to empty on every app restart, and the first scan
+// after any restart silently re-baselines without alerting (see remediateTenant
+// below) — during the stretch where every deploy attempt hit a Kudu conflict
+// (2026-07-15 to 2026-08-10), that meant new-CVE alerts went silent for weeks.
 
 // ── Run history — exposed to supervisor via /api/health-deep ─────────────────
 const _runHistory = [];   // last 20 runs, newest first
@@ -133,7 +137,10 @@ async function remediateTenant(tenantId, options = {}) {
   // ── Detect new CVEs vs last run ──────────────────────────────────────────
   {
     const currentIds = new Set(vulns.map(v => (v.cveId || v.id || '').toUpperCase()).filter(Boolean));
-    const seenIds    = _seenCves.get(tenantId);
+    const seenIds    = await tableStorage.getSeenCves(tenantId).catch(err => {
+      console.error(`[AutoRemediation] ${tenantId} — getSeenCves failed, treating as first run:`, err.message);
+      return null;
+    });
     if (seenIds) {
       const newOnes = vulns.filter(v => {
         const id = (v.cveId || v.id || '').toUpperCase();
@@ -143,9 +150,13 @@ async function remediateTenant(tenantId, options = {}) {
         console.log(`[AutoRemediation] ${tenantId} — ${newOnes.length} new CVE(s) detected, sending Telegram alert`);
         telegramService.sendNewCveAlert(tenantId, newOnes).catch(() => {});
       }
+    } else {
+      console.log(`[AutoRemediation] ${tenantId} — first scan ever for this tenant, seeding baseline of ${currentIds.size} CVE(s) without alerting`);
     }
-    // Always update the seen set after each run
-    _seenCves.set(tenantId, currentIds);
+    // Always persist the seen set after each run — survives restarts now
+    await tableStorage.saveSeenCves(tenantId, currentIds).catch(err =>
+      console.error(`[AutoRemediation] ${tenantId} — saveSeenCves failed:`, err.message)
+    );
   }
 
   // Sort: Critical first, then High, Medium, Low

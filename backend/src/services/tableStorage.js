@@ -10,7 +10,8 @@ const TABLES = {
   TENANTS:   'tenants',
   WEBHOOKS:  'webhooks',
   WORKFLOWS: 'workflows',
-  INCIDENTS: 'incidents'
+  INCIDENTS: 'incidents',
+  SEENCVES:  'seencves'
 };
 
 let _clients = {};
@@ -131,6 +132,39 @@ async function saveBaseline(tenantId, userId, baseline) {
     knownDevices:   JSON.stringify([...new Set(baseline.knownDevices || [])].slice(-50)),
     recentSignIns:  JSON.stringify(recentCapped),
     lastUpdated:    new Date().toISOString()
+  }, 'Replace');
+}
+
+// ─── SEEN CVEs (auto-remediation new-CVE detection) ──────────────────────
+// PartitionKey = tenantId, RowKey = 'seen'
+//
+// Was an in-memory Map in autoRemediationService.js — reset to empty on
+// every app restart, and the first scan after any restart silently
+// re-baselines "current CVEs = seen" without ever alerting on them (see
+// that file's comment). Confirmed live (2026-08-11): IdentityMonitor's App
+// Service was hitting a Kudu deploy-conflict on every attempt from
+// 2026-07-15 to 2026-08-10, almost certainly restarting repeatedly during
+// that whole window — explains a full silence on new-CVE Telegram alerts
+// starting around then. Persisting this here means a restart no longer
+// wipes what's already been alerted on.
+
+async function getSeenCves(tenantId) {
+  const client = getClient(TABLES.SEENCVES);
+  try {
+    const entity = await client.getEntity(tenantId, 'seen');
+    return new Set(JSON.parse(entity.cveIds || '[]'));
+  } catch (err) {
+    return null; // not found = never scanned before, distinct from "scanned, found nothing"
+  }
+}
+
+async function saveSeenCves(tenantId, cveIdSet) {
+  const client = getClient(TABLES.SEENCVES);
+  await client.upsertEntity({
+    partitionKey: tenantId,
+    rowKey:       'seen',
+    cveIds:       JSON.stringify([...cveIdSet].slice(0, 2000)),
+    lastUpdated:  new Date().toISOString()
   }, 'Replace');
 }
 
@@ -310,6 +344,7 @@ async function eraseAllTenantData(tenantId) {
   deleted.webhooks  = await _purgeTable(TABLES.WEBHOOKS,  tenantId);
   deleted.incidents = await _purgeTable(TABLES.INCIDENTS, tenantId);
   deleted.workflows = await _purgeTable(TABLES.WORKFLOWS, tenantId);
+  deleted.seenCves  = await _purgeTable(TABLES.SEENCVES,  tenantId);
 
   // Tenant profile (partitionKey = 'profile') and settings (partitionKey = 'settings')
   const tenantsClient = getClient(TABLES.TENANTS);
@@ -326,6 +361,7 @@ module.exports = {
   initTables,
   saveAlert, getAlerts, updateAlertStatus,
   getBaseline, saveBaseline,
+  getSeenCves, saveSeenCves,
   saveWebhookSubscription, getWebhookSubscriptions, deleteWebhookSubscription,
   saveTenantSettings, getTenantSettings,
   saveTenantProfile, getAllTenantProfiles,
