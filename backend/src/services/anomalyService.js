@@ -394,30 +394,47 @@ async function triggerActions(tenantId, alerts, user, settings) {
       }
     }
 
+    // A third, independent auto-revoke/disable path found live (2026-08-11)
+    // during a company-wide sweep for this exact bug class — gated only by
+    // billing plan, with no corroboration check, unlike the two paths
+    // already fixed tonight (playbookEngine.js, telegramService.js). Worse:
+    // settingsService.js ships revokeSession:true by DEFAULT for 'critical'
+    // on every new tenant, so this fires out of the box, not just for
+    // tenants who opted into an aggressive policy. Same guard applied.
+    const hasCorroboration = (alert.riskFactors || []).length >= 2;
+
     // ── Revoke sessions ───────────────────────────────────────────────
     // PREMIUM ONLY: Auto-remediation requires an active subscription
     if (actions.revokeSession && premium) {
-      try {
-        await graphService.revokeUserSessions(tenantId, user.id);
-        alertsStore.addAction(alert.id, 'sessions_revoked');
-        if (notifyCfg.userNotify && (user.mail || user.userPrincipalName)) {
-          await emailService.sendUserSecurityNotice(user, alert, tenantId);
-          alertsStore.addAction(alert.id, 'user_notified');
+      if (!hasCorroboration) {
+        console.log(`[Actions] revokeSession blocked for ${user.userPrincipalName || user.id}: only ${(alert.riskFactors || []).length} risk factor(s), need 2+`);
+      } else {
+        try {
+          await graphService.revokeUserSessions(tenantId, user.id);
+          alertsStore.addAction(alert.id, 'sessions_revoked');
+          if (notifyCfg.userNotify && (user.mail || user.userPrincipalName)) {
+            await emailService.sendUserSecurityNotice(user, alert, tenantId);
+            alertsStore.addAction(alert.id, 'user_notified');
+          }
+        } catch (err) {
+          console.error('[Actions] Revoke failed:', err.message);
         }
-      } catch (err) {
-        console.error('[Actions] Revoke failed:', err.message);
       }
     }
 
     // ── Disable user ──────────────────────────────────────────────────
     // PREMIUM ONLY: Auto-remediation requires an active subscription
     if (actions.disableUser && premium) {
-      try {
-        await graphService.disableUser(tenantId, user.id);
-        alertsStore.addAction(alert.id, 'user_disabled');
-        console.log('[Actions] User account disabled (id:', user.id, ')');
-      } catch (err) {
-        console.error('[Actions] Disable user failed:', err.message);
+      if (!hasCorroboration) {
+        console.log(`[Actions] disableUser blocked for ${user.userPrincipalName || user.id}: only ${(alert.riskFactors || []).length} risk factor(s), need 2+`);
+      } else {
+        try {
+          await graphService.disableUser(tenantId, user.id);
+          alertsStore.addAction(alert.id, 'user_disabled');
+          console.log('[Actions] User account disabled (id:', user.id, ')');
+        } catch (err) {
+          console.error('[Actions] Disable user failed:', err.message);
+        }
       }
     }
   }
