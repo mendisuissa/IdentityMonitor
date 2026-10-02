@@ -234,18 +234,17 @@ async function remediateTenant(tenantId, options = {}) {
     // fleet unattended, based on Defender TVM data this same file's own
     // isGarbageProductName() admits is sometimes dirty. Now honors the
     // setting for every severity, matching what its name promises.
-    if (REQUIRE_APPROVAL()) {
+    { // P0: the legacy REQUIRE_APPROVAL=false flag cannot bypass human approval.
       console.log(`[AutoRemediation] ${tenantId} ${cveId} — ${vuln.severity || 'unknown'} severity CVE, requesting Telegram approval`);
-      let decision = 'approved';
+      let decision = require('./remediationApproval').NOT_APPROVED('APPROVAL_UNAVAILABLE');
       try {
         decision = await telegramService.requestCveApproval(tenantId, cveId, enriched, APPROVAL_TIMEOUT());
       } catch (err) {
         console.error(`[AutoRemediation] Approval request failed for ${cveId}:`, err.message);
-        decision = 'approved'; // fail-open
+        decision = require('./remediationApproval').NOT_APPROVED('TRANSPORT_FAILED');
       }
-      if (decision === 'skipped') {
+      if (!require('./remediationApproval').isExplicit(decision)) {
         summary.skipped++;
-        summary.total++;
         await saveRemediationRecord({
           tenantId, cveId,
           productName: enriched.productName || '',
@@ -254,7 +253,7 @@ async function remediateTenant(tenantId, options = {}) {
           status: 'skipped',
           executor: 'auto',
           triggeredBy: 'cron',
-          message: 'Skipped by admin via Telegram approval gate.',
+          message: 'Not explicitly approved; no remediation executed.',
         }).catch(() => {});
         continue;
       }
@@ -300,7 +299,7 @@ async function remediateTenant(tenantId, options = {}) {
               suggestedWingetId:   enrichedDeep.suggestedWingetId || undefined,
             },
           });
-          const ok = result?.ok !== false && result?.status !== 'failed';
+          const ok = result?.status === 'VERIFIED';
           status  = ok ? 'success' : 'failed';
           message = result?.message || (ok ? 'Deployed via WinGet to All Devices.' : 'Deployment failed.');
           if (ok) summary.success++; else summary.failed++;
@@ -325,7 +324,7 @@ async function remediateTenant(tenantId, options = {}) {
               affectedDeviceNames: affectedMachines,
             },
           });
-          const ok = result?.ok !== false;
+          const ok = result?.status === 'VERIFIED';
           status  = ok ? 'success' : 'failed';
           message = result?.message || (ok ? 'Windows Update deployed.' : 'Windows Update failed.');
           if (ok) summary.success++; else summary.failed++;

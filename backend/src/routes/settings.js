@@ -604,6 +604,7 @@ router.post('/siem', (req, res) => {
 // The tenant must re-authenticate after this action (their session remains until expiry,
 // but all stored alerts, baselines, settings, and integrations are gone).
 router.delete('/tenant-data', requirePermission('settings.manage'), async (req, res) => {
+  return res.status(423).json({ error: 'P0_REMEDIATION_HELD', status: 'NOT_APPROVED' });
   const tenantId = requireAuth(req, res);
   if (!tenantId) return;
 

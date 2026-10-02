@@ -316,6 +316,7 @@ function unflattenFromTable(entity) {
 // ─── RETENTION ENFORCEMENT ───────────────────────────────────────────────
 // Deletes alert rows older than `cutoffIso` for a specific tenant.
 async function purgeOldAlerts(tenantId, cutoffIso) {
+  require('./remediationApproval').assertExecutionHeld();
   const client = getClient(TABLES.ALERTS);
   const pk = tenantId || 'default';
   const filter = `PartitionKey eq '${pk}' and detectedAt lt '${cutoffIso}'`;
@@ -332,6 +333,7 @@ async function purgeOldAlerts(tenantId, cutoffIso) {
 
 // Purge baseline entries older than `cutoffIso` (based on lastUpdated field).
 async function purgeOldBaselines(tenantId, cutoffIso) {
+  require('./remediationApproval').assertExecutionHeld();
   const client = getClient(TABLES.BASELINES);
   const filter = `PartitionKey eq '${tenantId}' and lastUpdated lt '${cutoffIso}'`;
   const toDelete = [];
@@ -348,6 +350,7 @@ async function purgeOldBaselines(tenantId, cutoffIso) {
 // ─── GDPR RIGHT TO ERASURE ────────────────────────────────────────────────
 // Deletes ALL data for a tenant across every table. Irreversible.
 async function eraseAllTenantData(tenantId) {
+  require('./remediationApproval').assertExecutionHeld();
   const deleted = {};
 
   async function _purgeTable(tableName, partitionKey) {

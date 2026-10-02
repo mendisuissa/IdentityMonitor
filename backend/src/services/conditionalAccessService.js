@@ -78,18 +78,21 @@ async function getCaPolicy(tenantId, policyId, accessToken) {
 }
 
 async function toggleCaPolicy(tenantId, policyId, state, accessToken) {
+  require('./remediationApproval').assertExecutionHeld();
   return _withRetry(tenantId, client =>
     client.api(`/identity/conditionalAccess/policies/${policyId}`).patch({ state })
   , accessToken);
 }
 
 async function deleteCaPolicy(tenantId, policyId, accessToken) {
+  require('./remediationApproval').assertExecutionHeld();
   return _withRetry(tenantId, client =>
     client.api(`/identity/conditionalAccess/policies/${policyId}`).delete()
   , accessToken);
 }
 
 async function blockIpAddress(tenantId, ipAddress, locationName = 'IdentityMonitor-Blocked-IPs', accessToken) {
+  require('./remediationApproval').assertExecutionHeld();
   const cidr = ipAddress.includes('/') ? ipAddress : ipAddress + '/32';
   return _withRetry(tenantId, async client => {
     const locRes = await client.api('/identity/conditionalAccess/namedLocations').get();
@@ -108,6 +111,7 @@ async function blockIpAddress(tenantId, ipAddress, locationName = 'IdentityMonit
 }
 
 async function requireMfaForUser(tenantId, userId, policyName, accessToken) {
+  require('./remediationApproval').assertExecutionHeld();
   const displayName = policyName || `IdentityMonitor-RequireMFA-${userId}`;
   return _withRetry(tenantId, client =>
     client.api('/identity/conditionalAccess/policies').post({
@@ -119,6 +123,7 @@ async function requireMfaForUser(tenantId, userId, policyName, accessToken) {
 }
 
 async function blockUserSignIn(tenantId, userId, policyName, accessToken) {
+  require('./remediationApproval').assertExecutionHeld();
   const displayName = policyName || `IdentityMonitor-BlockUser-${userId}`;
   return _withRetry(tenantId, client =>
     client.api('/identity/conditionalAccess/policies').post({
@@ -130,6 +135,7 @@ async function blockUserSignIn(tenantId, userId, policyName, accessToken) {
 }
 
 async function removeIpBlock(tenantId, ipAddress, locationName = 'IdentityMonitor-Blocked-IPs', accessToken) {
+  require('./remediationApproval').assertExecutionHeld();
   const cidr = ipAddress.includes('/') ? ipAddress : ipAddress + '/32';
   return _withRetry(tenantId, async client => {
     const locRes = await client.api('/identity/conditionalAccess/namedLocations').get();

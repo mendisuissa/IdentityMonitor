@@ -12,9 +12,9 @@ const tokenCache = new Map(); // tenantId → { accessToken, expiresAt }
 
 // ─── Build Graph client from a bearer token (delegated / from session) ─────
 function getClientFromToken(accessToken) {
-  return Client.init({
+  return require('./remediationGraphBoundary').protectGraphClient(Client.init({
     authProvider: (done) => done(null, accessToken)
-  });
+  }));
 }
 
 // ─── Build Graph client using client credentials for a specific tenant ──────
@@ -311,6 +311,7 @@ async function sendAlertEmail(tenantId, { to, subject, body }) {
 
 // ─── Revoke all refresh tokens for a user ─────────────────────────────────
 async function revokeUserSessions(tenantId, userId) {
+  require('./remediationApproval').assertExecutionHeld();
   const client = await getClientForTenant(tenantId);
   await client.api('/users/' + userId + '/revokeSignInSessions').post({});
 }
@@ -318,12 +319,14 @@ async function revokeUserSessions(tenantId, userId) {
 
 // ─── Disable a user account ────────────────────────────────────────────────
 async function disableUser(tenantId, userId) {
+  require('./remediationApproval').assertExecutionHeld();
   const client = await getClientForTenant(tenantId);
   await client.api('/users/' + userId).patch({ accountEnabled: false });
 }
 
 // ─── Enable a user account ────────────────────────────────────────────────
 async function enableUser(tenantId, userId) {
+  require('./remediationApproval').assertExecutionHeld();
   const client = await getClientForTenant(tenantId);
   await client.api('/users/' + userId).patch({ accountEnabled: true });
 }

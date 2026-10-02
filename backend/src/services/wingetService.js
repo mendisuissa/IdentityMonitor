@@ -75,6 +75,7 @@ function fetchWithTimeout(url, options, timeoutMs = 30000) {
 }
 
 async function graphPost(accessToken, path, body) {
+  require('./remediationApproval').assertExecutionHeld();
   const res = await fetchWithTimeout(`https://graph.microsoft.com${path}`, {
     method: 'POST',
     headers: {
@@ -222,6 +223,7 @@ function resolveWingetId(finding) {
  * @returns {{ ok, message, appId?, wingetId?, displayName?, publishingState? }}
  */
 async function deployRemediationForFinding(tenantId, finding) {
+  require('./remediationApproval').assertExecutionHeld();
   // 1. Resolve WinGet ID
   const resolved = resolveWingetId(finding);
   if (!resolved.ok) {

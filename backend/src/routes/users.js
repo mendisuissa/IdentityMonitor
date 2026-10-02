@@ -74,6 +74,7 @@ router.get('/:userId/signins', async (req, res) => {
 
 // POST /api/users/:userId/revoke
 router.post('/:userId/revoke', requirePermission('users.respond'), async (req, res) => {
+  return res.status(423).json({ error: 'P0_REMEDIATION_HELD', status: 'NOT_APPROVED' });
   try {
     if (isMock()) return res.json({ success: true, message: '[MOCK] Sessions revoked.' });
     const tenantId = requireTenant(req, res); if (!tenantId) return;
@@ -87,6 +88,7 @@ router.post('/:userId/revoke', requirePermission('users.respond'), async (req, r
 
 // POST /api/users/:userId/disable
 router.post('/:userId/disable', requirePermission('users.respond'), async (req, res) => {
+  return res.status(423).json({ error: 'P0_REMEDIATION_HELD', status: 'NOT_APPROVED' });
   try {
     if (isMock()) return res.json({ success: true, message: '[MOCK] User disabled.' });
     const tenantId = requireTenant(req, res); if (!tenantId) return;
@@ -100,6 +102,7 @@ router.post('/:userId/disable', requirePermission('users.respond'), async (req, 
 });
 
 router.post('/:userId/enable', requirePermission('users.respond'), async (req, res) => {
+  return res.status(423).json({ error: 'P0_REMEDIATION_HELD', status: 'NOT_APPROVED' });
   try {
     if (isMock()) return res.json({ success: true, message: '[MOCK] User enabled.' });
     const tenantId = requireTenant(req, res); if (!tenantId) return;

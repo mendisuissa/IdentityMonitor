@@ -102,6 +102,7 @@ async function resolveApplicationRemediation(finding) {
  * payload = { tenantId, finding, options }
  */
 async function executeApplicationRemediation(payload) {
+  require('./remediationApproval').assertExecutionHeld();
   const { tenantId, finding = {}, options = {} } = payload || {};
 
   if (!tenantId) {

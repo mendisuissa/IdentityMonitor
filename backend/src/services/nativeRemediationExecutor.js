@@ -39,6 +39,7 @@ async function getGraphAccessToken(tenantId) {
 }
 
 async function graphBetaRequest(tenantId, path, options = {}) {
+  if ((options.method || 'GET').toUpperCase() !== 'GET') require('./remediationApproval').assertExecutionHeld();
   const accessToken = await getGraphAccessToken(tenantId);
   const response = await fetch(`${GRAPH_BETA_BASE}${path}`, {
     method: options.method || 'GET',
@@ -417,6 +418,7 @@ async function listTenantConfigurationPolicies(tenantId) {
 }
 
 async function executeImmediateWindowsUpdate(tenantId, updateType, deviceIds, affectedDeviceNames) {
+  require('./remediationApproval').assertExecutionHeld();
   const type = String(updateType || 'security').toLowerCase() === 'feature' ? 'feature' : 'security';
   const inputDeviceIds = Array.isArray(deviceIds) ? deviceIds : toArray(deviceIds);
   const inputNames = Array.isArray(affectedDeviceNames) ? affectedDeviceNames : toArray(affectedDeviceNames);
@@ -717,6 +719,7 @@ async function executeScriptRemediation({ tenantId, finding = {}, options = {} }
   }
 }
 async function executeNativeRemediation({ tenantId, finding = {}, classification, options = {} }) {
+  require('./remediationApproval').assertExecutionHeld();
   switch (classification.type) { case 'windows-update': return executeWindowsUpdate({ tenantId, finding, options }); case 'intune-policy': return executeIntunePolicy({ tenantId, finding, options }); case 'script': return executeScriptRemediation({ tenantId, finding, options }); default: return { queued: false, supported: true, status: 'manual-review-required', executionMode: 'guided-manual', message: 'This finding requires guided manual remediation.' }; }
 }
 function clearGraphTokenCache(tenantId) {

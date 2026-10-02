@@ -86,6 +86,7 @@ function simulateDecision(tenantId, sample = {}) {
 }
 
 function getExecutionCheck(tenantId, alert, action = 'monitor', workflow = {}) {
+  if (action !== 'monitor') return { canExecute: false, state: 'HELD', reason: 'P0_REMEDIATION_HELD: signed final-plan authorization required', decision: null };
   const normalized = normalizeAlert(alert);
   const decision = buildPolicyDecision(tenantId, normalized);
   if (decision.suppressed) {

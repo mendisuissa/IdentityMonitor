@@ -238,6 +238,7 @@ router.post('/plan', async (req, res) => {
 router.post('/execute', async (req, res) => {
   try {
     const tenantId = getTenantIdFromRequest(req);
+    require('../services/remediationApproval').assertExecutionHeld();
     const { approvalId = null, finding = {}, devices = [], plan = {}, options = {} } = req.body || {};
     const enrichedFinding = enrichFinding(finding);
     const classification = enrichedFinding.classification || classifyFinding(enrichedFinding);

@@ -135,6 +135,7 @@ router.get('/ca-policies/:id', async (req, res) => {
 
 // PATCH /api/identity/ca-policies/:id — toggle state
 router.patch('/ca-policies/:id', requirePermission('settings.manage'), async (req, res) => {
+  return res.status(423).json({ error: 'P0_REMEDIATION_HELD', status: 'NOT_APPROVED' });
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
   const token = await requireDelegatedToken(req, res);
@@ -151,6 +152,7 @@ router.patch('/ca-policies/:id', requirePermission('settings.manage'), async (re
 
 // DELETE /api/identity/ca-policies/:id
 router.delete('/ca-policies/:id', requirePermission('settings.manage'), async (req, res) => {
+  return res.status(423).json({ error: 'P0_REMEDIATION_HELD', status: 'NOT_APPROVED' });
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
   const token = await requireDelegatedToken(req, res);
@@ -187,6 +189,7 @@ router.get('/named-locations', async (req, res) => {
 
 // POST /api/identity/block-ip
 router.post('/block-ip', requirePermission('settings.manage'), async (req, res) => {
+  return res.status(423).json({ error: 'P0_REMEDIATION_HELD', status: 'NOT_APPROVED' });
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
   const token = await requireDelegatedToken(req, res);
@@ -203,6 +206,7 @@ router.post('/block-ip', requirePermission('settings.manage'), async (req, res) 
 
 // DELETE /api/identity/block-ip
 router.delete('/block-ip', requirePermission('settings.manage'), async (req, res) => {
+  return res.status(423).json({ error: 'P0_REMEDIATION_HELD', status: 'NOT_APPROVED' });
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
   const token = await requireDelegatedToken(req, res);
@@ -223,6 +227,7 @@ router.delete('/block-ip', requirePermission('settings.manage'), async (req, res
 
 // POST /api/identity/require-mfa
 router.post('/require-mfa', requirePermission('settings.manage'), async (req, res) => {
+  return res.status(423).json({ error: 'P0_REMEDIATION_HELD', status: 'NOT_APPROVED' });
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
   const token = await requireDelegatedToken(req, res);
@@ -239,6 +244,7 @@ router.post('/require-mfa', requirePermission('settings.manage'), async (req, re
 
 // POST /api/identity/block-user
 router.post('/block-user', requirePermission('settings.manage'), async (req, res) => {
+  return res.status(423).json({ error: 'P0_REMEDIATION_HELD', status: 'NOT_APPROVED' });
   const tenantId = getTenantId(req);
   if (!tenantId) return res.status(401).json({ error: 'Not authenticated' });
   const token = await requireDelegatedToken(req, res);

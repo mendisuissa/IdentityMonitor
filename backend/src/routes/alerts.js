@@ -126,6 +126,7 @@ router.post('/:id/execute', requirePermission('alerts.respond'), (req, res) => {
   if (!alert) return res.status(404).json({ error: 'Alert not found' });
   const workflow = workflowStore.getAlertWorkflow(tenantId, alert.id);
   const action = req.body?.action || workflow.requestedAction || 'monitor';
+  if (action !== 'monitor') return res.status(423).json({ error: 'P0_REMEDIATION_HELD', status: 'NOT_APPROVED' });
   const check = policyEngine.getExecutionCheck(tenantId, alert, action, workflow);
   if (!check.canExecute) return res.status(409).json({ error: check.reason, state: check.state, decision: check.decision });
   alertsStore.addAction(alert.id, action);

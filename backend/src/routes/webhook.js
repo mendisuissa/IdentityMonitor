@@ -60,6 +60,7 @@ router.post('/notify', async (req, res) => {
 
 // ─── POST /api/webhook/telegram — Telegram bot callback + text messages ──
 router.post('/telegram', async (req, res) => {
+  if (!require('../services/remediationApproval').authenticateWebhook(req)) return res.status(401).json({ error: 'Unauthorized' });
   res.status(200).send('OK');
   const update = req.body || {};
 
