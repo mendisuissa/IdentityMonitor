@@ -141,7 +141,7 @@ export default function PricingPage() {
               color: 'var(--text-secondary)',
             }}
           >
-            Your current plan
+            Included with every account
           </div>
         </div>
 
@@ -172,7 +172,7 @@ export default function PricingPage() {
           <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Pro</h2>
 
           <div style={{ marginBottom: 28, display: 'flex', alignItems: 'baseline', gap: 4 }}>
-            <span style={{ fontSize: 42, fontWeight: 800, letterSpacing: -1, color: '#E8784A' }}>$29</span>
+            <span style={{ fontSize: 42, fontWeight: 800, letterSpacing: -1, color: '#E8784A' }}>$15</span>
             <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>/month per tenant</span>
           </div>
 

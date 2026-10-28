@@ -53,6 +53,20 @@ const PORT   = process.env.PORT || 3001;
 const MOCK   = process.env.MOCK_MODE === 'true';
 
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
+
+// ── Security headers ──────────────────────────────────────────────────────────
+// CSP is deliberately minimal (framing/base/object only) so it can't break the
+// SPA's inline styles or third-party checkout redirects.
+app.use((req, res, next) => {
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'none'; base-uri 'self'; object-src 'none'");
+  next();
+});
+
 app.use(express.json());
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
@@ -118,7 +132,11 @@ app.use(session({
     secure:   process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge:   SESSION_TTL_SEC * 1000,
-    sameSite: 'strict'
+    // Must be 'lax', not 'strict': the OAuth callback is a cross-site redirect
+    // from login.microsoftonline.com, and a strict cookie is dropped on it —
+    // the oauthNonce is lost and every sign-in fails with state_mismatch.
+    // Lax still withholds the cookie from cross-site POSTs (CSRF protection).
+    sameSite: 'lax'
   }
 }));
 

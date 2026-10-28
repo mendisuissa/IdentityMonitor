@@ -16,7 +16,7 @@ const WHAT_WE_READ = [
 
 const CONNECT_STEPS = [
   { icon: '🔐', label: 'Verifying your Microsoft identity',   desc: 'Signing in with Entra ID' },
-  { icon: '🛡️', label: 'Granting Defender & Graph access',    desc: 'Read-only — sign-in logs, roles, audit events' },
+  { icon: '🛡️', label: 'Granting Defender & Graph access',    desc: 'Sign-in logs, roles, audit events, Conditional Access' },
   { icon: '🔧', label: 'Connecting Intune remediation',       desc: 'Enables automated CVE patching via WinGet' },
   { icon: '✅', label: 'Finalising your workspace',           desc: 'Loading tenant data and registering webhooks' },
 ];
@@ -245,7 +245,7 @@ export default function LoginPage({ onLogin }: Props) {
           fontSize: 11,
           lineHeight: 1.8,
         }}>
-          <div>Your credentials are never stored · Read-only access to Entra ID</div>
+          <div>Your credentials are never stored · You approve every permission on the Microsoft consent screen</div>
           <div>Session stays active while the app is in use</div>
         </div>
       </div>
