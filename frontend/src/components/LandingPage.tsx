@@ -65,7 +65,7 @@ const STEPS = [
     n: '1',
     title: 'Connect in 2 minutes',
     desc: 'Sign in with your Microsoft 365 Global Admin account. Approve standard Microsoft OAuth scopes. No agents, no firewall rules, no IT ticket.',
-    detail: 'Read-only Graph API permissions',
+    detail: 'Read access for detection · write access for remediation',
   },
   {
     n: '2',
@@ -84,11 +84,11 @@ const STEPS = [
 const FAQ = [
   {
     q: 'What permissions does it need?',
-    a: 'Read-only Microsoft Graph API permissions: AuditLog.Read.All, User.Read.All, IdentityRiskEvent.Read.All, and Directory.Read.All. We never write to your tenant unless you explicitly trigger a remediation action.',
+    a: 'Detection uses read permissions: AuditLog.Read.All, Directory.Read.All, User.Read.All, RoleManagement.Read.Directory and Policy.Read.All. Two permissions allow changes: Policy.ReadWrite.ConditionalAccess for Conditional Access management, and Mail.Send for alert emails. CVE remediation through Intune uses a separate consent screen. Microsoft shows you the full list before you approve, and nothing in your tenant changes unless you trigger an action or turn on automation.',
   },
   {
     q: 'Can it actually break anything in my tenant?',
-    a: 'Monitoring is completely read-only. Manual remediation actions (session revoke, disable user) only execute when you tap a button in Telegram or the dashboard. Auto-remediation for CVEs (app updates via WinGet, Windows security patches) runs on a 60-minute schedule when enabled — every action is logged in the Audit Center. You can pause or disable auto-remediation at any time.',
+    a: 'Detection only reads data. Changes happen in two ways: manual actions (session revoke, disable user) run when you tap a button in Telegram or the dashboard, and automatic actions run only after you turn them on — auto session revoke, auto-disable on critical alerts, and CVE auto-remediation (WinGet app updates, Windows security patches) on a 60-minute schedule. Every action is logged in the Audit Center, and you can pause automation at any time.',
   },
   {
     q: 'Why not use Microsoft Sentinel or Defender for Identity?',
@@ -284,7 +284,7 @@ export default function LandingPage() {
           <span>✓ Free tier — forever</span>
           <span>✓ No credit card</span>
           <span>✓ 2-minute setup</span>
-          <span>✓ Read-only permissions</span>
+          <span>✓ You approve every permission</span>
         </div>
 
         {/* Mini product preview — scan ticker */}
@@ -453,7 +453,7 @@ export default function LandingPage() {
         }}>
           {[
             { value: '60s',    label: 'Scan cycle',          icon: '⚡' },
-            { value: '$29',    label: 'Per tenant/month',     icon: '💳' },
+            { value: '$15',    label: 'Per tenant/month',     icon: '💳' },
             { value: '1-tap',  label: 'Remediation',         icon: '👆' },
             { value: '100%',   label: 'Microsoft Graph API', icon: '🔗' },
             { value: '$0',     label: 'Free tier forever',   icon: '🎁' },
@@ -988,7 +988,7 @@ export default function LandingPage() {
           <Btn href="/pricing">See Pro features</Btn>
         </div>
         <div style={{ marginTop: 20, fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>
-          ✓ Read-only permissions &nbsp;·&nbsp; ✓ Setup in 2 minutes &nbsp;·&nbsp; ✓ Cancel any time
+          ✓ You approve every permission &nbsp;·&nbsp; ✓ Setup in 2 minutes &nbsp;·&nbsp; ✓ Cancel any time
         </div>
       </section>
 

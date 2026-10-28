@@ -1,8 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const emailService = require('../services/emailService');
+const { requirePermission } = require('../services/accessControl');
 
 const isMock = () => process.env.MOCK_MODE === 'true';
+
+// Every non-GET route here sends a real email / Telegram alert. They used to be
+// open to anonymous callers in production — signed-in tenant admins only now
+// (requirePermission still lets everything through when MOCK_MODE=true).
+const requireAdmin = requirePermission('settings.manage');
+router.use((req, res, next) => (req.method === 'GET' ? next() : requireAdmin(req, res, next)));
 
 // GET /api/mock/status
 router.get('/status', (req, res) => {
