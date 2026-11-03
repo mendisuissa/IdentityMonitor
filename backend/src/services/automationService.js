@@ -158,7 +158,9 @@ function evaluateTenant(tenantId) {
       });
     }
 
-    if (Object.keys(patch).length) {
+    // Only a sweep that changes the case is written and logged; re-applying the same patch to
+    // every open alert on every sweep is what filled the audit log.
+    if (workflowStore.changedFields(wf, patch).length) {
       wf = workflowStore.patchAlertWorkflow(tenantId, alert.id, patch, 'system');
       auditLog.log(tenantId, 'automation.sweep', { alertId: alert.id, severity: alert.severity, escalated: !!isBreached }, 'system');
     }

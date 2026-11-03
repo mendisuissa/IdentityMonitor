@@ -6,9 +6,9 @@
 const fs   = require('fs');
 const path = require('path');
 
-const AUDIT_DIR = process.env.NODE_ENV === 'production'
+const AUDIT_DIR = process.env.AUDIT_DIR || (process.env.NODE_ENV === 'production'
   ? '/home/audit'
-  : path.join(__dirname, '../../../audit');
+  : path.join(__dirname, '../../../audit'));
 
 if (!fs.existsSync(AUDIT_DIR)) fs.mkdirSync(AUDIT_DIR, { recursive: true });
 
@@ -41,15 +41,27 @@ function _ensureCache(tenantId) {
 }
 
 // warmCache — async (non-blocking) — call from startup for each known tenant.
-// Reads the JSONL file asynchronously so it never freezes the event loop.
+// Reads only the tail of the JSONL file: the cache holds at most CACHE_MAX entries, and reading a
+// multi-GB file whole fails (V8 string limit), which used to leave the audit view empty.
+const WARM_TAIL_BYTES = 4 * 1024 * 1024;
 async function warmCache(tenantId) {
   if (!tenantId) return;
   const safe = sanitizeTenantId(tenantId);
   if (!safe) return;
   const filePath = path.join(AUDIT_DIR, safe + '.jsonl');
   try {
-    await fs.promises.access(filePath);
-    const content = await fs.promises.readFile(filePath, 'utf8');
+    const fh = await fs.promises.open(filePath, 'r');
+    let content;
+    try {
+      const { size } = await fh.stat();
+      const start = Math.max(0, size - WARM_TAIL_BYTES);
+      const buf = Buffer.alloc(size - start);
+      await fh.read(buf, 0, buf.length, start);
+      content = buf.toString('utf8');
+      if (start > 0) content = content.slice(content.indexOf('\n') + 1); // drop the partial first line
+    } finally {
+      await fh.close();
+    }
     const lines = content.split('\n').filter(Boolean)
       .map(l => { try { return JSON.parse(l); } catch { return null; } })
       .filter(Boolean);
@@ -110,6 +122,32 @@ function log(tenantId, action, details = {}, actor = 'system') {
   const filePath = path.join(AUDIT_DIR, safe + '.jsonl');
   fs.appendFile(filePath, JSON.stringify(entry) + '\n', err => {
     if (err) console.error('[AuditLog] Write error:', err.message);
+    else _maybeRotate(safe, filePath);
+  });
+}
+
+// ── Rotation ──────────────────────────────────────────────────────────────────
+// The live file is rotated into AUDIT_DIR/archive/ once it passes ROTATE_BYTES. Archived files
+// are kept; nothing is deleted. archive/ is a directory, so tenantRegistry never reads it as a
+// tenant file.
+const ROTATE_BYTES       = Number(process.env.AUDIT_ROTATE_BYTES) || 50 * 1024 * 1024;
+const ROTATE_CHECK_EVERY = 500;       // stat the file on the first write and every 500th after
+const _writeCount = new Map();      // tenantId → writes since start
+
+function _maybeRotate(safe, filePath) {
+  const n = (_writeCount.get(safe) || 0) + 1;
+  _writeCount.set(safe, n);
+  if (n % ROTATE_CHECK_EVERY !== 1) return;
+  fs.stat(filePath, (err, st) => {
+    if (err || st.size < ROTATE_BYTES) return;
+    const archiveDir = path.join(AUDIT_DIR, 'archive');
+    fs.mkdir(archiveDir, { recursive: true }, mkErr => {
+      if (mkErr) return console.error('[AuditLog] Rotate error:', mkErr.message);
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      fs.rename(filePath, path.join(archiveDir, `${safe}.${stamp}.jsonl`), e => {
+        if (e) console.error('[AuditLog] Rotate error:', e.message);
+      });
+    });
   });
 }
 

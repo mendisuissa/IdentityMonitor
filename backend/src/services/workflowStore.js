@@ -125,31 +125,61 @@ function getAlertWorkflow(tenantId, alertId) {
   return normalizeWorkflow({ ...defaultWorkflow() });
 }
 
-async function patchAlertWorkflowAsync(tenantId, alertId, patch, actor = 'system') {
-  const existing = await getAlertWorkflowAsync(tenantId, alertId);
+// Fields of `patch` whose value differs from `existing`. updatedAt is ignored.
+function changedFields(existing, patch) {
+  return Object.keys(patch || {}).filter(key =>
+    key !== 'updatedAt' && JSON.stringify(patch[key]) !== JSON.stringify(existing[key]));
+}
+
+// One audit entry per real change. Automated (system) patches record only the changed field
+// names: the automation sweep re-patches every open alert, and logging the full patch (with its
+// growing automationActions list) filled /home/audit with multiple GB.
+function logUpdate(tenantId, alertId, patch, fields, actor) {
+  const details = actor === 'system' ? { alertId, fields } : { alertId, patch };
+  auditLog.log(tenantId, 'workflow.updated', details, actor);
+}
+
+// Applies a patch to a known base workflow. A patch that changes nothing is not written or logged.
+async function applyPatch(tenantId, alertId, existing, patch, actor) {
+  const fields = changedFields(existing, patch);
+  if (!fields.length) return existing;
   const next = normalizeWorkflow({ ...existing, ...patch, updatedAt: new Date().toISOString() });
-  const k = _key(tenantId, alertId);
-  _cache.set(k, next);
+  _cache.set(_key(tenantId, alertId), next);
   try {
     await getClient().upsertEntity(toEntity(tenantId, alertId, next), 'Replace');
   } catch (err) {
     console.error('[WorkflowStore] patch error:', err.message);
   }
-  auditLog.log(tenantId, 'workflow.updated', { alertId, patch }, actor);
+  logUpdate(tenantId, alertId, patch, fields, actor);
   return next;
 }
 
+async function patchAlertWorkflowAsync(tenantId, alertId, patch, actor = 'system') {
+  const existing = await getAlertWorkflowAsync(tenantId, alertId);
+  return applyPatch(tenantId, alertId, existing, patch, actor);
+}
+
 function patchAlertWorkflow(tenantId, alertId, patch, actor = 'system') {
-  // Optimistic cache update, async persist
   const k = _key(tenantId, alertId);
-  const existing = _cache.get(k) || defaultWorkflow();
-  const next = normalizeWorkflow({ ...existing, ...patch, updatedAt: new Date().toISOString() });
-  _cache.set(k, next);
+  if (_cache.has(k)) {
+    // Optimistic cache update, async persist
+    const existing = normalizeWorkflow({ ..._cache.get(k) });
+    const fields = changedFields(existing, patch);
+    if (!fields.length) return existing;
+    const next = normalizeWorkflow({ ...existing, ...patch, updatedAt: new Date().toISOString() });
+    _cache.set(k, next);
+    getClient().upsertEntity(toEntity(tenantId, alertId, next), 'Replace').catch(err =>
+      console.error('[WorkflowStore] patch error:', err.message)
+    );
+    logUpdate(tenantId, alertId, patch, fields, actor);
+    return next;
+  }
+  // Cache miss: load the stored workflow first, so the merge (and the no-op check) uses real data
+  // and stored fields are never replaced by defaults. The caller gets an optimistic view now.
   patchAlertWorkflowAsync(tenantId, alertId, patch, actor).catch(err =>
     console.error('[WorkflowStore] async patch error:', err.message)
   );
-  auditLog.log(tenantId, 'workflow.updated', { alertId, patch }, actor);
-  return next;
+  return normalizeWorkflow({ ...defaultWorkflow(), ...patch, updatedAt: new Date().toISOString() });
 }
 
 function parseMentions(message = '') {
@@ -239,4 +269,4 @@ async function warmCache(tenantId) {
   }
 }
 
-module.exports = { getAlertWorkflow, getAlertWorkflowAsync, patchAlertWorkflow, patchAlertWorkflowAsync, addComment, progressApproval, getCases, getWorkflowStats, parseMentions, warmCache };
+module.exports = { getAlertWorkflow, getAlertWorkflowAsync, patchAlertWorkflow, patchAlertWorkflowAsync, changedFields, addComment, progressApproval, getCases, getWorkflowStats, parseMentions, warmCache };
