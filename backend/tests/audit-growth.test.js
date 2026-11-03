@@ -14,6 +14,8 @@ const services = path.join(__dirname, '../src/services');
 function loadWorkflowStore(stored = {}, opts = {}) {
   const upserts = [];
   let failsLeft = opts.failUpserts || 0;
+  let readFailsLeft = opts.failReads || 0;
+  let reads = 0;
   const audits = [];
   const fakes = {
     '@azure/data-tables': {
@@ -21,7 +23,9 @@ function loadWorkflowStore(stored = {}, opts = {}) {
         fromConnectionString: () => ({
           createTable: async () => {},
           getEntity: async (pk, rk) => {
+            reads++;
             if (opts.gate) await opts.gate;
+            if (readFailsLeft > 0) { readFailsLeft--; const e = new Error('server busy'); e.statusCode = 503; throw e; }
             if (!stored[rk]) { const e = new Error('nf'); e.statusCode = 404; throw e; }
             return stored[rk];
           },
@@ -47,7 +51,7 @@ function loadWorkflowStore(stored = {}, opts = {}) {
   const file = path.join(services, 'workflowStore.js');
   delete require.cache[require.resolve(file)];
   try {
-    return { store: require(file), upserts, audits };
+    return { store: require(file), upserts, audits, reads: () => reads };
   } finally {
     Module._load = origLoad;
   }
@@ -168,6 +172,57 @@ test('warmCache does not replace an unpersisted workflow with the stored row', a
   await store.patchAlertWorkflowAsync('t1', 'a1', { owner: 'new@contoso.com' }, 'system');
   await store.warmCache('t1'); // fake listEntities yields nothing; must not clobber either way
   assert.strictEqual(store.getAlertWorkflow('t1', 'a1').owner, 'new@contoso.com');
+});
+
+const waitFor = async (cond) => { for (let i = 0; i < 100 && !cond(); i++) await new Promise((r) => setTimeout(r, 10)); };
+
+test('a failed initial read keeps queued patches in order and retries the read', async () => {
+  const stored = { a1: { owner: 'old@contoso.com', caseStatus: 'triage' } };
+  const { store, upserts, audits, reads } = loadWorkflowStore(stored, { failReads: 2 });
+  const view = await store.patchAlertWorkflowAsync('t1', 'a1', { owner: 'new@contoso.com' }, 'analyst@contoso.com');
+  assert.strictEqual(view.owner, 'new@contoso.com', 'awaiting caller gets the optimistic result, not a hang');
+  assert.strictEqual(store.unpersistedCount(), 1, 'the queued patch is counted as unpersisted');
+  store.patchAlertWorkflow('t1', 'a1', { note: 'second' }, 'analyst@contoso.com');
+  store.patchAlertWorkflow('t1', 'a1', { owner: 'newest@contoso.com' }, 'analyst@contoso.com');
+  assert.strictEqual(store.getAlertWorkflow('t1', 'a1').owner, 'newest@contoso.com', 'sync read shows the optimistic view');
+  assert.strictEqual(upserts.length, 0, 'nothing is written over the stored row before it is read');
+  await waitFor(() => store.unpersistedCount() === 0);
+  assert.strictEqual(reads(), 3, 'read retried with backoff, not once per patch');
+  const last = upserts[upserts.length - 1];
+  assert.deepStrictEqual([last.owner, last.note, last.caseStatus], ['newest@contoso.com', 'second', 'triage']);
+  assert.deepStrictEqual(audits.map((a) => a.details.patch), [{ owner: 'new@contoso.com' }, { note: 'second' }, { owner: 'newest@contoso.com' }], 'applied in order');
+});
+
+test('cold cache: two comments both survive, along with the stored ones', async () => {
+  const stored = { a1: { comments: JSON.stringify([{ id: 'c0', message: 'stored' }]) } };
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { store, upserts } = loadWorkflowStore(stored, { gate });
+  store.addComment('t1', 'a1', 'one', 'a@contoso.com');
+  const optimistic = store.addComment('t1', 'a1', 'two @b@contoso.com', 'a@contoso.com');
+  assert.deepStrictEqual(optimistic.comments.map((c) => c.message), ['one', 'two @b@contoso.com'], 'optimistic view chains queued updates');
+  release();
+  await waitFor(() => store.unpersistedCount() === 0);
+  const comments = JSON.parse(upserts[upserts.length - 1].comments).map((c) => c.message);
+  assert.deepStrictEqual(comments, ['stored', 'one', 'two @b@contoso.com']);
+  assert.deepStrictEqual(JSON.parse(upserts[upserts.length - 1].mentions), ['b@contoso.com']);
+});
+
+test('cold cache: progressApproval right after a queued approval plan decides the step', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { store, upserts } = loadWorkflowStore({ a1: { owner: 'o@contoso.com' } }, { gate });
+  store.patchAlertWorkflow('t1', 'a1', { approvalSteps: [{ step: 1, role: 'lead', status: 'pending' }] }, 'system');
+  const optimistic = store.progressApproval('t1', 'a1', 'approved', 'lead@contoso.com', 'ok');
+  assert.strictEqual(optimistic.approvalStatus, 'approved', 'sync result is the optimistic decision');
+  release();
+  await waitFor(() => store.unpersistedCount() === 0);
+  const last = upserts[upserts.length - 1];
+  assert.strictEqual(JSON.parse(last.approvalSteps)[0].status, 'approved');
+  assert.strictEqual(last.approvalStatus, 'approved');
+  assert.strictEqual(last.caseStatus, 'ready_to_execute');
+  assert.strictEqual(last.owner, 'o@contoso.com');
+  assert.strictEqual(JSON.parse(last.approvalHistory).length, 1);
 });
 
 // ── auditLog: tail-only warm-up and rotation ──
