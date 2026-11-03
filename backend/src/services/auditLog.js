@@ -41,20 +41,21 @@ function _ensureCache(tenantId) {
 }
 
 // warmCache — async (non-blocking) — call from startup for each known tenant.
-// Reads only the tail of the JSONL file: the cache holds at most CACHE_MAX entries, and reading a
-// multi-GB file whole fails (V8 string limit), which used to leave the audit view empty.
-const WARM_TAIL_BYTES = 4 * 1024 * 1024;
-async function warmCache(tenantId) {
-  if (!tenantId) return;
-  const safe = sanitizeTenantId(tenantId);
-  if (!safe) return;
-  const filePath = path.join(AUDIT_DIR, safe + '.jsonl');
+// Reads only file tails: the cache holds at most CACHE_MAX entries, and reading a multi-GB file
+// whole fails (V8 string limit), which used to leave the audit view empty. When the live file
+// holds fewer than CACHE_MAX entries (it was rotated recently), the rest of the window is filled
+// from the tails of the newest archives, so recent history survives rotation plus a restart.
+const WARM_TAIL_BYTES     = 4 * 1024 * 1024; // per file
+const WARM_MAX_ARCHIVES   = 3;               // newest archives consulted at most
+
+// Parsed entries from the last maxBytes of a JSONL file ([] if it cannot be read).
+async function readTailEntries(filePath, maxBytes) {
+  let content;
   try {
     const fh = await fs.promises.open(filePath, 'r');
-    let content;
     try {
       const { size } = await fh.stat();
-      const start = Math.max(0, size - WARM_TAIL_BYTES);
+      const start = Math.max(0, size - maxBytes);
       const buf = Buffer.alloc(size - start);
       await fh.read(buf, 0, buf.length, start);
       content = buf.toString('utf8');
@@ -62,13 +63,47 @@ async function warmCache(tenantId) {
     } finally {
       await fh.close();
     }
-    const lines = content.split('\n').filter(Boolean)
-      .map(l => { try { return JSON.parse(l); } catch { return null; } })
-      .filter(Boolean);
-    _memCache.set(tenantId, lines.slice(-CACHE_MAX));
+  } catch {
+    return [];
+  }
+  return content.split('\n').filter(Boolean)
+    .map(l => { try { return JSON.parse(l); } catch { return null; } })
+    .filter(Boolean);
+}
+
+// This tenant's archive files, newest first. Names are `<safe>.<ISO stamp>.jsonl`; the stamp has
+// a fixed shape, so another tenant whose id starts with `<safe>.` never matches, and the stamp
+// sorts chronologically as text.
+async function listArchives(safe) {
+  const archiveDir = path.join(AUDIT_DIR, 'archive');
+  const escaped = safe.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`^${escaped}\\.(\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}-\\d{3}Z)\\.jsonl$`);
+  let names;
+  try { names = await fs.promises.readdir(archiveDir); } catch { return []; }
+  return names
+    .map(n => { const m = re.exec(n); return m ? { name: n, stamp: m[1] } : null; })
+    .filter(Boolean)
+    .sort((a, b) => (a.stamp < b.stamp ? 1 : a.stamp > b.stamp ? -1 : 0))
+    .map(a => path.join(archiveDir, a.name));
+}
+
+async function warmCache(tenantId) {
+  if (!tenantId) return;
+  const safe = sanitizeTenantId(tenantId);
+  if (!safe) return;
+  try {
+    let entries = await readTailEntries(path.join(AUDIT_DIR, safe + '.jsonl'), WARM_TAIL_BYTES);
+    if (entries.length < CACHE_MAX) {
+      const archives = (await listArchives(safe)).slice(0, WARM_MAX_ARCHIVES);
+      for (const file of archives) {
+        const older = await readTailEntries(file, WARM_TAIL_BYTES);
+        entries = older.concat(entries);
+        if (entries.length >= CACHE_MAX) break;
+      }
+    }
+    _memCache.set(tenantId, entries.slice(-CACHE_MAX));
     _cacheTime.set(tenantId, Date.now());
   } catch {
-    // File doesn't exist or can't be read — start with empty cache
     _memCache.set(tenantId, []);
     _cacheTime.set(tenantId, Date.now());
   }

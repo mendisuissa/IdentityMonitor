@@ -92,25 +92,52 @@ function normalizeWorkflow(wf) {
 }
 
 // ─── In-memory write-through cache ───────────────────────────────────────
-const _cache = new Map(); // `${tenantId}:${alertId}` → wf
+// _cache holds the newest known state of each workflow, which may be ahead of Table Storage.
+// Writes go through a per-workflow persist loop that always writes the newest cached state, one
+// upsert at a time, so a slow earlier Replace can never land after (and erase) a later one.
+// A workflow whose newest state has not been written yet is in _dirty; a failed upsert is
+// retried with backoff, and any later patch (even one that changes nothing) retries it at once.
+const _cache = new Map();   // `${tenantId}:${alertId}` → wf
+const _dirty = new Set();   // keys whose cached state is not yet persisted
+const _persist = new Map(); // key → { running, promise, attempt, timer }
+const _loads = new Map();   // key → in-flight Table read (shared by concurrent callers)
+const _chains = new Map();  // key → tail of the queue of patches waiting for the first read
+
+const RETRY_BASE_MS = Number(process.env.WORKFLOW_PERSIST_RETRY_MS) || 2000;
+const RETRY_MAX_MS  = 5 * 60 * 1000;
 
 function _key(tenantId, alertId) { return `${tenantId}:${alertId}`; }
+
+// Reads the stored workflow once per key at a time. Resolves null when the row does not exist;
+// rejects on any other read error.
+function loadStored(tenantId, alertId) {
+  const k = _key(tenantId, alertId);
+  if (_loads.has(k)) return _loads.get(k);
+  const p = (async () => {
+    try {
+      const rowKey = alertId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const entity = await getClient().getEntity(tenantId, rowKey);
+      return normalizeWorkflow({ ...defaultWorkflow(), ...fromEntity(entity) });
+    } catch (err) {
+      if (err.statusCode === 404) return null;
+      throw err;
+    }
+  })();
+  _loads.set(k, p);
+  p.then(() => _loads.delete(k), () => _loads.delete(k));
+  return p;
+}
 
 // ─── Core CRUD ────────────────────────────────────────────────────────────
 async function getAlertWorkflowAsync(tenantId, alertId) {
   const k = _key(tenantId, alertId);
   if (_cache.has(k)) return normalizeWorkflow({ ..._cache.get(k) });
   try {
-    const rowKey = alertId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const entity = await getClient().getEntity(tenantId, rowKey);
-    const wf = normalizeWorkflow({ ...defaultWorkflow(), ...fromEntity(entity) });
-    _cache.set(k, wf);
-    return wf;
+    const wf = await loadStored(tenantId, alertId);
+    if (!wf) return normalizeWorkflow({ ...defaultWorkflow() });
+    if (!_cache.has(k)) _cache.set(k, wf); // a patch queued behind this read may already have set it
+    return normalizeWorkflow({ ..._cache.get(k) });
   } catch (err) {
-    if (err.statusCode === 404) {
-      const wf = normalizeWorkflow({ ...defaultWorkflow() });
-      return wf;
-    }
     console.warn('[WorkflowStore] getAlertWorkflow error:', err.message);
     return normalizeWorkflow({ ...defaultWorkflow() });
   }
@@ -139,48 +166,105 @@ function logUpdate(tenantId, alertId, patch, fields, actor) {
   auditLog.log(tenantId, 'workflow.updated', details, actor);
 }
 
-// Applies a patch to a known base workflow. A patch that changes nothing is not written or logged.
-async function applyPatch(tenantId, alertId, existing, patch, actor) {
+// Writes the newest cached state of a workflow. Only one upsert per workflow runs at a time; a
+// change made while one is in flight is written right after it. Resolves when the workflow is
+// clean or the current attempt failed (a retry is then scheduled). Never rejects.
+function schedulePersist(tenantId, alertId) {
+  const k = _key(tenantId, alertId);
+  _dirty.add(k);
+  let st = _persist.get(k);
+  if (!st) { st = { running: false, promise: null, attempt: 0, timer: null }; _persist.set(k, st); }
+  if (st.running) return st.promise; // the running loop re-checks the cache after its upsert
+  if (st.timer) { clearTimeout(st.timer); st.timer = null; }
+  st.running = true;
+  st.promise = (async () => {
+    try {
+      while (_dirty.has(k)) {
+        const snapshot = _cache.get(k);
+        if (!snapshot) { _dirty.delete(k); break; }
+        try {
+          await getClient().upsertEntity(toEntity(tenantId, alertId, snapshot), 'Replace');
+        } catch (err) {
+          st.attempt += 1;
+          const delay = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (st.attempt - 1));
+          console.error(`[WorkflowStore] patch error (attempt ${st.attempt}, retry in ${delay} ms):`, err.message);
+          st.timer = setTimeout(() => { st.timer = null; schedulePersist(tenantId, alertId); }, delay);
+          if (st.timer.unref) st.timer.unref();
+          return;
+        }
+        st.attempt = 0;
+        if (_cache.get(k) === snapshot) _dirty.delete(k); // otherwise a newer change arrived: loop
+      }
+    } finally {
+      st.running = false;
+    }
+  })();
+  return st.promise;
+}
+
+// Merges a patch into `base` (the latest known state). A patch that changes nothing is not
+// written or logged, but it does retry a workflow whose last write failed.
+function applyLocal(tenantId, alertId, base, patch, actor) {
+  const k = _key(tenantId, alertId);
+  const existing = normalizeWorkflow({ ...base });
   const fields = changedFields(existing, patch);
-  if (!fields.length) return existing;
-  const next = normalizeWorkflow({ ...existing, ...patch, updatedAt: new Date().toISOString() });
-  _cache.set(_key(tenantId, alertId), next);
-  try {
-    await getClient().upsertEntity(toEntity(tenantId, alertId, next), 'Replace');
-  } catch (err) {
-    console.error('[WorkflowStore] patch error:', err.message);
+  if (!fields.length) {
+    if (_dirty.has(k)) schedulePersist(tenantId, alertId);
+    return existing;
   }
+  const next = normalizeWorkflow({ ...existing, ...patch, updatedAt: new Date().toISOString() });
+  _cache.set(k, next);
   logUpdate(tenantId, alertId, patch, fields, actor);
+  schedulePersist(tenantId, alertId);
   return next;
 }
 
+// Runs fn after every patch already queued for this workflow.
+function enqueue(k, fn) {
+  const prev = _chains.get(k) || Promise.resolve();
+  const run = prev.then(fn);
+  const tail = run.catch(() => {});
+  _chains.set(k, tail);
+  tail.then(() => { if (_chains.get(k) === tail) _chains.delete(k); });
+  return run;
+}
+
+// Queued patch step: merge against the cache if it is warm, else against the stored row (read
+// once and cached). A read error other than 404 rejects instead of merging into defaults, which
+// would overwrite the stored workflow with a Replace.
+async function queuedApply(tenantId, alertId, patch, actor) {
+  const k = _key(tenantId, alertId);
+  if (!_cache.has(k)) {
+    const stored = await loadStored(tenantId, alertId);
+    if (stored && !_cache.has(k)) _cache.set(k, stored);
+  }
+  return applyLocal(tenantId, alertId, _cache.get(k) || defaultWorkflow(), patch, actor);
+}
+
 async function patchAlertWorkflowAsync(tenantId, alertId, patch, actor = 'system') {
-  const existing = await getAlertWorkflowAsync(tenantId, alertId);
-  return applyPatch(tenantId, alertId, existing, patch, actor);
+  const k = _key(tenantId, alertId);
+  const next = await enqueue(k, () => queuedApply(tenantId, alertId, patch, actor));
+  const st = _persist.get(k);
+  if (st && st.running) await st.promise;
+  return next;
 }
 
 function patchAlertWorkflow(tenantId, alertId, patch, actor = 'system') {
   const k = _key(tenantId, alertId);
-  if (_cache.has(k)) {
-    // Optimistic cache update, async persist
-    const existing = normalizeWorkflow({ ..._cache.get(k) });
-    const fields = changedFields(existing, patch);
-    if (!fields.length) return existing;
-    const next = normalizeWorkflow({ ...existing, ...patch, updatedAt: new Date().toISOString() });
-    _cache.set(k, next);
-    getClient().upsertEntity(toEntity(tenantId, alertId, next), 'Replace').catch(err =>
-      console.error('[WorkflowStore] patch error:', err.message)
-    );
-    logUpdate(tenantId, alertId, patch, fields, actor);
-    return next;
+  if (_cache.has(k) && !_chains.has(k)) {
+    // Warm cache and nothing queued: merge now, persist in the background.
+    return applyLocal(tenantId, alertId, _cache.get(k), patch, actor);
   }
-  // Cache miss: load the stored workflow first, so the merge (and the no-op check) uses real data
-  // and stored fields are never replaced by defaults. The caller gets an optimistic view now.
-  patchAlertWorkflowAsync(tenantId, alertId, patch, actor).catch(err =>
+  // Cache miss, or earlier patches still wait for the first read: queue behind them, so each
+  // patch merges against the state left by the one before it (never an independent snapshot).
+  enqueue(k, () => queuedApply(tenantId, alertId, patch, actor)).catch(err =>
     console.error('[WorkflowStore] async patch error:', err.message)
   );
-  return normalizeWorkflow({ ...defaultWorkflow(), ...patch, updatedAt: new Date().toISOString() });
+  return normalizeWorkflow({ ...(_cache.get(k) || defaultWorkflow()), ...patch, updatedAt: new Date().toISOString() });
 }
+
+// Number of workflows whose newest state is not yet in Table Storage (for health checks/tests).
+function unpersistedCount() { return _dirty.size; }
 
 function parseMentions(message = '') {
   return Array.from(new Set((String(message).match(/@[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+/g) || []).map(m => m.slice(1).toLowerCase())));
@@ -260,8 +344,11 @@ async function warmCache(tenantId) {
     const iter = getClient().listEntities({ queryOptions: { filter: `PartitionKey eq '${tenantId}'` } });
     for await (const entity of iter) {
       const alertId = entity.rowKey;
+      const k = _key(tenantId, alertId);
+      // Never replace a newer, not-yet-persisted or queued state with the stored row.
+      if (_dirty.has(k) || _chains.has(k)) continue;
       const wf = normalizeWorkflow({ ...defaultWorkflow(), ...fromEntity(entity) });
-      _cache.set(_key(tenantId, alertId), wf);
+      _cache.set(k, wf);
     }
     console.log('[WorkflowStore] Cache warmed for tenant:', tenantId);
   } catch (err) {
@@ -269,4 +356,4 @@ async function warmCache(tenantId) {
   }
 }
 
-module.exports = { getAlertWorkflow, getAlertWorkflowAsync, patchAlertWorkflow, patchAlertWorkflowAsync, changedFields, addComment, progressApproval, getCases, getWorkflowStats, parseMentions, warmCache };
+module.exports = { getAlertWorkflow, getAlertWorkflowAsync, patchAlertWorkflow, patchAlertWorkflowAsync, changedFields, addComment, progressApproval, getCases, getWorkflowStats, parseMentions, warmCache, unpersistedCount };

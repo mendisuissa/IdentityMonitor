@@ -10,8 +10,10 @@ const Module = require('module');
 const services = path.join(__dirname, '../src/services');
 
 // ── workflowStore with fake Azure Table, alerts store, notifications and audit log ──
-function loadWorkflowStore(stored = {}) {
+// opts.gate: a promise every getEntity waits for; opts.failUpserts: number of upserts that fail first.
+function loadWorkflowStore(stored = {}, opts = {}) {
   const upserts = [];
+  let failsLeft = opts.failUpserts || 0;
   const audits = [];
   const fakes = {
     '@azure/data-tables': {
@@ -19,10 +21,14 @@ function loadWorkflowStore(stored = {}) {
         fromConnectionString: () => ({
           createTable: async () => {},
           getEntity: async (pk, rk) => {
+            if (opts.gate) await opts.gate;
             if (!stored[rk]) { const e = new Error('nf'); e.statusCode = 404; throw e; }
             return stored[rk];
           },
-          upsertEntity: async (entity) => { upserts.push(entity); },
+          upsertEntity: async (entity) => {
+            if (failsLeft > 0) { failsLeft--; throw new Error('table unavailable'); }
+            upserts.push(entity);
+          },
           listEntities: async function* () {}
         })
       }
@@ -37,6 +43,7 @@ function loadWorkflowStore(stored = {}) {
     return origLoad.call(this, request, parent, isMain);
   };
   process.env.AZURE_STORAGE_CONNECTION_STRING = 'UseDevelopmentStorage=true';
+  process.env.WORKFLOW_PERSIST_RETRY_MS = '10';
   const file = path.join(services, 'workflowStore.js');
   delete require.cache[require.resolve(file)];
   try {
@@ -98,6 +105,71 @@ test('cache miss: merges into the stored workflow, never into defaults, and skip
   assert.strictEqual(u2[0].notifications, '[{"key":"n1"}]');
 });
 
+test('cache miss: two sync patches before the first read completes both survive', async () => {
+  const stored = { a1: { owner: 'kept@contoso.com', caseStatus: 'triage', escalationLevel: 2 } };
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { store, upserts, audits } = loadWorkflowStore(stored, { gate });
+  store.patchAlertWorkflow('t1', 'a1', { note: 'first' }, 'system');
+  store.patchAlertWorkflow('t1', 'a1', { escalationLevel: 3 }, 'system');
+  store.patchAlertWorkflowAsync('t1', 'a1', { owner: 'new@contoso.com' }, 'analyst@contoso.com');
+  assert.strictEqual(upserts.length, 0, 'nothing written before the stored row is read');
+  release();
+  for (let i = 0; i < 10; i++) await settle();
+  const last = upserts[upserts.length - 1];
+  assert.strictEqual(last.note, 'first', 'first patch is not erased by the second');
+  assert.strictEqual(last.escalationLevel, 3);
+  assert.strictEqual(last.owner, 'new@contoso.com');
+  assert.strictEqual(last.caseStatus, 'triage', 'stored field survives');
+  assert.strictEqual(audits.length, 3);
+  const wf = store.getAlertWorkflow('t1', 'a1');
+  assert.deepStrictEqual([wf.note, wf.escalationLevel, wf.owner, wf.caseStatus], ['first', 3, 'new@contoso.com', 'triage']);
+  assert.strictEqual(store.unpersistedCount(), 0);
+});
+
+test('cache miss: a queued patch that repeats an earlier queued value is a no-op', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { store, upserts, audits } = loadWorkflowStore({ a1: { owner: 'o' } }, { gate });
+  store.patchAlertWorkflow('t1', 'a1', { escalationLevel: 1 }, 'system');
+  store.patchAlertWorkflow('t1', 'a1', { escalationLevel: 1 }, 'system');
+  release();
+  for (let i = 0; i < 10; i++) await settle();
+  assert.strictEqual(audits.length, 1, 'second patch merged against the first, so nothing changed');
+  assert.strictEqual(upserts[upserts.length - 1].escalationLevel, 1);
+});
+
+test('a failed upsert is retried even when the same patch is re-sent', async () => {
+  const { store, upserts, audits } = loadWorkflowStore({}, { failUpserts: 1 });
+  await store.patchAlertWorkflowAsync('t1', 'a1', { owner: 'x@y.z' }, 'x@y.z');
+  assert.strictEqual(upserts.length, 0, 'first write failed');
+  assert.strictEqual(store.unpersistedCount(), 1, 'workflow is tracked as unpersisted');
+  const again = store.patchAlertWorkflow('t1', 'a1', { owner: 'x@y.z' }, 'x@y.z');
+  assert.strictEqual(again.owner, 'x@y.z');
+  for (let i = 0; i < 5; i++) await settle();
+  assert.strictEqual(upserts.length, 1, 'the no-op patch triggered the retry');
+  assert.strictEqual(upserts[0].owner, 'x@y.z');
+  assert.strictEqual(audits.length, 1, 'the retry is not logged again');
+  assert.strictEqual(store.unpersistedCount(), 0);
+});
+
+test('a failed upsert is retried on its own with backoff', async () => {
+  const { store, upserts } = loadWorkflowStore({}, { failUpserts: 2 });
+  await store.patchAlertWorkflowAsync('t1', 'a1', { caseStatus: 'closed' }, 'system');
+  assert.strictEqual(upserts.length, 0);
+  for (let i = 0; i < 50 && upserts.length === 0; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.strictEqual(upserts.length, 1);
+  assert.strictEqual(upserts[0].caseStatus, 'closed');
+  assert.strictEqual(store.unpersistedCount(), 0);
+});
+
+test('warmCache does not replace an unpersisted workflow with the stored row', async () => {
+  const { store } = loadWorkflowStore({}, { failUpserts: 100 });
+  await store.patchAlertWorkflowAsync('t1', 'a1', { owner: 'new@contoso.com' }, 'system');
+  await store.warmCache('t1'); // fake listEntities yields nothing; must not clobber either way
+  assert.strictEqual(store.getAlertWorkflow('t1', 'a1').owner, 'new@contoso.com');
+});
+
 // ── auditLog: tail-only warm-up and rotation ──
 function loadAuditLog(dir, rotateBytes) {
   process.env.AUDIT_DIR = dir;
@@ -132,4 +204,42 @@ test('the live file rotates into archive/ past the size limit, and nothing is de
   assert.match(archived[0], /^t1\..+\.jsonl$/);
   assert.ok(fs.readFileSync(path.join(dir, 'archive', archived[0]), 'utf8').includes('admin.login'));
   assert.ok(!fs.readdirSync(dir).some((n) => n.endsWith('.jsonl')), 'no tenant-looking file left behind by rotation');
+});
+
+function stampAt(ms) { return new Date(ms).toISOString().replace(/[:.]/g, '-'); }
+function auditLines(from, to, pad = 0) {
+  const out = [];
+  for (let i = from; i < to; i++) out.push(JSON.stringify({ timestamp: new Date(1e12 + i).toISOString(), tenantId: 't1', action: 'x', i, pad: 'p'.repeat(pad) }));
+  return out.join('\n') + '\n';
+}
+
+test('warmCache fills the recent window from the newest archives after rotation', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-'));
+  fs.mkdirSync(path.join(dir, 'archive'));
+  // oldest archive: must not be needed; newer archive is ~7 MB (bigger than the tail window)
+  fs.writeFileSync(path.join(dir, 'archive', `t1.${stampAt(1e12)}.jsonl`), auditLines(0, 100));
+  fs.writeFileSync(path.join(dir, 'archive', `t1.${stampAt(2e12)}.jsonl`), auditLines(100, 30100, 200));
+  // another tenant whose id starts with "t1." must not be mixed in
+  fs.writeFileSync(path.join(dir, 'archive', `t1.other.${stampAt(3e12)}.jsonl`), JSON.stringify({ timestamp: 'z', action: 'foreign', i: -1 }) + '\n');
+  fs.writeFileSync(path.join(dir, 't1.jsonl'), auditLines(30100, 30110));
+  const audit = loadAuditLog(dir);
+  await audit.warmCache('t1');
+  const got = audit.getLog('t1');
+  assert.strictEqual(got.length, 2000);
+  assert.strictEqual(got[0].i, 30109, 'newest live entry first');
+  assert.strictEqual(got[9].i, 30100);
+  assert.strictEqual(got[10].i, 30099, 'then the newest archived entries');
+  assert.strictEqual(got[1999].i, 30109 - 1999);
+  assert.ok(!got.some((e) => e.action === 'foreign'));
+});
+
+test('warmCache reads archives when the live file does not exist yet', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-'));
+  fs.mkdirSync(path.join(dir, 'archive'));
+  fs.writeFileSync(path.join(dir, 'archive', `t1.${stampAt(1e12)}.jsonl`), auditLines(0, 5));
+  fs.writeFileSync(path.join(dir, 'archive', `t1.${stampAt(2e12)}.jsonl`), auditLines(5, 8));
+  const audit = loadAuditLog(dir);
+  await audit.warmCache('t1');
+  assert.deepStrictEqual(audit.getLog('t1').map((e) => e.i), [7, 6, 5, 4, 3, 2, 1, 0]);
+  assert.strictEqual(fs.readdirSync(path.join(dir, 'archive')).length, 2, 'archives are only read');
 });
