@@ -140,8 +140,8 @@ async function getAlertWorkflowAsync(tenantId, alertId) {
   if (_cache.has(k)) return normalizeWorkflow({ ..._cache.get(k) });
   try {
     const wf = await loadStored(tenantId, alertId);
-    if (!wf) return normalizeWorkflow({ ...defaultWorkflow() });
-    if (!_cache.has(k)) _cache.set(k, wf); // a patch queued behind this read may already have set it
+    // a patch queued behind this read may already have set it; a missing row caches the defaults
+    if (!_cache.has(k)) _cache.set(k, wf || normalizeWorkflow({ ...defaultWorkflow() }));
     return normalizeWorkflow({ ..._cache.get(k) });
   } catch (err) {
     console.warn('[WorkflowStore] getAlertWorkflow error:', err.message);
@@ -228,14 +228,15 @@ function applyLocal(tenantId, alertId, base, patch, actor) {
 
 // Runs an updater against `base` and applies its patch. The updater gets its own copy.
 function applyUpdate(tenantId, alertId, base, updater, actor) {
-  const patch = updater(normalizeWorkflow({ ...base }));
+  const patch = updater(normalizeWorkflow({ ...base }), { preview: false });
   return applyLocal(tenantId, alertId, base, patch, actor);
 }
 
 // The optimistic result of an updater on `base`, without caching, writing or logging anything.
+// Updaters receive { preview: true } here and must not cause side effects in that case.
 function previewUpdate(base, updater) {
   const current = normalizeWorkflow({ ...base });
-  const patch = updater(normalizeWorkflow({ ...base }));
+  const patch = updater(normalizeWorkflow({ ...base }), { preview: true });
   if (!changedFields(current, patch).length) return current;
   return normalizeWorkflow({ ...current, ...patch, updatedAt: new Date().toISOString() });
 }
@@ -251,7 +252,7 @@ async function drainQueue(tenantId, alertId, fromTimer = false) {
   q.timer = null;
   q.draining = true;
   try {
-    let stored = null;
+    let stored;
     if (!_cache.has(k)) {
       try {
         stored = await loadStored(tenantId, alertId);
@@ -264,7 +265,7 @@ async function drainQueue(tenantId, alertId, fromTimer = false) {
         for (const op of q.ops) if (op.resolve) { op.resolve(normalizeWorkflow({ ...op.optimistic })); op.resolve = null; }
         return;
       }
-      if (stored && !_cache.has(k)) _cache.set(k, stored);
+      if (!_cache.has(k)) _cache.set(k, stored || normalizeWorkflow({ ...defaultWorkflow() }));
     }
     while (q.ops.length) {
       const op = q.ops.shift();
@@ -284,7 +285,8 @@ async function drainQueue(tenantId, alertId, fromTimer = false) {
   }
 }
 
-// Applies `updater(currentWorkflow) → patch | null` to a workflow. Returns { value, done }:
+// Applies `updater(currentWorkflow, { preview }) → patch | null` to a workflow. The updater runs
+// once on the real state (preview false) and possibly once for the optimistic view (preview true). Returns { value, done }:
 // value is the result now (exact when the workflow is cached and nothing is queued, otherwise
 // the best-effort optimistic view), done resolves once the updater has run on the real state.
 function submitUpdate(tenantId, alertId, updater, actor = 'system') {
@@ -301,7 +303,13 @@ function submitUpdate(tenantId, alertId, updater, actor = 'system') {
   q.view = previewUpdate(q.view, updater);
   let resolve;
   const done = new Promise((r) => { resolve = r; });
-  q.ops.push({ updater, actor, resolve, optimistic: q.view });
+  const op = { updater, actor, resolve, optimistic: q.view };
+  q.ops.push(op);
+  if (q.timer) {
+    // The read is in error backoff: answer now with the optimistic view, keep the op queued.
+    resolve(normalizeWorkflow({ ...q.view }));
+    op.resolve = null;
+  }
   drainQueue(tenantId, alertId).catch(err => console.error('[WorkflowStore] queue error:', err.message));
   return { value: normalizeWorkflow({ ...q.view }), done };
 }
@@ -316,6 +324,22 @@ async function patchAlertWorkflowAsync(tenantId, alertId, patch, actor = 'system
 
 function patchAlertWorkflow(tenantId, alertId, patch, actor = 'system') {
   return submitUpdate(tenantId, alertId, () => patch, actor).value;
+}
+
+// Read-modify-write: `updater(currentWorkflow, { preview })` returns a patch or null. Use this
+// instead of patching with values computed from getAlertWorkflow(), which on a cold cache is
+// defaults or an optimistic view, never the stored workflow.
+function updateAlertWorkflow(tenantId, alertId, updater, actor = 'system') {
+  return submitUpdate(tenantId, alertId, updater, actor).value;
+}
+
+// True when the workflow's stored state is in the cache and no update is waiting for its read.
+// On false, starts the read so a later call can return true.
+function isWorkflowLoaded(tenantId, alertId) {
+  const k = _key(tenantId, alertId);
+  if (_cache.has(k) && !_queues.has(k)) return true;
+  if (!_cache.has(k)) getAlertWorkflowAsync(tenantId, alertId).catch(() => {});
+  return false;
 }
 
 // Number of workflows with changes not yet in Table Storage: failed or pending writes, plus
@@ -368,10 +392,16 @@ function getCases(tenantId) {
     const dueTs = wf.dueAt ? new Date(wf.dueAt).getTime() : null;
     const isOverdue = !!dueTs && dueTs < now && wf.caseStatus !== 'closed';
     if (isOverdue && !wf.slaBreachedAt) {
-      wf.slaBreachedAt = new Date().toISOString();
-      wf.escalationLevel = Math.max(1, wf.escalationLevel || 0);
-      patchAlertWorkflow(tenantId, alert.id, wf, 'system');
-      auditLog.log(tenantId, 'case.sla_breached', { alertId: alert.id, severity: alert.severity }, 'system');
+      // Decide and apply the breach on the loaded state; never write the (possibly optimistic)
+      // view back as a patch, which would overwrite stored owner, comments and approvals.
+      const breachedAt = new Date().toISOString();
+      const updated = updateAlertWorkflow(tenantId, alert.id, (cur, { preview }) => {
+        const curDue = cur.dueAt ? new Date(cur.dueAt).getTime() : null;
+        if (!curDue || curDue >= Date.now() || cur.caseStatus === 'closed' || cur.slaBreachedAt) return null;
+        if (!preview) auditLog.log(tenantId, 'case.sla_breached', { alertId: alert.id, severity: alert.severity }, 'system');
+        return { slaBreachedAt: breachedAt, escalationLevel: Math.max(1, cur.escalationLevel || 0) };
+      }, 'system');
+      Object.assign(wf, { slaBreachedAt: updated.slaBreachedAt, escalationLevel: updated.escalationLevel });
     }
     return {
       alertId: alert.id, title: alert.anomalyLabel, severity: alert.severity,
@@ -415,4 +445,4 @@ async function warmCache(tenantId) {
   }
 }
 
-module.exports = { getAlertWorkflow, getAlertWorkflowAsync, patchAlertWorkflow, patchAlertWorkflowAsync, changedFields, addComment, progressApproval, getCases, getWorkflowStats, parseMentions, warmCache, unpersistedCount, submitUpdate };
+module.exports = { getAlertWorkflow, getAlertWorkflowAsync, patchAlertWorkflow, patchAlertWorkflowAsync, changedFields, addComment, progressApproval, getCases, getWorkflowStats, parseMentions, warmCache, unpersistedCount, submitUpdate, updateAlertWorkflow, isWorkflowLoaded };

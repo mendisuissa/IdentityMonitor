@@ -18,6 +18,7 @@ function loadWorkflowStore(stored = {}, opts = {}) {
   let reads = 0;
   const audits = [];
   const fakes = {
+    ...(opts.extraFakes || {}),
     '@azure/data-tables': {
       TableClient: {
         fromConnectionString: () => ({
@@ -37,7 +38,7 @@ function loadWorkflowStore(stored = {}, opts = {}) {
         })
       }
     },
-    './alertsStore': { getAll: () => [], getOpen: () => [] },
+    './alertsStore': { getAll: () => opts.alerts || [], getOpen: () => opts.alerts || [] },
     './notificationCenterService': { enqueue: () => {}, list: () => [] },
     './auditLog': { log: (tenantId, action, details, actor) => audits.push({ tenantId, action, details, actor }) }
   };
@@ -47,11 +48,19 @@ function loadWorkflowStore(stored = {}, opts = {}) {
     return origLoad.call(this, request, parent, isMain);
   };
   process.env.AZURE_STORAGE_CONNECTION_STRING = 'UseDevelopmentStorage=true';
-  process.env.WORKFLOW_PERSIST_RETRY_MS = '10';
+  process.env.WORKFLOW_PERSIST_RETRY_MS = String(opts.retryMs || 10);
   const file = path.join(services, 'workflowStore.js');
   delete require.cache[require.resolve(file)];
   try {
-    return { store: require(file), upserts, audits, reads: () => reads };
+    const store = require(file);
+    let automation;
+    if (opts.withAutomation) {
+      fakes['./workflowStore'] = store;
+      const af = path.join(services, 'automationService.js');
+      delete require.cache[require.resolve(af)];
+      automation = require(af);
+    }
+    return { store, automation, upserts, audits, reads: () => reads };
   } finally {
     Module._load = origLoad;
   }
@@ -223,6 +232,96 @@ test('cold cache: progressApproval right after a queued approval plan decides th
   assert.strictEqual(last.caseStatus, 'ready_to_execute');
   assert.strictEqual(last.owner, 'o@contoso.com');
   assert.strictEqual(JSON.parse(last.approvalHistory).length, 1);
+});
+
+test('getCases SLA breach on a cold cache keeps stored owner and comments', async () => {
+  const stored = { a1: { owner: 'kept@contoso.com', comments: JSON.stringify([{ id: 'c0', message: 'stored' }]) } };
+  const alerts = [{ id: 'a1', severity: 'high', status: 'open', detectedAt: new Date().toISOString() }];
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { store, upserts, audits } = loadWorkflowStore(stored, { gate, alerts });
+  store.patchAlertWorkflow('t1', 'a1', { dueAt: new Date(Date.now() - 3600e3).toISOString() }, 'analyst@contoso.com');
+  store.addComment('t1', 'a1', 'queued', 'analyst@contoso.com');
+  const cases = store.getCases('t1');
+  assert.ok(cases[0].slaBreachedAt, 'response still shows the breach');
+  release();
+  await waitFor(() => store.unpersistedCount() === 0);
+  const last = upserts[upserts.length - 1];
+  assert.strictEqual(last.owner, 'kept@contoso.com', 'stored owner survives');
+  assert.deepStrictEqual(JSON.parse(last.comments).map((c) => c.message), ['stored', 'queued']);
+  assert.ok(last.slaBreachedAt);
+  assert.strictEqual(last.escalationLevel, 1);
+  assert.strictEqual(audits.filter((a) => a.action === 'case.sla_breached').length, 1);
+  const sla = audits.find((a) => a.action === 'workflow.updated' && a.details.fields);
+  assert.deepStrictEqual(sla.details.fields, ['slaBreachedAt', 'escalationLevel'], 'only the SLA fields are patched');
+});
+
+test('getCases does not re-breach a case that the loaded state shows already breached', async () => {
+  const past = new Date(Date.now() - 3600e3).toISOString();
+  const stored = { a1: { dueAt: past, slaBreachedAt: past, escalationLevel: 2 } };
+  const alerts = [{ id: 'a1', severity: 'high', status: 'open', detectedAt: past }];
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { store, upserts, audits } = loadWorkflowStore(stored, { gate, alerts });
+  store.addComment('t1', 'a1', 'x', 'a@contoso.com'); // queue so getCases sees an optimistic view
+  store.getCases('t1');
+  release();
+  await waitFor(() => store.unpersistedCount() === 0);
+  assert.strictEqual(audits.filter((a) => a.action === 'case.sla_breached').length, 0);
+  assert.strictEqual(upserts[upserts.length - 1].escalationLevel, 2);
+  assert.strictEqual(upserts[upserts.length - 1].slaBreachedAt, past);
+});
+
+test('updates submitted during read backoff resolve at once and stay queued', async () => {
+  const { store, upserts } = loadWorkflowStore({ a1: { owner: 'o' } }, { failReads: 1, retryMs: 60000 });
+  await store.patchAlertWorkflowAsync('t1', 'a1', { note: 'one' }, 'system');
+  const timeout = new Promise((r) => setTimeout(() => r('timeout'), 300));
+  const second = await Promise.race([store.patchAlertWorkflowAsync('t1', 'a1', { caseStatus: 'triage' }, 'auto-playbook'), timeout]);
+  assert.notStrictEqual(second, 'timeout', 'awaiting caller is not held for the backoff');
+  assert.deepStrictEqual([second.note, second.caseStatus], ['one', 'triage']);
+  assert.strictEqual(store.unpersistedCount(), 1);
+  assert.strictEqual(upserts.length, 0, 'still queued for the retried read');
+});
+
+test('updateAlertWorkflow appends to the loaded list on a cold cache', async () => {
+  const stored = { a1: { automationActions: JSON.stringify([{ type: 'escalation', key: 'k0' }]) } };
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { store, upserts } = loadWorkflowStore(stored, { gate });
+  const entry = { type: 'manual-execution', key: 'exec-1' };
+  store.updateAlertWorkflow('t1', 'a1', (cur) => ({ caseStatus: 'executed', automationActions: [...cur.automationActions, entry] }), 'a@contoso.com');
+  release();
+  await waitFor(() => store.unpersistedCount() === 0);
+  const last = upserts[upserts.length - 1];
+  assert.deepStrictEqual(JSON.parse(last.automationActions).map((a) => a.key), ['k0', 'exec-1']);
+  assert.strictEqual(last.caseStatus, 'executed');
+});
+
+test('isWorkflowLoaded starts the read and is true once loaded, also for a missing row', async () => {
+  const { store } = loadWorkflowStore({ a1: { owner: 'o' } });
+  assert.strictEqual(store.isWorkflowLoaded('t1', 'a1'), false);
+  assert.strictEqual(store.isWorkflowLoaded('t1', 'missing'), false);
+  await settle(); await settle();
+  assert.strictEqual(store.isWorkflowLoaded('t1', 'a1'), true);
+  assert.strictEqual(store.isWorkflowLoaded('t1', 'missing'), true);
+  assert.strictEqual(store.getAlertWorkflow('t1', 'a1').owner, 'o');
+});
+
+test('automation sweep skips unloaded workflows and fills defaults without overwriting stored ones', async () => {
+  const alerts = [{ id: 'a1', tenantId: 't1', severity: 'high', status: 'open', detectedAt: new Date().toISOString() }];
+  const extraFakes = {
+    './settingsService': { getSettings: () => ({ assignmentRules: { defaultOwner: 'default@contoso.com' }, runbooks: {} }) },
+    './tenantRegistry': { getAllTenantIds: () => ['t1'] },
+    './policyEngineService': { buildPolicyDecision: () => ({ requiresApproval: false }), getExecutionCheck: () => ({ canExecute: false, reason: 'r', state: 's' }) }
+  };
+  const stored = { a1: { owner: 'kept@contoso.com', caseStatus: 'triage' } };
+  const { automation, upserts } = loadWorkflowStore(stored, { alerts, extraFakes, withAutomation: true });
+  automation.runAutomationSweep('t1'); // cold: starts the read, writes nothing
+  assert.strictEqual(upserts.length, 0);
+  await settle(); await settle();
+  automation.runAutomationSweep('t1');
+  await settle();
+  for (const u of upserts) assert.strictEqual(u.owner, 'kept@contoso.com', 'stored owner never replaced by the default owner');
 });
 
 // ── auditLog: tail-only warm-up and rotation ──

@@ -29,9 +29,14 @@ function resolveOwner(alert, settings = {}) {
   return rules.severityOwners?.[alert.severity] || rules.defaultOwner || '';
 }
 
+// Runs as an updater, so missing fields are judged on the loaded workflow, never on defaults
+// (on a cold cache, that would overwrite a stored owner or approval plan).
 function ensureWorkflowDefaults(tenantId, alert) {
   const settings = settingsService.getSettings(tenantId);
-  const wf = workflowStore.getAlertWorkflow(tenantId, alert.id);
+  return workflowStore.updateAlertWorkflow(tenantId, alert.id, wf => workflowDefaultsPatch(wf, alert, settings), 'system');
+}
+
+function workflowDefaultsPatch(wf, alert, settings) {
   const patch = {};
   if (!wf.dueAt) patch.dueAt = new Date(new Date(alert.detectedAt).getTime() + severityMinutes(settings, alert.severity) * 60000).toISOString();
   if (!Array.isArray(wf.approvalSteps) || wf.approvalSteps.length === 0) patch.approvalSteps = buildApprovalPlan(alert, settings);
@@ -41,8 +46,7 @@ function ensureWorkflowDefaults(tenantId, alert) {
   if (!wf.notifications) patch.notifications = [];
   if (!wf.automationActions) patch.automationActions = [];
   if (!wf.runbookSteps) patch.runbookSteps = settings.runbooks?.[alert.severity] || [];
-  if (Object.keys(patch).length) return workflowStore.patchAlertWorkflow(tenantId, alert.id, patch, 'system');
-  return wf;
+  return Object.keys(patch).length ? patch : null;
 }
 
 function appendAction(list, action) {
@@ -72,6 +76,9 @@ function evaluateTenant(tenantId) {
   };
 
   for (const alert of alerts) {
+    // The sweep decides escalations from the workflow, so it only handles workflows whose stored
+    // state is loaded; others start loading now and are handled on the next sweep.
+    if (!workflowStore.isWorkflowLoaded(tenantId, alert.id)) continue;
     let wf = ensureWorkflowDefaults(tenantId, alert);
     const patch = {};
     const policyDecision = policyEngine.buildPolicyDecision(tenantId, alert);

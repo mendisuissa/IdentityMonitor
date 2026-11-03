@@ -129,13 +129,12 @@ router.post('/:id/execute', requirePermission('alerts.respond'), (req, res) => {
   const check = policyEngine.getExecutionCheck(tenantId, alert, action, workflow);
   if (!check.canExecute) return res.status(409).json({ error: check.reason, state: check.state, decision: check.decision });
   alertsStore.addAction(alert.id, action);
-  const updatedWorkflow = workflowStore.patchAlertWorkflow(tenantId, alert.id, {
-    caseStatus: action === 'monitor' ? workflow.caseStatus : 'executed',
-    automationActions: [
-      ...(workflow.automationActions || []),
-      { type: 'manual-execution', key: `exec-${alert.id}-${Date.now()}`, createdAt: new Date().toISOString(), detail: `${getActor(req)} executed ${action}`, state: 'executed' }
-    ]
-  }, getActor(req));
+  // Appended inside an updater, so the list is the loaded one, not a cold-cache default.
+  const execEntry = { type: 'manual-execution', key: `exec-${alert.id}-${Date.now()}`, createdAt: new Date().toISOString(), detail: `${getActor(req)} executed ${action}`, state: 'executed' };
+  const updatedWorkflow = workflowStore.updateAlertWorkflow(tenantId, alert.id, cur => ({
+    caseStatus: action === 'monitor' ? cur.caseStatus : 'executed',
+    automationActions: [...(cur.automationActions || []), execEntry]
+  }), getActor(req));
   auditLog.log(tenantId, `response.${action}_executed`, { alertId: alert.id, action }, getActor(req));
   res.json({ ok: true, action, executionCheck: check, workflow: updatedWorkflow, alert: alertsStore.getById(alert.id) });
 });
