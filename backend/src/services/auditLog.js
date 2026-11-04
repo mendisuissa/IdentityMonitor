@@ -6,9 +6,9 @@
 const fs   = require('fs');
 const path = require('path');
 
-const AUDIT_DIR = process.env.NODE_ENV === 'production'
+const AUDIT_DIR = process.env.AUDIT_DIR || (process.env.NODE_ENV === 'production'
   ? '/home/audit'
-  : path.join(__dirname, '../../../audit');
+  : path.join(__dirname, '../../../audit'));
 
 if (!fs.existsSync(AUDIT_DIR)) fs.mkdirSync(AUDIT_DIR, { recursive: true });
 
@@ -41,22 +41,69 @@ function _ensureCache(tenantId) {
 }
 
 // warmCache — async (non-blocking) — call from startup for each known tenant.
-// Reads the JSONL file asynchronously so it never freezes the event loop.
+// Reads only file tails: the cache holds at most CACHE_MAX entries, and reading a multi-GB file
+// whole fails (V8 string limit), which used to leave the audit view empty. When the live file
+// holds fewer than CACHE_MAX entries (it was rotated recently), the rest of the window is filled
+// from the tails of the newest archives, so recent history survives rotation plus a restart.
+const WARM_TAIL_BYTES     = 4 * 1024 * 1024; // per file
+const WARM_MAX_ARCHIVES   = 3;               // newest archives consulted at most
+
+// Parsed entries from the last maxBytes of a JSONL file ([] if it cannot be read).
+async function readTailEntries(filePath, maxBytes) {
+  let content;
+  try {
+    const fh = await fs.promises.open(filePath, 'r');
+    try {
+      const { size } = await fh.stat();
+      const start = Math.max(0, size - maxBytes);
+      const buf = Buffer.alloc(size - start);
+      await fh.read(buf, 0, buf.length, start);
+      content = buf.toString('utf8');
+      if (start > 0) content = content.slice(content.indexOf('\n') + 1); // drop the partial first line
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    return [];
+  }
+  return content.split('\n').filter(Boolean)
+    .map(l => { try { return JSON.parse(l); } catch { return null; } })
+    .filter(Boolean);
+}
+
+// This tenant's archive files, newest first. Names are `<safe>.<ISO stamp>.jsonl`; the stamp has
+// a fixed shape, so another tenant whose id starts with `<safe>.` never matches, and the stamp
+// sorts chronologically as text.
+async function listArchives(safe) {
+  const archiveDir = path.join(AUDIT_DIR, 'archive');
+  const escaped = safe.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`^${escaped}\\.(\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}-\\d{3}Z)\\.jsonl$`);
+  let names;
+  try { names = await fs.promises.readdir(archiveDir); } catch { return []; }
+  return names
+    .map(n => { const m = re.exec(n); return m ? { name: n, stamp: m[1] } : null; })
+    .filter(Boolean)
+    .sort((a, b) => (a.stamp < b.stamp ? 1 : a.stamp > b.stamp ? -1 : 0))
+    .map(a => path.join(archiveDir, a.name));
+}
+
 async function warmCache(tenantId) {
   if (!tenantId) return;
   const safe = sanitizeTenantId(tenantId);
   if (!safe) return;
-  const filePath = path.join(AUDIT_DIR, safe + '.jsonl');
   try {
-    await fs.promises.access(filePath);
-    const content = await fs.promises.readFile(filePath, 'utf8');
-    const lines = content.split('\n').filter(Boolean)
-      .map(l => { try { return JSON.parse(l); } catch { return null; } })
-      .filter(Boolean);
-    _memCache.set(tenantId, lines.slice(-CACHE_MAX));
+    let entries = await readTailEntries(path.join(AUDIT_DIR, safe + '.jsonl'), WARM_TAIL_BYTES);
+    if (entries.length < CACHE_MAX) {
+      const archives = (await listArchives(safe)).slice(0, WARM_MAX_ARCHIVES);
+      for (const file of archives) {
+        const older = await readTailEntries(file, WARM_TAIL_BYTES);
+        entries = older.concat(entries);
+        if (entries.length >= CACHE_MAX) break;
+      }
+    }
+    _memCache.set(tenantId, entries.slice(-CACHE_MAX));
     _cacheTime.set(tenantId, Date.now());
   } catch {
-    // File doesn't exist or can't be read — start with empty cache
     _memCache.set(tenantId, []);
     _cacheTime.set(tenantId, Date.now());
   }
@@ -110,6 +157,32 @@ function log(tenantId, action, details = {}, actor = 'system') {
   const filePath = path.join(AUDIT_DIR, safe + '.jsonl');
   fs.appendFile(filePath, JSON.stringify(entry) + '\n', err => {
     if (err) console.error('[AuditLog] Write error:', err.message);
+    else _maybeRotate(safe, filePath);
+  });
+}
+
+// ── Rotation ──────────────────────────────────────────────────────────────────
+// The live file is rotated into AUDIT_DIR/archive/ once it passes ROTATE_BYTES. Archived files
+// are kept; nothing is deleted. archive/ is a directory, so tenantRegistry never reads it as a
+// tenant file.
+const ROTATE_BYTES       = Number(process.env.AUDIT_ROTATE_BYTES) || 50 * 1024 * 1024;
+const ROTATE_CHECK_EVERY = 500;       // stat the file on the first write and every 500th after
+const _writeCount = new Map();      // tenantId → writes since start
+
+function _maybeRotate(safe, filePath) {
+  const n = (_writeCount.get(safe) || 0) + 1;
+  _writeCount.set(safe, n);
+  if (n % ROTATE_CHECK_EVERY !== 1) return;
+  fs.stat(filePath, (err, st) => {
+    if (err || st.size < ROTATE_BYTES) return;
+    const archiveDir = path.join(AUDIT_DIR, 'archive');
+    fs.mkdir(archiveDir, { recursive: true }, mkErr => {
+      if (mkErr) return console.error('[AuditLog] Rotate error:', mkErr.message);
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      fs.rename(filePath, path.join(archiveDir, `${safe}.${stamp}.jsonl`), e => {
+        if (e) console.error('[AuditLog] Rotate error:', e.message);
+      });
+    });
   });
 }
 
