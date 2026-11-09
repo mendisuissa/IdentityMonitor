@@ -7,7 +7,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test tests/audit-growth.test.js",
+    "test": "node --test tests/audit-growth.test.js tests/stall-monitor.test.js",
     "dev": "nodemon src/index.js"
   },
   "dependencies": {

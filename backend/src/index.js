@@ -46,11 +46,17 @@ const billingRoutes    = require('./routes/billing');
 const internalRoutes   = require('./routes/internal');
 
 const rateLimit = require('express-rate-limit');
+const { createStallMonitor } = require('./services/stallMonitor');
 
 const app    = express();
 const server = http.createServer(app);
 const PORT   = process.env.PORT || 3001;
 const MOCK   = process.env.MOCK_MODE === 'true';
+
+// #105: measure event-loop stalls and slow requests to find why the app hangs.
+const stallMonitor = createStallMonitor();
+stallMonitor.start();
+app.use(stallMonitor.middleware);
 
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
@@ -203,7 +209,12 @@ try {
 app.use('/api/internal', internalRoutes);
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, status: 'ok', service: 'identity-monitor', timestamp: new Date().toISOString(), version: require('../package.json').version });
+  // Public numbers only; route names stay in /api/health-deep.
+  const m = stallMonitor.snapshot();
+  res.json({
+    ok: true, status: 'ok', service: 'identity-monitor', timestamp: new Date().toISOString(), version: require('../package.json').version,
+    stalls: { since: m.since, eventLoop: m.eventLoop, stalls24h: m.stalls24h, worstStallMs: m.worstStallMs, slowRequests24h: m.slowRequests24h, inFlight: m.inFlight, oldestInFlightMs: m.oldestInFlightMs },
+  });
 });
 
 // GET /api/health-deep — supervisor-only endpoint, requires SUPERVISOR_SECRET header
@@ -242,6 +253,7 @@ app.get('/api/health-deep', async (req, res) => {
       timestamp:   new Date().toISOString(),
       version:     require('../package.json').version,
       tenantCount: tenantIds.length,
+      stallMonitor: stallMonitor.snapshot(),
       autoRemediation: {
         enabled:            autoRem.isEnabled(),
         lastRunAt:          remStats.lastRunAt,
