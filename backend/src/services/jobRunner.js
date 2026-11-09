@@ -1,7 +1,20 @@
 // jobRunner.js — background jobs for ALL tenants
 // Replaces the TODO comments in index.js
 
-const cron           = require('node-cron');
+const nodeCron       = require('node-cron');
+const { getStallMonitor } = require('./stallMonitor');
+
+// #105: every background job is wrapped so an event-loop stall names it.
+const CRON_LABELS = {
+  '0 3 * * *': 'webhook-renewal',
+  '0 8 * * 0': 'weekly-digest',
+  '0 2 * * *': 'retention',
+  '0 * * * *': 'tenant-health',
+};
+const cron = {
+  schedule: (expr, fn, opts) =>
+    nodeCron.schedule(expr, getStallMonitor().track(CRON_LABELS[expr] || `cron ${expr}`, fn), opts),
+};
 const tenantRegistry = require('./tenantRegistry');
 const anomalyService = require('./anomalyService');
 const webhookService = require('./webhookService');
@@ -62,9 +75,10 @@ function init() {
   // _scanRunning flag prevents overlap if a scan takes > 60s.
   // Real-time first alerts come from Graph webhooks (webhook.js);
   // this loop is a reliable fallback that catches anything missed.
-  setInterval(_runScanCycle, 60 * 1000);
+  const scanCycle = getStallMonitor().track('scan-cycle', _runScanCycle);
+  setInterval(scanCycle, 60 * 1000);
   // Also run immediately on startup (after a short delay so sessions load)
-  setTimeout(_runScanCycle, 15 * 1000);
+  setTimeout(scanCycle, 15 * 1000);
 
   // ── Renew webhook subscriptions — daily at 3am ────────────────────────
   cron.schedule('0 3 * * *', async () => {

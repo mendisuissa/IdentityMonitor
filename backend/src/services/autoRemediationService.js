@@ -509,9 +509,11 @@ function start() {
   // First run after a warmup delay — prevents back-to-back runs on App Service restarts
   const warmupMs = Math.min(intervalMs, 5 * 60 * 1000); // 5 min or one interval, whichever is shorter
   console.log(`[AutoRemediation] First run in ${warmupMs / 60000} minutes`);
-  setTimeout(() => runAutoRemediation().catch(console.error), warmupMs);
+  // #105: tracked so an event-loop stall during a run names it.
+  const tracked = require('./stallMonitor').getStallMonitor().track('auto-remediation', () => runAutoRemediation().catch(console.error));
+  setTimeout(tracked, warmupMs);
 
-  _timer = setInterval(() => runAutoRemediation().catch(console.error), intervalMs);
+  _timer = setInterval(tracked, intervalMs);
 }
 
 function stop() {

@@ -25,6 +25,7 @@ function createStallMonitor(opts = {}) {
   const stalls = [];
   const slow = [];
   const inFlight = new Map();
+  const jobs = new Map();    // background jobs (timers, cron) currently running
   let nextId = 0;
   let timer = null;
   let histogram = null;
@@ -67,7 +68,11 @@ function createStallMonitor(opts = {}) {
     const t = now();
     const lateMs = t - expected;
     if (expected && lateMs > cfg.stallMs) {
-      const active = [...new Set([...blamed, ...[...inFlight.values()].map((r) => `${r.method} ${templateOf(r.req, r.route)}`)])].slice(0, 5);
+      const active = [...new Set([
+        ...blamed,
+        ...[...jobs.values()].map((j) => `job ${j.label}`),
+        ...[...inFlight.values()].map((r) => `${r.method} ${templateOf(r.req, r.route)}`),
+      ])].slice(0, 5);
       const b = bucket(t);
       b.stalls += 1;
       b.worstStallMs = Math.max(b.worstStallMs, lateMs);
@@ -134,6 +139,40 @@ function createStallMonitor(opts = {}) {
     next();
   }
 
+  // Wraps a background job (setInterval / cron callback) so a stall names it.
+  // A sync job that blocked the loop has already returned when the heartbeat
+  // fires, so a job that finishes while the heartbeat is overdue is blamed, just
+  // like a request. An async job is listed as active for as long as it runs.
+  // Labels are fixed strings chosen by the caller, never request data.
+  function track(label, fn) {
+    const name = String(label).slice(0, 60);
+    return function trackedJob(...args) {
+      const id = ++nextId;
+      const begin = now();
+      jobs.set(id, { label: name, begin });
+      const finish = () => {
+        if (!jobs.delete(id)) return;
+        const t = now();
+        if (expected && t - expected > cfg.stallMs) blamed.push(`job ${name}`);
+        const ms = t - begin;
+        if (ms > cfg.slowRequestMs) log(`[stall-monitor] slow job ${name} ${ms}ms`);
+      };
+      let out;
+      try {
+        out = fn.apply(this, args);
+      } catch (err) {
+        finish();
+        throw err;
+      }
+      if (out && typeof out.then === 'function') {
+        out.then(finish, finish);
+      } else {
+        finish();
+      }
+      return out;
+    };
+  }
+
   function snapshot() {
     const t = now();
     const recent = (list) => list.filter((e) => t - Date.parse(e.at) <= cfg.windowMs);
@@ -154,10 +193,18 @@ function createStallMonitor(opts = {}) {
       lastSlowRequest: slow.length ? slow[slow.length - 1] : null,
       inFlight: inFlight.size,
       oldestInFlightMs: oldest,
+      jobsRunning: [...jobs.values()].map((j) => ({ label: j.label, ms: t - j.begin })).slice(0, 10),
     };
   }
 
-  return { start, stop, tick, middleware, snapshot };
+  return { start, stop, tick, middleware, track, snapshot };
 }
 
-module.exports = { createStallMonitor };
+// One monitor per process, shared by index.js and the job runners.
+let shared = null;
+function getStallMonitor() {
+  if (!shared) shared = createStallMonitor();
+  return shared;
+}
+
+module.exports = { createStallMonitor, getStallMonitor };
