@@ -113,3 +113,25 @@ test('24-hour counters and the worst stall are not capped by the detail buffer',
   assert.strictEqual(s.worstStallMs, 8500);
   assert.ok(s.stalls24h > 50);
 });
+
+test('an event stays counted for the full 24 hours across hour boundaries', () => {
+  const c = clock(Date.parse('2026-11-09T16:59:40Z'));
+  const m = createStallMonitor({ now: c.now, log: () => {} });
+  m.tick(); c.advance(5000); m.tick();             // stall at 16:59:45
+  c.advance(Date.parse('2026-11-10T16:00:00Z') - c.now());
+  assert.strictEqual(m.snapshot().stalls24h, 1);   // 23h later: still counted
+  assert.strictEqual(m.snapshot().worstStallMs, 4500);
+  c.advance(Date.parse('2026-11-10T17:01:00Z') - c.now());
+  assert.strictEqual(m.snapshot().stalls24h, 0);   // past 24h (+1 min bucket): expired
+});
+
+test('an in-flight request that already matched a route is reported by its template', () => {
+  const c = clock();
+  const m = createStallMonitor({ now: c.now, log: () => {} });
+  m.tick();
+  const req = fakeReq('/api/remediation/auto-remediation/trigger', 'POST');
+  m.middleware(req, fakeRes(), () => {});
+  req.baseUrl = '/api/remediation'; req.route = { path: '/auto-remediation/trigger' };
+  c.advance(4000); m.tick();                       // stall while still in flight
+  assert.deepStrictEqual(m.snapshot().lastStall.active, ['POST /api/remediation/auto-remediation/trigger']);
+});

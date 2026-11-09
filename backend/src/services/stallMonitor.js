@@ -31,21 +31,26 @@ function createStallMonitor(opts = {}) {
   let expected = 0;
   let blamed = [];           // requests that finished while the loop was overdue
   const startedAt = now();
-  // Rolling 24h counters in hourly buckets, independent of the capped detail lists.
-  const buckets = new Map(); // hourIndex -> { stalls, worstStallMs, slow }
+  // Rolling 24h counters in one-minute buckets, independent of the capped detail
+  // lists. A bucket counts while any part of its minute is inside the window, so
+  // an event is never dropped early (it may count for up to one extra minute).
+  const BUCKET_MS = 60000;
+  const buckets = new Map(); // minuteIndex -> { stalls, worstStallMs, slow }
+  const inWindow = (k, t) => (k + 1) * BUCKET_MS > t - cfg.windowMs;
 
   function bucket(t) {
-    const h = Math.floor(t / 3600000);
-    if (!buckets.has(h)) buckets.set(h, { stalls: 0, worstStallMs: 0, slow: 0 });
-    for (const k of buckets.keys()) if (k <= h - 25) buckets.delete(k);
-    return buckets.get(h);
+    const k = Math.floor(t / BUCKET_MS);
+    if (!buckets.has(k)) {
+      buckets.set(k, { stalls: 0, worstStallMs: 0, slow: 0 });
+      for (const old of buckets.keys()) if (!inWindow(old, t)) buckets.delete(old);
+    }
+    return buckets.get(k);
   }
 
   function rolling(t) {
-    const h = Math.floor(t / 3600000);
     const out = { stalls: 0, worstStallMs: 0, slow: 0 };
     for (const [k, b] of buckets) {
-      if (k <= h - Math.ceil(cfg.windowMs / 3600000)) continue;
+      if (!inWindow(k, t)) continue;
       out.stalls += b.stalls; out.slow += b.slow;
       out.worstStallMs = Math.max(out.worstStallMs, b.worstStallMs);
     }
@@ -62,7 +67,7 @@ function createStallMonitor(opts = {}) {
     const t = now();
     const lateMs = t - expected;
     if (expected && lateMs > cfg.stallMs) {
-      const active = [...new Set([...blamed, ...[...inFlight.values()].map((r) => `${r.method} ${r.route}`)])].slice(0, 5);
+      const active = [...new Set([...blamed, ...[...inFlight.values()].map((r) => `${r.method} ${templateOf(r.req, r.route)}`)])].slice(0, 5);
       const b = bucket(t);
       b.stalls += 1;
       b.worstStallMs = Math.max(b.worstStallMs, lateMs);
@@ -105,7 +110,7 @@ function createStallMonitor(opts = {}) {
   function middleware(req, res, next) {
     const id = ++nextId;
     const begin = now();
-    const entry = { method: req.method, route: prefixOf(req), begin };
+    const entry = { method: req.method, route: prefixOf(req), begin, req };
     inFlight.set(id, entry);
     let done = false;
     const finish = () => {
@@ -113,6 +118,7 @@ function createStallMonitor(opts = {}) {
       done = true;
       inFlight.delete(id);
       entry.route = templateOf(req, entry.route);
+      entry.req = null;
       const t = now();
       // The heartbeat is overdue: this request may be what blocked the loop.
       if (expected && t - expected > cfg.stallMs) blamed.push(`${entry.method} ${entry.route}`);
