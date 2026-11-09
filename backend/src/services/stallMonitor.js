@@ -29,7 +29,28 @@ function createStallMonitor(opts = {}) {
   let timer = null;
   let histogram = null;
   let expected = 0;
+  let blamed = [];           // requests that finished while the loop was overdue
   const startedAt = now();
+  // Rolling 24h counters in hourly buckets, independent of the capped detail lists.
+  const buckets = new Map(); // hourIndex -> { stalls, worstStallMs, slow }
+
+  function bucket(t) {
+    const h = Math.floor(t / 3600000);
+    if (!buckets.has(h)) buckets.set(h, { stalls: 0, worstStallMs: 0, slow: 0 });
+    for (const k of buckets.keys()) if (k <= h - 25) buckets.delete(k);
+    return buckets.get(h);
+  }
+
+  function rolling(t) {
+    const h = Math.floor(t / 3600000);
+    const out = { stalls: 0, worstStallMs: 0, slow: 0 };
+    for (const [k, b] of buckets) {
+      if (k <= h - Math.ceil(cfg.windowMs / 3600000)) continue;
+      out.stalls += b.stalls; out.slow += b.slow;
+      out.worstStallMs = Math.max(out.worstStallMs, b.worstStallMs);
+    }
+    return out;
+  }
 
   function push(list, item) {
     list.push(item);
@@ -41,10 +62,14 @@ function createStallMonitor(opts = {}) {
     const t = now();
     const lateMs = t - expected;
     if (expected && lateMs > cfg.stallMs) {
-      const active = [...inFlight.values()].map((r) => `${r.method} ${r.route}`).slice(0, 5);
+      const active = [...new Set([...blamed, ...[...inFlight.values()].map((r) => `${r.method} ${r.route}`)])].slice(0, 5);
+      const b = bucket(t);
+      b.stalls += 1;
+      b.worstStallMs = Math.max(b.worstStallMs, lateMs);
       push(stalls, { at: new Date(t).toISOString(), lateMs, active });
       log(`[stall-monitor] event loop blocked ${lateMs}ms; in-flight: ${active.join(', ') || 'none'}`);
     }
+    blamed = [];
     expected = t + cfg.intervalMs;
   }
 
@@ -65,24 +90,35 @@ function createStallMonitor(opts = {}) {
     if (histogram) histogram.disable();
   }
 
-  // Route label without ids or query strings, so nothing sensitive is kept.
-  function routeOf(req) {
+  // Route labels never carry request values. Before routing, only the first two
+  // path segments are kept (e.g. /api/settings); once Express has matched a
+  // route, its template is used (e.g. /api/settings/whitelist/devices/:name).
+  function prefixOf(req) {
     const p = String(req.originalUrl || req.url || '').split('?')[0];
-    return p.split('/').map((seg) => (/\d/.test(seg) && seg.length > 6 ? ':id' : seg)).join('/').slice(0, 80);
+    return p.split('/').slice(0, 3).join('/').slice(0, 40) + '/…';
+  }
+  function templateOf(req, fallback) {
+    const tpl = req.route && typeof req.route.path === 'string' ? req.route.path : null;
+    return tpl ? `${req.baseUrl || ''}${tpl}`.slice(0, 80) : fallback;
   }
 
   function middleware(req, res, next) {
     const id = ++nextId;
     const begin = now();
-    const entry = { method: req.method, route: routeOf(req), begin };
+    const entry = { method: req.method, route: prefixOf(req), begin };
     inFlight.set(id, entry);
     let done = false;
     const finish = () => {
       if (done) return;
       done = true;
       inFlight.delete(id);
-      const ms = now() - begin;
+      entry.route = templateOf(req, entry.route);
+      const t = now();
+      // The heartbeat is overdue: this request may be what blocked the loop.
+      if (expected && t - expected > cfg.stallMs) blamed.push(`${entry.method} ${entry.route}`);
+      const ms = t - begin;
       if (ms > cfg.slowRequestMs) {
+        bucket(t).slow += 1;
         push(slow, { at: new Date(begin).toISOString(), method: entry.method, route: entry.route, ms, status: res.statusCode });
         log(`[stall-monitor] slow request ${entry.method} ${entry.route} ${ms}ms status ${res.statusCode}`);
       }
@@ -96,6 +132,7 @@ function createStallMonitor(opts = {}) {
     const t = now();
     const recent = (list) => list.filter((e) => t - Date.parse(e.at) <= cfg.windowMs);
     const r = recent(stalls);
+    const roll = rolling(t);
     const oldest = [...inFlight.values()].reduce((m, e) => Math.max(m, t - e.begin), 0);
     // The histogram includes its own 20ms sampling period; report only the delay beyond it.
     const ms = (ns) => Math.max(0, Math.round(ns / 1e6) - 20);
@@ -104,10 +141,10 @@ function createStallMonitor(opts = {}) {
       eventLoop: histogram
         ? { p50Ms: ms(histogram.percentile(50)), p99Ms: ms(histogram.percentile(99)), maxMs: ms(histogram.max) }
         : null,
-      stalls24h: r.length,
-      worstStallMs: r.reduce((m, e) => Math.max(m, e.lateMs), 0),
+      stalls24h: roll.stalls,
+      worstStallMs: roll.worstStallMs,
       lastStall: r.length ? r[r.length - 1] : null,
-      slowRequests24h: recent(slow).length,
+      slowRequests24h: roll.slow,
       lastSlowRequest: slow.length ? slow[slow.length - 1] : null,
       inFlight: inFlight.size,
       oldestInFlightMs: oldest,
