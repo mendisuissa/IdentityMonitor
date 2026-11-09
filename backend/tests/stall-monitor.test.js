@@ -135,3 +135,49 @@ test('an in-flight request that already matched a route is reported by its templ
   c.advance(4000); m.tick();                       // stall while still in flight
   assert.deepStrictEqual(m.snapshot().lastStall.active, ['POST /api/remediation/auto-remediation/trigger']);
 });
+
+test('a sync background job that blocked the loop is named in the stall', () => {
+  const c = clock();
+  const m = createStallMonitor({ now: c.now, log: () => {}, intervalMs: 500, stallMs: 1000 });
+  m.tick();
+  const job = m.track('automation-sweep', () => { c.advance(8000); return 3; });
+  assert.strictEqual(job(), 3);                 // return value passes through
+  m.tick();                                     // heartbeat fires after the job returned
+  const s = m.snapshot();
+  assert.strictEqual(s.stalls24h, 1);
+  assert.deepStrictEqual(s.lastStall.active, ['job automation-sweep']);
+  assert.deepStrictEqual(s.jobsRunning, []);
+  c.advance(500); m.tick();                     // blame does not leak into the next stall
+  c.advance(2000); m.tick();
+  assert.deepStrictEqual(m.snapshot().lastStall.active, []);
+});
+
+test('an async background job is listed while it runs and removed when it settles', async () => {
+  const c = clock();
+  const logs = [];
+  const m = createStallMonitor({ now: c.now, log: (x) => logs.push(x), slowRequestMs: 5000 });
+  m.tick();
+  let release;
+  const job = m.track('scan-cycle', () => new Promise((r) => { release = r; }));
+  const p = job();
+  c.advance(3000); m.tick();                    // stall while the async job is running
+  assert.deepStrictEqual(m.snapshot().lastStall.active, ['job scan-cycle']);
+  assert.strictEqual(m.snapshot().jobsRunning[0].label, 'scan-cycle');
+  c.advance(4000);
+  release(); await p; await null;
+  assert.deepStrictEqual(m.snapshot().jobsRunning, []);
+  assert.ok(logs.some((l) => l.includes('slow job scan-cycle 7000ms')));
+});
+
+test('a job that throws or rejects is still removed', async () => {
+  const m = createStallMonitor({ log: () => {} });
+  assert.throws(() => m.track('boom', () => { throw new Error('x'); })(), /x/);
+  await assert.rejects(m.track('reject', async () => { throw new Error('y'); })(), /y/);
+  await null;
+  assert.deepStrictEqual(m.snapshot().jobsRunning, []);
+});
+
+test('the shared monitor is one instance per process', () => {
+  const { getStallMonitor } = require('../src/services/stallMonitor');
+  assert.strictEqual(getStallMonitor(), getStallMonitor());
+});

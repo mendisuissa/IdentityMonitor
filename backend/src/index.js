@@ -46,7 +46,7 @@ const billingRoutes    = require('./routes/billing');
 const internalRoutes   = require('./routes/internal');
 
 const rateLimit = require('express-rate-limit');
-const { createStallMonitor } = require('./services/stallMonitor');
+const { getStallMonitor } = require('./services/stallMonitor');
 
 const app    = express();
 const server = http.createServer(app);
@@ -54,7 +54,7 @@ const PORT   = process.env.PORT || 3001;
 const MOCK   = process.env.MOCK_MODE === 'true';
 
 // #105: measure event-loop stalls and slow requests to find why the app hangs.
-const stallMonitor = createStallMonitor();
+const stallMonitor = getStallMonitor();
 stallMonitor.start();
 app.use(stallMonitor.middleware);
 
@@ -375,23 +375,23 @@ async function startup() {
 // ─── Scheduled Jobs ───────────────────────────────────────────────────────
 if (!MOCK) {
   // Workflow/SLA automation sweep — every 15 min
-  cron.schedule('*/15 * * * *', async () => {
+  cron.schedule('*/15 * * * *', stallMonitor.track('automation-sweep', async () => {
     try {
       const results = automationService.runAutomationSweep();
       console.log('[CRON] Automation summary:', JSON.stringify(results));
     } catch (err) {
       console.error('[CRON] Automation failed:', err.message);
     }
-  });
+  }));
 
   // Device action monitor — check Intune for wipe/delete/reset every 5 minutes
-  cron.schedule('*/5 * * * *', async () => {
+  cron.schedule('*/5 * * * *', stallMonitor.track('device-action-check', async () => {
     try {
       await deviceActionMonitor.runDeviceActionCheck();
     } catch (err) {
       console.error('[CRON] Device action monitor failed:', err.message);
     }
-  });
+  }));
 
   // Anomaly detection + alert notifications + webhooks + weekly digests
   // are all owned by jobRunner (initialized in startup)
