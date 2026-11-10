@@ -8,7 +8,33 @@
 // Each stall and slow request is also logged once, so App Service logs show
 // which route or timer was active when it happened.
 
-const { monitorEventLoopDelay } = require('perf_hooks');
+const { monitorEventLoopDelay, PerformanceObserver } = require('perf_hooks');
+const v8 = require('v8');
+
+// Garbage-collection time, summed from V8's own gc performance entries. A stall
+// that ran no job and no request but spent most of its time in GC means the heap
+// is too full (a leak or an oversized cache), not that some code looped.
+function createGcMeter() {
+  const total = { count: 0, ms: 0, maxPauseMs: 0 };
+  let obs = null;
+  return {
+    start() {
+      if (obs) return;
+      try {
+        obs = new PerformanceObserver((list) => {
+          for (const e of list.getEntries()) {
+            total.count += 1;
+            total.ms += e.duration;
+            total.maxPauseMs = Math.max(total.maxPauseMs, e.duration);
+          }
+        });
+        obs.observe({ entryTypes: ['gc'] });
+      } catch { obs = null; }
+    },
+    stop() { if (obs) obs.disconnect(); obs = null; },
+    read() { return { ...total }; },
+  };
+}
 
 const DEFAULTS = {
   intervalMs: 500,          // heartbeat period
@@ -28,6 +54,18 @@ function createStallMonitor(opts = {}) {
   // such as the /home network share, or the host paused or swapped it).
   const cpuUsage = opts.cpuUsage || (() => process.cpuUsage());
   const memoryUsage = opts.memoryUsage || (() => process.memoryUsage());
+  const heapLimit = opts.heapLimit || (() => v8.getHeapStatistics().heap_size_limit);
+  const gc = opts.gcMeter || createGcMeter();
+  let lastGcMs = 0;
+  const mb = (n) => (Number.isFinite(n) ? Math.round(n / 1048576) : null);
+  function memory() {
+    try {
+      const u = memoryUsage();
+      let limit = null;
+      try { limit = heapLimit(); } catch { limit = null; }
+      return { rssMb: mb(u.rss), heapUsedMb: mb(u.heapUsed), heapLimitMb: mb(limit) };
+    } catch { return { rssMb: null, heapUsedMb: null, heapLimitMb: null }; }
+  }
   const cpuNow = () => { const u = cpuUsage(); return (u.user + u.system) / 1000; };
   let lastCpuMs = 0;
   const stalls = [];
@@ -57,12 +95,13 @@ function createStallMonitor(opts = {}) {
   }
 
   function rolling(t) {
-    const out = { stalls: 0, worstStallMs: 0, slow: 0, kinds: { cpu: 0, idle: 0 } };
+    const out = { stalls: 0, worstStallMs: 0, slow: 0, kinds: { cpu: 0, idle: 0 }, gcMs: 0, stallMs: 0 };
     for (const [k, b] of buckets) {
       if (!inWindow(k, t)) continue;
       out.stalls += b.stalls; out.slow += b.slow;
       if (b.kinds) { out.kinds.cpu += b.kinds.cpu; out.kinds.idle += b.kinds.idle; }
       out.worstStallMs = Math.max(out.worstStallMs, b.worstStallMs);
+      out.gcMs += b.gcMs || 0; out.stallMs += b.stallMs || 0;
     }
     return out;
   }
@@ -77,6 +116,8 @@ function createStallMonitor(opts = {}) {
     const t = now();
     let cpuMs_ = lastCpuMs;
     try { cpuMs_ = cpuNow(); } catch { /* keep the last reading */ }
+    let gcNow = lastGcMs;
+    try { gcNow = gc.read().ms; } catch { /* keep the last reading */ }
     const lateMs = t - expected;
     if (expected && lateMs > cfg.stallMs) {
       const active = [...new Set([
@@ -90,14 +131,17 @@ function createStallMonitor(opts = {}) {
       const cpuMs = Math.max(0, Math.round(cpuMs_ - lastCpuMs));
       const busy = cpuMs / Math.max(1, lateMs + cfg.intervalMs);
       const kind = busy >= 0.5 ? 'cpu' : 'idle';
-      let rssMb = null;
-      try { rssMb = Math.round(memoryUsage().rss / 1048576); } catch { rssMb = null; }
-      push(stalls, { at: new Date(t).toISOString(), lateMs, cpuMs, kind, rssMb, active });
+      const { rssMb, heapUsedMb, heapLimitMb } = memory();
+      const gcMs = Math.max(0, Math.round(gcNow - lastGcMs));
+      push(stalls, { at: new Date(t).toISOString(), lateMs, cpuMs, gcMs, kind, rssMb, heapUsedMb, heapLimitMb, active });
       b.kinds = b.kinds || { cpu: 0, idle: 0 };
       b.kinds[kind] += 1;
-      log(`[stall-monitor] event loop blocked ${lateMs}ms (${kind}, cpu ${cpuMs}ms, rss ${rssMb}MB); in-flight: ${active.join(', ') || 'none'}`);
+      b.gcMs = (b.gcMs || 0) + gcMs;
+      b.stallMs = (b.stallMs || 0) + lateMs;
+      log(`[stall-monitor] event loop blocked ${lateMs}ms (${kind}, cpu ${cpuMs}ms, gc ${gcMs}ms, rss ${rssMb}MB, heap ${heapUsedMb}/${heapLimitMb}MB); in-flight: ${active.join(', ') || 'none'}`);
     }
     lastCpuMs = cpuMs_;
+    lastGcMs = gcNow;
     blamed = [];
     expected = t + cfg.intervalMs;
   }
@@ -106,6 +150,7 @@ function createStallMonitor(opts = {}) {
     if (timer) return;
     expected = now() + cfg.intervalMs;
     try { lastCpuMs = cpuNow(); } catch { lastCpuMs = 0; }
+    try { gc.start(); lastGcMs = gc.read().ms; } catch { lastGcMs = 0; }
     timer = setInterval(tick, cfg.intervalMs);
     timer.unref();
     try {
@@ -118,6 +163,7 @@ function createStallMonitor(opts = {}) {
     if (timer) clearInterval(timer);
     timer = null;
     if (histogram) histogram.disable();
+    try { gc.stop(); } catch { /* already stopped */ }
   }
 
   // Route labels never carry request values. Before routing, only the first two
@@ -209,6 +255,10 @@ function createStallMonitor(opts = {}) {
       stalls24h: roll.stalls,
       worstStallMs: roll.worstStallMs,
       stallKinds24h: roll.kinds,
+      // Share of stalled time spent in garbage collection: near 1 means a full heap.
+      stallGcShare24h: roll.stallMs ? Math.round((roll.gcMs / roll.stallMs) * 100) / 100 : null,
+      memory: memory(),
+      gc: (() => { try { const g = gc.read(); return { count: g.count, totalMs: Math.round(g.ms), maxPauseMs: Math.round(g.maxPauseMs) }; } catch { return null; } })(),
       lastStall: r.length ? r[r.length - 1] : null,
       slowRequests24h: roll.slow,
       lastSlowRequest: slow.length ? slow[slow.length - 1] : null,
@@ -228,4 +278,4 @@ function getStallMonitor() {
   return shared;
 }
 
-module.exports = { createStallMonitor, getStallMonitor };
+module.exports = { createStallMonitor, getStallMonitor, createGcMeter };

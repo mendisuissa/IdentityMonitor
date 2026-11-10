@@ -203,7 +203,7 @@ test('a stall records the CPU spent and calls it cpu or idle (#105)', () => {
   assert.strictEqual(s.lastStall.kind, 'idle');
   assert.strictEqual(s.lastStall.cpuMs, 50);
   assert.deepStrictEqual(s.stallKinds24h, { cpu: 1, idle: 1 });
-  assert.ok(logs.some((l) => l.includes('(idle, cpu 50ms, rss 300MB)')));
+  assert.ok(logs.some((l) => l.includes('(idle, cpu 50ms, gc 0ms, rss 300MB')));
 });
 
 test('a failing CPU or memory reading never breaks the heartbeat', () => {
@@ -212,6 +212,8 @@ test('a failing CPU or memory reading never breaks the heartbeat', () => {
     now: c.now, log: () => {},
     cpuUsage: () => { throw new Error('no cpu'); },
     memoryUsage: () => { throw new Error('no mem'); },
+    heapLimit: () => { throw new Error('no heap'); },
+    gcMeter: { start() { throw new Error('no gc'); }, stop() { throw new Error('no gc'); }, read() { throw new Error('no gc'); } },
   });
   m.tick();
   c.advance(3000);
@@ -219,5 +221,51 @@ test('a failing CPU or memory reading never breaks the heartbeat', () => {
   const s = m.snapshot();
   assert.strictEqual(s.stalls24h, 1);
   assert.strictEqual(s.lastStall.rssMb, null);
+  assert.strictEqual(s.lastStall.heapUsedMb, null);
+  assert.strictEqual(s.lastStall.gcMs, 0);
+  assert.strictEqual(s.gc, null);
   assert.strictEqual(s.lastStall.kind, 'idle');
+});
+
+// #105: CPU stalls with no job or request active, at 1.4 GB RSS, point at GC.
+// Each stall must say how much of it was garbage collection and how full the heap was.
+test('a stall records GC time and heap use, and the snapshot gives the GC share', () => {
+  const c = clock();
+  let gcMs = 0;
+  const gcMeter = { start() {}, stop() {}, read: () => ({ count: 3, ms: gcMs, maxPauseMs: 2500 }) };
+  const m = createStallMonitor({
+    now: c.now, log: () => {}, gcMeter,
+    cpuUsage: () => ({ user: 0, system: 0 }),
+    memoryUsage: () => ({ rss: 1500 * 1048576, heapUsed: 1400 * 1048576 }),
+    heapLimit: () => 1450 * 1048576,
+  });
+  m.tick();
+  c.advance(3500); gcMs = 2700; m.tick();     // 3000ms late, 2700ms of it in GC
+  const s = m.snapshot();
+  assert.strictEqual(s.lastStall.gcMs, 2700);
+  assert.strictEqual(s.lastStall.heapUsedMb, 1400);
+  assert.strictEqual(s.lastStall.heapLimitMb, 1450);
+  assert.strictEqual(s.stallGcShare24h, 0.9);
+  assert.deepStrictEqual(s.memory, { rssMb: 1500, heapUsedMb: 1400, heapLimitMb: 1450 });
+  assert.deepStrictEqual(s.gc, { count: 3, totalMs: 2700, maxPauseMs: 2500 });
+});
+
+test('GC time before a stall window is not blamed on the stall', () => {
+  const c = clock();
+  let gcMs = 500;
+  const gcMeter = { start() {}, stop() {}, read: () => ({ count: 1, ms: gcMs, maxPauseMs: 500 }) };
+  const m = createStallMonitor({ now: c.now, log: () => {}, gcMeter });
+  m.tick();                               // baseline reads 500ms
+  c.advance(500); m.tick();               // on time
+  c.advance(3500); gcMs = 600; m.tick();  // stall with 100ms of new GC
+  assert.strictEqual(m.snapshot().lastStall.gcMs, 100);
+});
+
+test('the real GC meter starts, reads and stops without throwing', () => {
+  const { createGcMeter } = require('../src/services/stallMonitor');
+  const g = createGcMeter();
+  g.start();
+  const r = g.read();
+  assert.ok(Number.isFinite(r.ms) && Number.isFinite(r.count));
+  g.stop();
 });
