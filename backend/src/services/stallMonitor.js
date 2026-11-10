@@ -8,7 +8,37 @@
 // Each stall and slow request is also logged once, so App Service logs show
 // which route or timer was active when it happened.
 
-const { monitorEventLoopDelay } = require('perf_hooks');
+const { monitorEventLoopDelay, PerformanceObserver } = require('perf_hooks');
+const v8 = require('v8');
+
+// Garbage-collection time from V8's own gc performance entries. A stall that ran
+// no job and no request but spent most of its time in GC means the heap is too
+// full (a leak or an oversized cache), not that some code looped.
+// Each entry is passed on with its own wall-clock window, so the monitor can
+// attribute it to the stall it overlapped even when V8 delivers it late.
+function createGcMeter() {
+  const total = { count: 0, ms: 0, maxPauseMs: 0 };
+  let obs = null;
+  return {
+    start(onEntry) {
+      if (obs) return;
+      try {
+        const { performance } = require('perf_hooks');
+        obs = new PerformanceObserver((list) => {
+          for (const e of list.getEntries()) {
+            total.count += 1;
+            total.ms += e.duration;
+            total.maxPauseMs = Math.max(total.maxPauseMs, e.duration);
+            if (onEntry) onEntry({ startMs: performance.timeOrigin + e.startTime, durationMs: e.duration });
+          }
+        });
+        obs.observe({ entryTypes: ['gc'] });
+      } catch { obs = null; }
+    },
+    stop() { if (obs) obs.disconnect(); obs = null; },
+    read() { return { ...total }; },
+  };
+}
 
 const DEFAULTS = {
   intervalMs: 500,          // heartbeat period
@@ -28,6 +58,46 @@ function createStallMonitor(opts = {}) {
   // such as the /home network share, or the host paused or swapped it).
   const cpuUsage = opts.cpuUsage || (() => process.cpuUsage());
   const memoryUsage = opts.memoryUsage || (() => process.memoryUsage());
+  const heapLimit = opts.heapLimit || (() => v8.getHeapStatistics().heap_size_limit);
+  const gc = opts.gcMeter || createGcMeter();
+  // GC is attributed by overlap with each stall's late window [expected, t], so
+  // the GC share is GC-inside-stalls / stalled time and can never exceed 1.
+  // Entries delivered before the stall's heartbeat wait in recentGc; entries
+  // delivered after it are matched against recent stall windows. Each
+  // (entry, stall) pair is counted once.
+  const GC_KEEP_MS = 10 * 60 * 1000;
+  const recentGc = [];       // { start, end }
+  const stallWindows = [];   // { start, end, rec, b }
+  // Waiting entries are kept until they can no longer overlap the pending late
+  // window, which starts at `expected`, however long the stall runs. A hard cap
+  // bounds memory if the heartbeat never fires.
+  const GC_MAX_ENTRIES = 50000;
+  function pruneGc() {
+    while (recentGc.length && expected && recentGc[0].end < expected) recentGc.shift();
+    while (recentGc.length > GC_MAX_ENTRIES) recentGc.shift();
+  }
+  const overlap = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
+  function onGcEntry({ startMs, durationMs }) {
+    if (!Number.isFinite(startMs) || !Number.isFinite(durationMs)) return;
+    const g = { start: startMs, end: startMs + durationMs };
+    recentGc.push(g);
+    pruneGc();
+    const cutoff = now() - GC_KEEP_MS;
+    while (stallWindows.length && stallWindows[0].end < cutoff) stallWindows.shift();
+    for (const w of stallWindows) {
+      const ms = overlap(w.start, w.end, g.start, g.end);
+      if (ms > 0) { w.raw += ms; w.rec.gcMs = Math.round(w.raw); w.b.gcMs = (w.b.gcMs || 0) + ms; }
+    }
+  }
+  const mb = (n) => (Number.isFinite(n) ? Math.round(n / 1048576) : null);
+  function memory() {
+    try {
+      const u = memoryUsage();
+      let limit = null;
+      try { limit = heapLimit(); } catch { limit = null; }
+      return { rssMb: mb(u.rss), heapUsedMb: mb(u.heapUsed), heapLimitMb: mb(limit) };
+    } catch { return { rssMb: null, heapUsedMb: null, heapLimitMb: null }; }
+  }
   const cpuNow = () => { const u = cpuUsage(); return (u.user + u.system) / 1000; };
   let lastCpuMs = 0;
   const stalls = [];
@@ -57,12 +127,13 @@ function createStallMonitor(opts = {}) {
   }
 
   function rolling(t) {
-    const out = { stalls: 0, worstStallMs: 0, slow: 0, kinds: { cpu: 0, idle: 0 } };
+    const out = { stalls: 0, worstStallMs: 0, slow: 0, kinds: { cpu: 0, idle: 0 }, gcMs: 0, stallMs: 0 };
     for (const [k, b] of buckets) {
       if (!inWindow(k, t)) continue;
       out.stalls += b.stalls; out.slow += b.slow;
       if (b.kinds) { out.kinds.cpu += b.kinds.cpu; out.kinds.idle += b.kinds.idle; }
       out.worstStallMs = Math.max(out.worstStallMs, b.worstStallMs);
+      out.gcMs += b.gcMs || 0; out.stallMs += b.stallMs || 0;
     }
     return out;
   }
@@ -90,22 +161,31 @@ function createStallMonitor(opts = {}) {
       const cpuMs = Math.max(0, Math.round(cpuMs_ - lastCpuMs));
       const busy = cpuMs / Math.max(1, lateMs + cfg.intervalMs);
       const kind = busy >= 0.5 ? 'cpu' : 'idle';
-      let rssMb = null;
-      try { rssMb = Math.round(memoryUsage().rss / 1048576); } catch { rssMb = null; }
-      push(stalls, { at: new Date(t).toISOString(), lateMs, cpuMs, kind, rssMb, active });
+      const { rssMb, heapUsedMb, heapLimitMb } = memory();
+      const win = { start: expected, end: t };
+      let gcSoFar = 0;
+      for (const g of recentGc) gcSoFar += overlap(win.start, win.end, g.start, g.end);
+      const rec = { at: new Date(t).toISOString(), lateMs, cpuMs, gcMs: Math.round(gcSoFar), kind, rssMb, heapUsedMb, heapLimitMb, active };
+      push(stalls, rec);
+      stallWindows.push({ ...win, rec, b, raw: gcSoFar });
       b.kinds = b.kinds || { cpu: 0, idle: 0 };
       b.kinds[kind] += 1;
-      log(`[stall-monitor] event loop blocked ${lateMs}ms (${kind}, cpu ${cpuMs}ms, rss ${rssMb}MB); in-flight: ${active.join(', ') || 'none'}`);
+      b.gcMs = (b.gcMs || 0) + gcSoFar;
+      const gcMs = rec.gcMs;
+      b.stallMs = (b.stallMs || 0) + lateMs;
+      log(`[stall-monitor] event loop blocked ${lateMs}ms (${kind}, cpu ${cpuMs}ms, gc ${gcMs}ms, rss ${rssMb}MB, heap ${heapUsedMb}/${heapLimitMb}MB); in-flight: ${active.join(', ') || 'none'}`);
     }
     lastCpuMs = cpuMs_;
     blamed = [];
     expected = t + cfg.intervalMs;
+    pruneGc();
   }
 
   function start() {
     if (timer) return;
     expected = now() + cfg.intervalMs;
     try { lastCpuMs = cpuNow(); } catch { lastCpuMs = 0; }
+    try { gc.start(onGcEntry); } catch { /* GC attribution stays at 0 */ }
     timer = setInterval(tick, cfg.intervalMs);
     timer.unref();
     try {
@@ -118,6 +198,7 @@ function createStallMonitor(opts = {}) {
     if (timer) clearInterval(timer);
     timer = null;
     if (histogram) histogram.disable();
+    try { gc.stop(); } catch { /* already stopped */ }
   }
 
   // Route labels never carry request values. Before routing, only the first two
@@ -209,6 +290,10 @@ function createStallMonitor(opts = {}) {
       stalls24h: roll.stalls,
       worstStallMs: roll.worstStallMs,
       stallKinds24h: roll.kinds,
+      // Share of stalled time spent in garbage collection: near 1 means a full heap.
+      stallGcShare24h: roll.stallMs ? Math.min(1, Math.round((roll.gcMs / roll.stallMs) * 100) / 100) : null,
+      memory: memory(),
+      gc: (() => { try { const g = gc.read(); return { count: g.count, totalMs: Math.round(g.ms), maxPauseMs: Math.round(g.maxPauseMs) }; } catch { return null; } })(),
       lastStall: r.length ? r[r.length - 1] : null,
       slowRequests24h: roll.slow,
       lastSlowRequest: slow.length ? slow[slow.length - 1] : null,
@@ -218,7 +303,7 @@ function createStallMonitor(opts = {}) {
     };
   }
 
-  return { start, stop, tick, middleware, track, snapshot };
+  return { start, stop, tick, middleware, track, snapshot, onGcEntry };
 }
 
 // One monitor per process, shared by index.js and the job runners.
@@ -228,4 +313,4 @@ function getStallMonitor() {
   return shared;
 }
 
-module.exports = { createStallMonitor, getStallMonitor };
+module.exports = { createStallMonitor, getStallMonitor, createGcMeter };
