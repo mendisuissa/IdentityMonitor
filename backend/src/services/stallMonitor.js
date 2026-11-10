@@ -22,6 +22,14 @@ function createStallMonitor(opts = {}) {
   const cfg = { ...DEFAULTS, ...opts };
   const now = opts.now || (() => Date.now());
   const log = opts.log || ((msg) => console.warn(msg));
+  // CPU and memory readings let a stall say what kind it was: CPU spent during
+  // the late window close to lateMs means JavaScript kept the loop busy; CPU
+  // near zero means the process was not running at all (blocked in sync I/O
+  // such as the /home network share, or the host paused or swapped it).
+  const cpuUsage = opts.cpuUsage || (() => process.cpuUsage());
+  const memoryUsage = opts.memoryUsage || (() => process.memoryUsage());
+  const cpuNow = () => { const u = cpuUsage(); return (u.user + u.system) / 1000; };
+  let lastCpuMs = 0;
   const stalls = [];
   const slow = [];
   const inFlight = new Map();
@@ -49,10 +57,11 @@ function createStallMonitor(opts = {}) {
   }
 
   function rolling(t) {
-    const out = { stalls: 0, worstStallMs: 0, slow: 0 };
+    const out = { stalls: 0, worstStallMs: 0, slow: 0, kinds: { cpu: 0, idle: 0 } };
     for (const [k, b] of buckets) {
       if (!inWindow(k, t)) continue;
       out.stalls += b.stalls; out.slow += b.slow;
+      if (b.kinds) { out.kinds.cpu += b.kinds.cpu; out.kinds.idle += b.kinds.idle; }
       out.worstStallMs = Math.max(out.worstStallMs, b.worstStallMs);
     }
     return out;
@@ -66,6 +75,8 @@ function createStallMonitor(opts = {}) {
   // Called by the heartbeat; exported for tests.
   function tick() {
     const t = now();
+    let cpuMs_ = lastCpuMs;
+    try { cpuMs_ = cpuNow(); } catch { /* keep the last reading */ }
     const lateMs = t - expected;
     if (expected && lateMs > cfg.stallMs) {
       const active = [...new Set([
@@ -76,9 +87,17 @@ function createStallMonitor(opts = {}) {
       const b = bucket(t);
       b.stalls += 1;
       b.worstStallMs = Math.max(b.worstStallMs, lateMs);
-      push(stalls, { at: new Date(t).toISOString(), lateMs, active });
-      log(`[stall-monitor] event loop blocked ${lateMs}ms; in-flight: ${active.join(', ') || 'none'}`);
+      const cpuMs = Math.max(0, Math.round(cpuMs_ - lastCpuMs));
+      const busy = cpuMs / Math.max(1, lateMs + cfg.intervalMs);
+      const kind = busy >= 0.5 ? 'cpu' : 'idle';
+      let rssMb = null;
+      try { rssMb = Math.round(memoryUsage().rss / 1048576); } catch { rssMb = null; }
+      push(stalls, { at: new Date(t).toISOString(), lateMs, cpuMs, kind, rssMb, active });
+      b.kinds = b.kinds || { cpu: 0, idle: 0 };
+      b.kinds[kind] += 1;
+      log(`[stall-monitor] event loop blocked ${lateMs}ms (${kind}, cpu ${cpuMs}ms, rss ${rssMb}MB); in-flight: ${active.join(', ') || 'none'}`);
     }
+    lastCpuMs = cpuMs_;
     blamed = [];
     expected = t + cfg.intervalMs;
   }
@@ -86,6 +105,7 @@ function createStallMonitor(opts = {}) {
   function start() {
     if (timer) return;
     expected = now() + cfg.intervalMs;
+    try { lastCpuMs = cpuNow(); } catch { lastCpuMs = 0; }
     timer = setInterval(tick, cfg.intervalMs);
     timer.unref();
     try {
@@ -188,6 +208,7 @@ function createStallMonitor(opts = {}) {
         : null,
       stalls24h: roll.stalls,
       worstStallMs: roll.worstStallMs,
+      stallKinds24h: roll.kinds,
       lastStall: r.length ? r[r.length - 1] : null,
       slowRequests24h: roll.slow,
       lastSlowRequest: slow.length ? slow[slow.length - 1] : null,
