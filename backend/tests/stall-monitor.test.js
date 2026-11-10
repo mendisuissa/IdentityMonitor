@@ -282,6 +282,29 @@ test('GC delivered after the heartbeat is attributed to the stall it overlapped'
   assert.strictEqual(s.stallGcShare24h, 0.5);
 });
 
+// Codex P2 on 03ea3d5: in a stall longer than ten minutes, GC delivered early must not be pruned.
+test('GC early in a very long stall is still attributed when the heartbeat fires', () => {
+  const c = clock();
+  const m = createStallMonitor({ now: c.now, log: () => {}, gcMeter: { start() {}, stop() {}, read: () => ({ count: 0, ms: 0, maxPauseMs: 0 }) } });
+  const t0 = c.now();
+  m.tick();                                              // window starts t0+500
+  c.advance(11 * 60 * 1000);
+  m.onGcEntry({ startMs: t0 + 1500, durationMs: 60000 }); // delivered 11 minutes in
+  c.advance(60 * 1000); m.tick();                        // 12-minute stall
+  assert.strictEqual(m.snapshot().lastStall.gcMs, 60000);
+});
+
+test('waiting GC entries that end before the pending window are dropped', () => {
+  const c = clock();
+  const m = createStallMonitor({ now: c.now, log: () => {}, gcMeter: { start() {}, stop() {}, read: () => ({ count: 0, ms: 0, maxPauseMs: 0 }) } });
+  const t0 = c.now();
+  m.tick();
+  m.onGcEntry({ startMs: t0 - 5000, durationMs: 100 });  // long before the window
+  c.advance(500); m.tick();                              // on time
+  c.advance(2500); m.tick();                             // stall
+  assert.strictEqual(m.snapshot().lastStall.gcMs, 0);
+});
+
 test('the real GC meter starts, reads and stops without throwing', () => {
   const { createGcMeter } = require('../src/services/stallMonitor');
   const g = createGcMeter();

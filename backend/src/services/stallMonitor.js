@@ -68,13 +68,21 @@ function createStallMonitor(opts = {}) {
   const GC_KEEP_MS = 10 * 60 * 1000;
   const recentGc = [];       // { start, end }
   const stallWindows = [];   // { start, end, rec, b }
+  // Waiting entries are kept until they can no longer overlap the pending late
+  // window, which starts at `expected`, however long the stall runs. A hard cap
+  // bounds memory if the heartbeat never fires.
+  const GC_MAX_ENTRIES = 50000;
+  function pruneGc() {
+    while (recentGc.length && expected && recentGc[0].end < expected) recentGc.shift();
+    while (recentGc.length > GC_MAX_ENTRIES) recentGc.shift();
+  }
   const overlap = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
   function onGcEntry({ startMs, durationMs }) {
     if (!Number.isFinite(startMs) || !Number.isFinite(durationMs)) return;
     const g = { start: startMs, end: startMs + durationMs };
     recentGc.push(g);
+    pruneGc();
     const cutoff = now() - GC_KEEP_MS;
-    while (recentGc.length && recentGc[0].end < cutoff) recentGc.shift();
     while (stallWindows.length && stallWindows[0].end < cutoff) stallWindows.shift();
     for (const w of stallWindows) {
       const ms = overlap(w.start, w.end, g.start, g.end);
@@ -170,6 +178,7 @@ function createStallMonitor(opts = {}) {
     lastCpuMs = cpuMs_;
     blamed = [];
     expected = t + cfg.intervalMs;
+    pruneGc();
   }
 
   function start() {
