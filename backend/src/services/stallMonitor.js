@@ -11,21 +11,25 @@
 const { monitorEventLoopDelay, PerformanceObserver } = require('perf_hooks');
 const v8 = require('v8');
 
-// Garbage-collection time, summed from V8's own gc performance entries. A stall
-// that ran no job and no request but spent most of its time in GC means the heap
-// is too full (a leak or an oversized cache), not that some code looped.
+// Garbage-collection time from V8's own gc performance entries. A stall that ran
+// no job and no request but spent most of its time in GC means the heap is too
+// full (a leak or an oversized cache), not that some code looped.
+// Each entry is passed on with its own wall-clock window, so the monitor can
+// attribute it to the stall it overlapped even when V8 delivers it late.
 function createGcMeter() {
   const total = { count: 0, ms: 0, maxPauseMs: 0 };
   let obs = null;
   return {
-    start() {
+    start(onEntry) {
       if (obs) return;
       try {
+        const { performance } = require('perf_hooks');
         obs = new PerformanceObserver((list) => {
           for (const e of list.getEntries()) {
             total.count += 1;
             total.ms += e.duration;
             total.maxPauseMs = Math.max(total.maxPauseMs, e.duration);
+            if (onEntry) onEntry({ startMs: performance.timeOrigin + e.startTime, durationMs: e.duration });
           }
         });
         obs.observe({ entryTypes: ['gc'] });
@@ -56,7 +60,27 @@ function createStallMonitor(opts = {}) {
   const memoryUsage = opts.memoryUsage || (() => process.memoryUsage());
   const heapLimit = opts.heapLimit || (() => v8.getHeapStatistics().heap_size_limit);
   const gc = opts.gcMeter || createGcMeter();
-  let lastGcMs = 0;
+  // GC is attributed by overlap with each stall's late window [expected, t], so
+  // the GC share is GC-inside-stalls / stalled time and can never exceed 1.
+  // Entries delivered before the stall's heartbeat wait in recentGc; entries
+  // delivered after it are matched against recent stall windows. Each
+  // (entry, stall) pair is counted once.
+  const GC_KEEP_MS = 10 * 60 * 1000;
+  const recentGc = [];       // { start, end }
+  const stallWindows = [];   // { start, end, rec, b }
+  const overlap = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
+  function onGcEntry({ startMs, durationMs }) {
+    if (!Number.isFinite(startMs) || !Number.isFinite(durationMs)) return;
+    const g = { start: startMs, end: startMs + durationMs };
+    recentGc.push(g);
+    const cutoff = now() - GC_KEEP_MS;
+    while (recentGc.length && recentGc[0].end < cutoff) recentGc.shift();
+    while (stallWindows.length && stallWindows[0].end < cutoff) stallWindows.shift();
+    for (const w of stallWindows) {
+      const ms = overlap(w.start, w.end, g.start, g.end);
+      if (ms > 0) { w.raw += ms; w.rec.gcMs = Math.round(w.raw); w.b.gcMs = (w.b.gcMs || 0) + ms; }
+    }
+  }
   const mb = (n) => (Number.isFinite(n) ? Math.round(n / 1048576) : null);
   function memory() {
     try {
@@ -116,8 +140,6 @@ function createStallMonitor(opts = {}) {
     const t = now();
     let cpuMs_ = lastCpuMs;
     try { cpuMs_ = cpuNow(); } catch { /* keep the last reading */ }
-    let gcNow = lastGcMs;
-    try { gcNow = gc.read().ms; } catch { /* keep the last reading */ }
     const lateMs = t - expected;
     if (expected && lateMs > cfg.stallMs) {
       const active = [...new Set([
@@ -132,16 +154,20 @@ function createStallMonitor(opts = {}) {
       const busy = cpuMs / Math.max(1, lateMs + cfg.intervalMs);
       const kind = busy >= 0.5 ? 'cpu' : 'idle';
       const { rssMb, heapUsedMb, heapLimitMb } = memory();
-      const gcMs = Math.max(0, Math.round(gcNow - lastGcMs));
-      push(stalls, { at: new Date(t).toISOString(), lateMs, cpuMs, gcMs, kind, rssMb, heapUsedMb, heapLimitMb, active });
+      const win = { start: expected, end: t };
+      let gcSoFar = 0;
+      for (const g of recentGc) gcSoFar += overlap(win.start, win.end, g.start, g.end);
+      const rec = { at: new Date(t).toISOString(), lateMs, cpuMs, gcMs: Math.round(gcSoFar), kind, rssMb, heapUsedMb, heapLimitMb, active };
+      push(stalls, rec);
+      stallWindows.push({ ...win, rec, b, raw: gcSoFar });
       b.kinds = b.kinds || { cpu: 0, idle: 0 };
       b.kinds[kind] += 1;
-      b.gcMs = (b.gcMs || 0) + gcMs;
+      b.gcMs = (b.gcMs || 0) + gcSoFar;
+      const gcMs = rec.gcMs;
       b.stallMs = (b.stallMs || 0) + lateMs;
       log(`[stall-monitor] event loop blocked ${lateMs}ms (${kind}, cpu ${cpuMs}ms, gc ${gcMs}ms, rss ${rssMb}MB, heap ${heapUsedMb}/${heapLimitMb}MB); in-flight: ${active.join(', ') || 'none'}`);
     }
     lastCpuMs = cpuMs_;
-    lastGcMs = gcNow;
     blamed = [];
     expected = t + cfg.intervalMs;
   }
@@ -150,7 +176,7 @@ function createStallMonitor(opts = {}) {
     if (timer) return;
     expected = now() + cfg.intervalMs;
     try { lastCpuMs = cpuNow(); } catch { lastCpuMs = 0; }
-    try { gc.start(); lastGcMs = gc.read().ms; } catch { lastGcMs = 0; }
+    try { gc.start(onGcEntry); } catch { /* GC attribution stays at 0 */ }
     timer = setInterval(tick, cfg.intervalMs);
     timer.unref();
     try {
@@ -256,7 +282,7 @@ function createStallMonitor(opts = {}) {
       worstStallMs: roll.worstStallMs,
       stallKinds24h: roll.kinds,
       // Share of stalled time spent in garbage collection: near 1 means a full heap.
-      stallGcShare24h: roll.stallMs ? Math.round((roll.gcMs / roll.stallMs) * 100) / 100 : null,
+      stallGcShare24h: roll.stallMs ? Math.min(1, Math.round((roll.gcMs / roll.stallMs) * 100) / 100) : null,
       memory: memory(),
       gc: (() => { try { const g = gc.read(); return { count: g.count, totalMs: Math.round(g.ms), maxPauseMs: Math.round(g.maxPauseMs) }; } catch { return null; } })(),
       lastStall: r.length ? r[r.length - 1] : null,
@@ -268,7 +294,7 @@ function createStallMonitor(opts = {}) {
     };
   }
 
-  return { start, stop, tick, middleware, track, snapshot };
+  return { start, stop, tick, middleware, track, snapshot, onGcEntry };
 }
 
 // One monitor per process, shared by index.js and the job runners.

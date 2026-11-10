@@ -231,34 +231,55 @@ test('a failing CPU or memory reading never breaks the heartbeat', () => {
 // Each stall must say how much of it was garbage collection and how full the heap was.
 test('a stall records GC time and heap use, and the snapshot gives the GC share', () => {
   const c = clock();
-  let gcMs = 0;
-  const gcMeter = { start() {}, stop() {}, read: () => ({ count: 3, ms: gcMs, maxPauseMs: 2500 }) };
+  const gcMeter = { start() {}, stop() {}, read: () => ({ count: 1, ms: 2700, maxPauseMs: 2700 }) };
   const m = createStallMonitor({
     now: c.now, log: () => {}, gcMeter,
     cpuUsage: () => ({ user: 0, system: 0 }),
     memoryUsage: () => ({ rss: 1500 * 1048576, heapUsed: 1400 * 1048576 }),
     heapLimit: () => 1450 * 1048576,
   });
-  m.tick();
-  c.advance(3500); gcMs = 2700; m.tick();     // 3000ms late, 2700ms of it in GC
+  const t0 = c.now();
+  m.tick();                                            // expects the next beat at t0+500
+  m.onGcEntry({ startMs: t0 + 600, durationMs: 2700 }); // GC inside the late window, delivered first
+  c.advance(3500); m.tick();                           // 3000ms late
   const s = m.snapshot();
   assert.strictEqual(s.lastStall.gcMs, 2700);
   assert.strictEqual(s.lastStall.heapUsedMb, 1400);
   assert.strictEqual(s.lastStall.heapLimitMb, 1450);
   assert.strictEqual(s.stallGcShare24h, 0.9);
   assert.deepStrictEqual(s.memory, { rssMb: 1500, heapUsedMb: 1400, heapLimitMb: 1450 });
-  assert.deepStrictEqual(s.gc, { count: 3, totalMs: 2700, maxPauseMs: 2500 });
+  assert.deepStrictEqual(s.gc, { count: 1, totalMs: 2700, maxPauseMs: 2700 });
 });
 
-test('GC time before a stall window is not blamed on the stall', () => {
+// Codex P2 on fb1f7d0: GC before the late window must not count, so the share stays <= 1.
+test('GC before the late window is not blamed on the stall', () => {
   const c = clock();
-  let gcMs = 500;
-  const gcMeter = { start() {}, stop() {}, read: () => ({ count: 1, ms: gcMs, maxPauseMs: 500 }) };
-  const m = createStallMonitor({ now: c.now, log: () => {}, gcMeter });
-  m.tick();                               // baseline reads 500ms
-  c.advance(500); m.tick();               // on time
-  c.advance(3500); gcMs = 600; m.tick();  // stall with 100ms of new GC
-  assert.strictEqual(m.snapshot().lastStall.gcMs, 100);
+  const m = createStallMonitor({ now: c.now, log: () => {}, gcMeter: { start() {}, stop() {}, read: () => ({ count: 0, ms: 0, maxPauseMs: 0 }) } });
+  const t0 = c.now();
+  m.tick();                                             // late window starts at t0+500
+  m.onGcEntry({ startMs: t0 + 100, durationMs: 300 });  // entirely before the window
+  m.onGcEntry({ startMs: t0 + 400, durationMs: 300 });  // 200ms inside the window
+  c.advance(1700); m.tick();                            // 1200ms late
+  const s = m.snapshot();
+  assert.strictEqual(s.lastStall.gcMs, 200);
+  assert.ok(s.stallGcShare24h <= 1);
+  assert.strictEqual(s.stallGcShare24h, 0.17);
+});
+
+// Codex P2 on fb1f7d0: a GC entry delivered after the overdue heartbeat still counts.
+test('GC delivered after the heartbeat is attributed to the stall it overlapped', () => {
+  const c = clock();
+  const m = createStallMonitor({ now: c.now, log: () => {}, gcMeter: { start() {}, stop() {}, read: () => ({ count: 0, ms: 0, maxPauseMs: 0 }) } });
+  const t0 = c.now();
+  m.tick();
+  c.advance(2500); m.tick();                            // stall window t0+500 .. t0+2500
+  assert.strictEqual(m.snapshot().lastStall.gcMs, 0);
+  m.onGcEntry({ startMs: t0 + 1000, durationMs: 1000 }); // delivered late
+  c.advance(500); m.tick();                             // on time: does not absorb it
+  const s = m.snapshot();
+  assert.strictEqual(s.stalls24h, 1);
+  assert.strictEqual(s.lastStall.gcMs, 1000);
+  assert.strictEqual(s.stallGcShare24h, 0.5);
 });
 
 test('the real GC meter starts, reads and stops without throwing', () => {
