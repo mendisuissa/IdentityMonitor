@@ -213,7 +213,7 @@ app.get('/api/health', (req, res) => {
   const m = stallMonitor.snapshot();
   res.json({
     ok: true, status: 'ok', service: 'identity-monitor', timestamp: new Date().toISOString(), version: require('../package.json').version,
-    stalls: { since: m.since, eventLoop: m.eventLoop, stalls24h: m.stalls24h, worstStallMs: m.worstStallMs, slowRequests24h: m.slowRequests24h, inFlight: m.inFlight, oldestInFlightMs: m.oldestInFlightMs },
+    stalls: { since: m.since, eventLoop: m.eventLoop, stalls24h: m.stalls24h, worstStallMs: m.worstStallMs, stallKinds24h: m.stallKinds24h, slowRequests24h: m.slowRequests24h, inFlight: m.inFlight, oldestInFlightMs: m.oldestInFlightMs },
   });
 });
 

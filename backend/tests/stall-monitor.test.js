@@ -181,3 +181,43 @@ test('the shared monitor is one instance per process', () => {
   const { getStallMonitor } = require('../src/services/stallMonitor');
   assert.strictEqual(getStallMonitor(), getStallMonitor());
 });
+
+test('a stall records the CPU spent and calls it cpu or idle (#105)', () => {
+  const c = clock();
+  let cpuUs = 0;
+  const logs = [];
+  const m = createStallMonitor({
+    now: c.now, log: (x) => logs.push(x), intervalMs: 500, stallMs: 1000,
+    cpuUsage: () => ({ user: cpuUs, system: 0 }),
+    memoryUsage: () => ({ rss: 300 * 1048576 }),
+  });
+  m.tick();
+  c.advance(4500); cpuUs += 4400 * 1000; m.tick();   // 4000ms late, busy the whole time
+  let s = m.snapshot();
+  assert.strictEqual(s.lastStall.kind, 'cpu');
+  assert.strictEqual(s.lastStall.cpuMs, 4400);
+  assert.strictEqual(s.lastStall.rssMb, 300);
+  c.advance(500); cpuUs += 10 * 1000; m.tick();      // on time: no stall, CPU baseline moves
+  c.advance(6500); cpuUs += 50 * 1000; m.tick();     // 6000ms late, almost no CPU
+  s = m.snapshot();
+  assert.strictEqual(s.lastStall.kind, 'idle');
+  assert.strictEqual(s.lastStall.cpuMs, 50);
+  assert.deepStrictEqual(s.stallKinds24h, { cpu: 1, idle: 1 });
+  assert.ok(logs.some((l) => l.includes('(idle, cpu 50ms, rss 300MB)')));
+});
+
+test('a failing CPU or memory reading never breaks the heartbeat', () => {
+  const c = clock();
+  const m = createStallMonitor({
+    now: c.now, log: () => {},
+    cpuUsage: () => { throw new Error('no cpu'); },
+    memoryUsage: () => { throw new Error('no mem'); },
+  });
+  m.tick();
+  c.advance(3000);
+  assert.doesNotThrow(() => m.tick());
+  const s = m.snapshot();
+  assert.strictEqual(s.stalls24h, 1);
+  assert.strictEqual(s.lastStall.rssMb, null);
+  assert.strictEqual(s.lastStall.kind, 'idle');
+});
