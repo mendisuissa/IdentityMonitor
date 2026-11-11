@@ -4,15 +4,23 @@ const crypto = require('crypto');
 const ALGORITHM = 'aes-256-gcm';
 const PREFIX    = 'enc:v1:';
 
+// #105: scryptSync costs ~40 ms of CPU and a 16 MB off-heap buffer per call. It ran on every
+// encrypt/decrypt, and a burst of settings reads (one per open alert in the automation sweep)
+// turned it into multi-minute event-loop stalls. The key only changes with ENCRYPTION_KEY, so
+// it is derived once per value.
+let _keyCache = { raw: null, key: null };
+
 function getKey() {
   const raw = process.env.ENCRYPTION_KEY || '';
   if (!raw) {
     throw new Error('ENCRYPTION_KEY environment variable is not set. Cannot encrypt/decrypt secrets.');
   }
-  if (/^[0-9a-f]{64}$/i.test(raw)) {
-    return Buffer.from(raw, 'hex');
-  }
-  return crypto.scryptSync(raw, 'identitymonitor-salt-v1', 32);
+  if (_keyCache.raw === raw) return _keyCache.key;
+  const key = /^[0-9a-f]{64}$/i.test(raw)
+    ? Buffer.from(raw, 'hex')
+    : crypto.scryptSync(raw, 'identitymonitor-salt-v1', 32);
+  _keyCache = { raw, key };
+  return key;
 }
 
 function encrypt(plaintext) {
