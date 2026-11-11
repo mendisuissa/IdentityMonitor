@@ -81,7 +81,37 @@ async function getAlerts(tenantId, filters = {}) {
     results.push(unflattenFromTable(entity));
   }
 
-  return results.sort((a, b) => new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime());
+  return sortByDetectedAtDesc(results);
+}
+
+// Newest first. Each timestamp is parsed once: a comparator that builds two Dates per
+// comparison made this sort the longest synchronous slice in the process (#105).
+function sortByDetectedAtDesc(alerts) {
+  const keyed = alerts.map(a => {
+    const t = Date.parse(a?.detectedAt);
+    return { t: Number.isFinite(t) ? t : NaN, a };
+  });
+  keyed.sort((x, y) => {
+    const xn = Number.isNaN(x.t), yn = Number.isNaN(y.t);
+    if (xn || yn) return xn === yn ? 0 : xn ? 1 : -1; // undated rows last, as before (NaN kept order)
+    return y.t - x.t;
+  });
+  return keyed.map(k => k.a);
+}
+
+// One alert by id, or null. A point read on PartitionKey + RowKey: its cost does not grow with
+// the tenant's alert history, unlike getAlerts (#105).
+async function getAlert(tenantId, alertId) {
+  if (!alertId) return null;
+  const client = getClient(TABLES.ALERTS);
+  const rowKey = String(alertId).replace(/[^a-zA-Z0-9_-]/g, '_');
+  try {
+    const entity = await client.getEntity(tenantId || 'default', rowKey);
+    return unflattenFromTable(entity);
+  } catch (err) {
+    if (err && err.statusCode === 404) return null;
+    throw err;
+  }
 }
 
 async function updateAlertStatus(tenantId, alertId, status, resolvedBy) {
@@ -383,7 +413,7 @@ async function eraseAllTenantData(tenantId) {
 
 module.exports = {
   initTables,
-  saveAlert, getAlerts, updateAlertStatus,
+  saveAlert, getAlerts, getAlert, sortByDetectedAtDesc, updateAlertStatus,
   getBaseline, saveBaseline,
   getSeenCves, saveSeenCves, markCveAlertSent, getLastCveAlertAt,
   saveWebhookSubscription, getWebhookSubscriptions, deleteWebhookSubscription,

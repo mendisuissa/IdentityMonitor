@@ -34,16 +34,23 @@ function add(alert) {
 
 function exists(id) { return alerts.has(id); }
 
+// Caches an alert that is already stored in Azure, without writing it again. The scan uses this
+// when its duplicate check finds a row, so the same sign-in is not looked up every cycle (#105).
+function remember(alert) {
+  if (!alert || !alert.id || alerts.has(alert.id)) return;
+  alerts.set(alert.id, { ...alert });
+}
+
 function getAll(tenantId) {
   // Trigger lazy load if not yet loaded
   if (tenantId && !_loaded.has(tenantId)) {
     loadFromAzure(tenantId).catch(() => {});
   }
-  const all = Array.from(alerts.values()).sort(
-    (a, b) => new Date(b.detectedAt) - new Date(a.detectedAt)
-  );
-  if (tenantId) return all.filter(a => a.tenantId === tenantId);
-  return all;
+  // Filter before sorting, and parse each date once (#105): this used to sort every tenant's
+  // alerts with two Date objects per comparison on every call.
+  const rows = [];
+  for (const a of alerts.values()) if (!tenantId || a.tenantId === tenantId) rows.push(a);
+  return tableStorage.sortByDetectedAtDesc(rows);
 }
 
 function getByUser(userId, tenantId) { return getAll(tenantId).filter(a => a.userId === userId); }
@@ -88,4 +95,4 @@ function getStats(tenantId) {
   };
 }
 
-module.exports = { add, exists, getAll, getById, getByUser, getOpen, updateStatus, addAction, getStats, loadFromAzure };
+module.exports = { add, exists, remember, getAll, getById, getByUser, getOpen, updateStatus, addAction, getStats, loadFromAzure };

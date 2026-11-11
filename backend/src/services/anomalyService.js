@@ -212,12 +212,19 @@ async function scanUser(tenantId, user, signIns, settings) {
       };
 
       if (!alertsStore.exists(alert.id)) {
-        // Also check Azure Tables to prevent duplicates after restart
+        // Also check Azure Tables to prevent duplicates after restart.
+        // #105: this used to download, parse and sort the tenant's whole alert partition once per
+        // candidate alert, and a row found in Azure was never cached, so every anomalous sign-in
+        // in the 48h window repeated that full read on every 60s cycle. It is a point read now,
+        // and a found row is cached so the next cycle stops at alertsStore.exists().
         const tableStorage = require('./tableStorage');
         let existsInAzure = false;
         try {
-          const existing = await tableStorage.getAlerts(tenantId, {});
-          existsInAzure = existing.some(a => a.id === alert.id);
+          const stored = await tableStorage.getAlert(tenantId, alert.id);
+          if (stored) {
+            existsInAzure = true;
+            alertsStore.remember({ ...stored, id: alert.id, tenantId: stored.tenantId || tenantId });
+          }
         } catch (e) { /* ignore — proceed with add */ }
 
         if (!existsInAzure) {
