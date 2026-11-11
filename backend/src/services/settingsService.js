@@ -20,12 +20,21 @@ function decryptNotificationSecrets(settings) {
 
 const _cache = new Map();
 const CACHE_TTL = 60 * 1000;
+// #105: one Azure read per tenant at a time. Without this, every getSettings call made while the
+// entry was expired started its own read (and its own decrypt), so a sweep over N open alerts
+// queued ~3N reads whose completions then blocked the event loop for minutes.
+const _inFlight = new Map();
 
 function _cacheGet(tenantId) {
   const entry = _cache.get(tenantId);
   if (!entry) return null;
-  if (Date.now() > entry.expiresAt) { _cache.delete(tenantId); return null; }
+  if (Date.now() > entry.expiresAt) return null; // expired; kept for _cacheStale until refreshed
   return entry.data;
+}
+// The last settings loaded for the tenant, even if expired (null if never loaded).
+function _cacheStale(tenantId) {
+  const entry = _cache.get(tenantId);
+  return entry ? entry.data : null;
 }
 function _cacheSet(tenantId, data) { _cache.set(tenantId, { data, expiresAt: Date.now() + CACHE_TTL }); }
 
@@ -75,8 +84,12 @@ async function _fetchAndCache(tenantId) {
       return fetched;
     }
   } catch (err) { console.warn('[Settings] Azure fetch failed:', err.message); }
-  // Only set defaults if nothing else has populated the cache in the meantime
+  // Only set defaults if nothing else has populated the cache in the meantime. A failed refresh
+  // of an expired entry keeps the last loaded settings for another TTL instead of resetting the
+  // tenant to defaults.
   if (!_cacheGet(tenantId)) {
+    const stale = _cacheStale(tenantId);
+    if (stale) { _cacheSet(tenantId, stale); return stale; }
     const def = defaultSettings(tenantId);
     _cacheSet(tenantId, def);
     return def;
@@ -84,21 +97,32 @@ async function _fetchAndCache(tenantId) {
   return _cacheGet(tenantId);
 }
 
+// Sync read. On an expired entry it returns the last loaded settings while one refresh runs
+// (it used to return free-plan defaults until the read came back); defaults only before the
+// tenant's settings were ever loaded.
 function getSettings(tenantId) {
   const cached = _cacheGet(tenantId);
   if (cached) return cached;
-  _fetchAndCache(tenantId).catch(() => {});
-  return defaultSettings(tenantId);
+  _refresh(tenantId).catch(() => {});
+  return _cacheStale(tenantId) || defaultSettings(tenantId);
 }
 
 async function getSettingsAsync(tenantId) {
   const cached = _cacheGet(tenantId);
   if (cached) return cached;
-  return _fetchAndCache(tenantId);
+  return _refresh(tenantId);
+}
+
+function _refresh(tenantId) {
+  let p = _inFlight.get(tenantId);
+  if (p) return p;
+  p = _fetchAndCache(tenantId).finally(() => { if (_inFlight.get(tenantId) === p) _inFlight.delete(tenantId); });
+  _inFlight.set(tenantId, p);
+  return p;
 }
 
 function saveSettings(tenantId, updates) {
-  const current = _cacheGet(tenantId) || defaultSettings(tenantId);
+  const current = _cacheGet(tenantId) || _cacheStale(tenantId) || defaultSettings(tenantId);
   const merged = deepMerge(current, updates);
   if (merged.workHours && !merged.businessHours) merged.businessHours = merged.workHours;
   merged.tenantId = tenantId; merged.updatedAt = new Date().toISOString();

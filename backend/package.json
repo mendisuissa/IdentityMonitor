@@ -7,7 +7,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test --test-force-exit tests/audit-growth.test.js tests/stall-monitor.test.js tests/scan-duplicate-check.test.js",
+    "test": "node --test --test-force-exit tests/audit-growth.test.js tests/stall-monitor.test.js tests/scan-duplicate-check.test.js tests/settings-cache-stall.test.js",
     "dev": "nodemon src/index.js"
   },
   "dependencies": {
