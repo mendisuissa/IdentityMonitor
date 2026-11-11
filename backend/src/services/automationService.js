@@ -55,133 +55,187 @@ function appendAction(list, action) {
   return [...actions, action];
 }
 
-function enqueueUnique(tenantId, type, uniqueKey, payload) {
-  const existing = notificationCenter.list(tenantId, { limit: 300 }).find(n => n.type === type && n.uniqueKey === uniqueKey);
-  if (existing) return existing;
-  return notificationCenter.enqueue(tenantId, { type, uniqueKey, ...payload });
+// Dedupe is against every key in the tenant's notification store, read once per sweep (#105).
+function enqueueUnique(batch, type, uniqueKey, payload) {
+  return batch.enqueueUnique({ type, uniqueKey, ...payload });
 }
 
-function evaluateTenant(tenantId) {
+// Longest stretch the background sweep runs before yielding to the event loop (#105).
+const SLICE_MS = Number(process.env.AUTOMATION_SWEEP_SLICE_MS) || 20;
+const yieldToLoop = () => new Promise(resolve => setImmediate(resolve));
+
+function startTenant(tenantId) {
   const alerts = alertsStore.getOpen(tenantId);
-  const settings = settingsService.getSettings(tenantId);
-  const now = Date.now();
-  const summary = {
-    tenantId,
-    openAlerts: alerts.length,
-    overdueCases: 0,
-    escalatedCases: 0,
-    pendingApprovals: 0,
-    automationActions: 0,
-    notificationsQueued: 0
+  return {
+    alerts,
+    settings: settingsService.getSettings(tenantId),
+    now: Date.now(),
+    batch: notificationCenter.openBatch(tenantId),
+    summary: {
+      tenantId,
+      openAlerts: alerts.length,
+      overdueCases: 0,
+      escalatedCases: 0,
+      pendingApprovals: 0,
+      automationActions: 0,
+      notificationsQueued: 0
+    }
   };
+}
 
-  for (const alert of alerts) {
-    // The sweep decides escalations from the workflow, so it only handles workflows whose stored
-    // state is loaded; others start loading now and are handled on the next sweep.
-    if (!workflowStore.isWorkflowLoaded(tenantId, alert.id)) continue;
-    let wf = ensureWorkflowDefaults(tenantId, alert);
-    const patch = {};
-    const policyDecision = policyEngine.buildPolicyDecision(tenantId, alert);
-    const dueTs = wf.dueAt ? new Date(wf.dueAt).getTime() : null;
-    const isBreached = !!dueTs && dueTs < now && wf.caseStatus !== 'closed';
-    const nextStep = (wf.approvalSteps || []).find(s => s.status === 'pending');
+function evaluateAlert(tenantId, alert, { settings, now, batch, summary }) {
+  // The sweep decides escalations from the workflow, so it only handles workflows whose stored
+  // state is loaded; others start loading now and are handled on the next sweep.
+  if (!workflowStore.isWorkflowLoaded(tenantId, alert.id)) return;
+  let wf = ensureWorkflowDefaults(tenantId, alert);
+  const patch = {};
+  const policyDecision = policyEngine.buildPolicyDecision(tenantId, alert);
+  const dueTs = wf.dueAt ? new Date(wf.dueAt).getTime() : null;
+  const isBreached = !!dueTs && dueTs < now && wf.caseStatus !== 'closed';
+  const nextStep = (wf.approvalSteps || []).find(s => s.status === 'pending');
 
-    if (policyDecision.suppressed) {
-      patch.caseStatus = 'closed';
-      patch.suppressReason = policyDecision.suppressionRule?.reason || 'Suppressed by policy';
-      patch.approvalStatus = 'approved';
-      patch.notifications = appendAction(wf.notifications, {
-        type: 'suppression',
-        key: `suppress-${alert.id}`,
-        severity: alert.severity,
-        sentAt: new Date().toISOString(),
-        channel: 'workflow',
-        target: 'policy-engine'
-      });
-    }
-
-    if (nextStep) {
-      summary.pendingApprovals += 1;
-      enqueueUnique(tenantId, 'approval', `approval-${alert.id}-${nextStep.step}`, {
-        severity: alert.severity,
-        target: nextStep.role,
-        title: `Approval required · ${alert.anomalyLabel}`,
-        detail: `Step ${nextStep.step} is waiting for ${nextStep.role}`,
-        metadata: { alertId: alert.id, step: nextStep.step, role: nextStep.role }
-      });
-    }
-
-    if (isBreached) {
-      summary.overdueCases += 1;
-      const nextLevel = Math.max(1, (wf.escalationLevel || 0) + 1);
-      patch.slaBreachedAt = wf.slaBreachedAt || new Date().toISOString();
-      patch.escalationLevel = Math.min(nextLevel, 3);
-      patch.caseStatus = wf.caseStatus === 'closed' ? 'closed' : 'triage';
-      patch.isOverdue = true;
-      patch.notifications = appendAction(wf.notifications, {
-        type: 'sla-breach',
-        key: `sla-${alert.id}-${Math.min(nextLevel, 3)}`,
-        severity: alert.severity,
-        sentAt: new Date().toISOString(),
-        channel: 'workflow',
-        target: (settings.escalation?.notifyRoles || []).join(',')
-      });
-      patch.automationActions = appendAction(wf.automationActions, {
-        type: 'escalation',
-        key: `esc-${alert.id}-${Math.min(nextLevel, 3)}`,
-        createdAt: new Date().toISOString(),
-        detail: `Escalated to level ${Math.min(nextLevel, 3)} after SLA breach`
-      });
-      enqueueUnique(tenantId, 'sla-breach', `sla-${alert.id}-${Math.min(nextLevel, 3)}`, {
-        severity: alert.severity,
-        target: (settings.escalation?.notifyRoles || []).join(','),
-        title: `SLA breached · ${alert.anomalyLabel}`,
-        detail: `Escalation level ${Math.min(nextLevel, 3)} triggered for ${alert.userPrincipalName}`,
-        metadata: { alertId: alert.id, level: Math.min(nextLevel, 3) }
-      });
-      summary.escalatedCases += 1;
-    }
-
-    if (isBreached && ['critical', 'high'].includes(alert.severity)) {
-      const autoType = alert.severity === 'critical' ? 'auto-revoke-session' : 'auto-notify-owner';
-      const desiredAction = alert.severity === 'critical' ? 'revoke' : 'monitor';
-      const executionCheck = policyEngine.getExecutionCheck(tenantId, alert, desiredAction, wf);
-      const detail = executionCheck.canExecute
-        ? (alert.severity === 'critical' ? 'Automatic revoke playbook queued due to critical SLA breach' : 'Owner notification queued due to high severity SLA breach')
-        : `Automation held: ${executionCheck.reason}`;
-      patch.automationActions = appendAction(patch.automationActions || wf.automationActions, {
-        type: executionCheck.canExecute ? autoType : 'approval-hold',
-        key: `auto-${alert.id}-${executionCheck.canExecute ? autoType : 'approval-hold'}`,
-        createdAt: new Date().toISOString(),
-        detail,
-        state: executionCheck.state
-      });
-      enqueueUnique(tenantId, executionCheck.canExecute ? 'automation' : 'approval-hold', `auto-${alert.id}-${executionCheck.canExecute ? autoType : 'approval-hold'}`, {
-        severity: alert.severity,
-        target: wf.owner || 'queue',
-        title: executionCheck.canExecute ? `Automation queued - ${autoType}` : 'Automation held pending approval',
-        detail: executionCheck.canExecute ? (alert.severity === 'critical' ? 'Automatic revoke session playbook staged' : 'Owner notification staged') : executionCheck.reason,
-        metadata: { alertId: alert.id, automationType: autoType, executionState: executionCheck.state }
-      });
-    }
-
-    // Only a sweep that changes the case is written and logged; re-applying the same patch to
-    // every open alert on every sweep is what filled the audit log.
-    if (workflowStore.changedFields(wf, patch).length) {
-      wf = workflowStore.patchAlertWorkflow(tenantId, alert.id, patch, 'system');
-      auditLog.log(tenantId, 'automation.sweep', { alertId: alert.id, severity: alert.severity, escalated: !!isBreached }, 'system');
-    }
-
-    summary.automationActions += (wf.automationActions || []).length;
-    summary.notificationsQueued += (wf.notifications || []).length;
+  if (policyDecision.suppressed) {
+    patch.caseStatus = 'closed';
+    patch.suppressReason = policyDecision.suppressionRule?.reason || 'Suppressed by policy';
+    patch.approvalStatus = 'approved';
+    patch.notifications = appendAction(wf.notifications, {
+      type: 'suppression',
+      key: `suppress-${alert.id}`,
+      severity: alert.severity,
+      sentAt: new Date().toISOString(),
+      channel: 'workflow',
+      target: 'policy-engine'
+    });
   }
 
-  return summary;
+  if (nextStep) {
+    summary.pendingApprovals += 1;
+    enqueueUnique(batch, 'approval', `approval-${alert.id}-${nextStep.step}`, {
+      severity: alert.severity,
+      target: nextStep.role,
+      title: `Approval required · ${alert.anomalyLabel}`,
+      detail: `Step ${nextStep.step} is waiting for ${nextStep.role}`,
+      metadata: { alertId: alert.id, step: nextStep.step, role: nextStep.role }
+    });
+  }
+
+  if (isBreached) {
+    summary.overdueCases += 1;
+    const nextLevel = Math.max(1, (wf.escalationLevel || 0) + 1);
+    patch.slaBreachedAt = wf.slaBreachedAt || new Date().toISOString();
+    patch.escalationLevel = Math.min(nextLevel, 3);
+    patch.caseStatus = wf.caseStatus === 'closed' ? 'closed' : 'triage';
+    patch.isOverdue = true;
+    patch.notifications = appendAction(wf.notifications, {
+      type: 'sla-breach',
+      key: `sla-${alert.id}-${Math.min(nextLevel, 3)}`,
+      severity: alert.severity,
+      sentAt: new Date().toISOString(),
+      channel: 'workflow',
+      target: (settings.escalation?.notifyRoles || []).join(',')
+    });
+    patch.automationActions = appendAction(wf.automationActions, {
+      type: 'escalation',
+      key: `esc-${alert.id}-${Math.min(nextLevel, 3)}`,
+      createdAt: new Date().toISOString(),
+      detail: `Escalated to level ${Math.min(nextLevel, 3)} after SLA breach`
+    });
+    enqueueUnique(batch, 'sla-breach', `sla-${alert.id}-${Math.min(nextLevel, 3)}`, {
+      severity: alert.severity,
+      target: (settings.escalation?.notifyRoles || []).join(','),
+      title: `SLA breached · ${alert.anomalyLabel}`,
+      detail: `Escalation level ${Math.min(nextLevel, 3)} triggered for ${alert.userPrincipalName}`,
+      metadata: { alertId: alert.id, level: Math.min(nextLevel, 3) }
+    });
+    summary.escalatedCases += 1;
+  }
+
+  if (isBreached && ['critical', 'high'].includes(alert.severity)) {
+    const autoType = alert.severity === 'critical' ? 'auto-revoke-session' : 'auto-notify-owner';
+    const desiredAction = alert.severity === 'critical' ? 'revoke' : 'monitor';
+    const executionCheck = policyEngine.getExecutionCheck(tenantId, alert, desiredAction, wf);
+    const detail = executionCheck.canExecute
+      ? (alert.severity === 'critical' ? 'Automatic revoke playbook queued due to critical SLA breach' : 'Owner notification queued due to high severity SLA breach')
+      : `Automation held: ${executionCheck.reason}`;
+    patch.automationActions = appendAction(patch.automationActions || wf.automationActions, {
+      type: executionCheck.canExecute ? autoType : 'approval-hold',
+      key: `auto-${alert.id}-${executionCheck.canExecute ? autoType : 'approval-hold'}`,
+      createdAt: new Date().toISOString(),
+      detail,
+      state: executionCheck.state
+    });
+    enqueueUnique(batch, executionCheck.canExecute ? 'automation' : 'approval-hold', `auto-${alert.id}-${executionCheck.canExecute ? autoType : 'approval-hold'}`, {
+      severity: alert.severity,
+      target: wf.owner || 'queue',
+      title: executionCheck.canExecute ? `Automation queued - ${autoType}` : 'Automation held pending approval',
+      detail: executionCheck.canExecute ? (alert.severity === 'critical' ? 'Automatic revoke session playbook staged' : 'Owner notification staged') : executionCheck.reason,
+      metadata: { alertId: alert.id, automationType: autoType, executionState: executionCheck.state }
+    });
+  }
+
+  // Only a sweep that changes the case is written and logged; re-applying the same patch to
+  // every open alert on every sweep is what filled the audit log.
+  if (workflowStore.changedFields(wf, patch).length) {
+    wf = workflowStore.patchAlertWorkflow(tenantId, alert.id, patch, 'system');
+    auditLog.log(tenantId, 'automation.sweep', { alertId: alert.id, severity: alert.severity, escalated: !!isBreached }, 'system');
+  }
+
+  summary.automationActions += (wf.automationActions || []).length;
+  summary.notificationsQueued += (wf.notifications || []).length;
+}
+
+// Synchronous sweep of one tenant, for request handlers that use the summary right away.
+// Notifications are written once, when the tenant is done.
+function evaluateTenant(tenantId) {
+  const ctx = startTenant(tenantId);
+  try {
+    for (const alert of ctx.alerts) evaluateAlert(tenantId, alert, ctx);
+  } finally {
+    ctx.batch.flush();
+  }
+  return ctx.summary;
+}
+
+// The same sweep, yielding to the event loop every SLICE_MS so a tenant with thousands of open
+// alerts never blocks requests (#105). An alert closed while the sweep was yielding is skipped.
+async function evaluateTenantAsync(tenantId) {
+  const ctx = startTenant(tenantId);
+  let sliceStart = performance.now();
+  try {
+    for (const alert of ctx.alerts) {
+      if (performance.now() - sliceStart >= SLICE_MS) {
+        await yieldToLoop();
+        sliceStart = performance.now();
+      }
+      if (alertsStore.getById(alert.id)?.status !== 'open') continue;
+      evaluateAlert(tenantId, alert, ctx);
+    }
+  } finally {
+    ctx.batch.flush();
+  }
+  return ctx.summary;
 }
 
 function runAutomationSweep(targetTenantId) {
   if (targetTenantId) return [evaluateTenant(targetTenantId)];
   return tenantRegistry.getAllTenantIds().map(evaluateTenant);
+}
+
+// The background (cron) sweep: tenants run one after another, yielding between them. A call made
+// while a full sweep is still running joins it instead of starting a second one.
+let _running = null;
+function runAutomationSweepAsync(targetTenantId) {
+  if (targetTenantId) return evaluateTenantAsync(targetTenantId).then(summary => [summary]);
+  if (_running) return _running;
+  _running = (async () => {
+    const results = [];
+    for (const tenantId of tenantRegistry.getAllTenantIds()) {
+      results.push(await evaluateTenantAsync(tenantId));
+      await yieldToLoop();
+    }
+    return results;
+  })().finally(() => { _running = null; });
+  return _running;
 }
 
 function getMultiTenantOps(currentTenantId) {
@@ -220,4 +274,4 @@ function getMultiTenantOps(currentTenantId) {
   };
 }
 
-module.exports = { runAutomationSweep, getMultiTenantOps, ensureWorkflowDefaults, buildApprovalPlan, resolveOwner };
+module.exports = { runAutomationSweep, runAutomationSweepAsync, getMultiTenantOps, ensureWorkflowDefaults, buildApprovalPlan, resolveOwner };
