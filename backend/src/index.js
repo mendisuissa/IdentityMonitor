@@ -377,7 +377,7 @@ if (!MOCK) {
   // Workflow/SLA automation sweep — every 15 min
   cron.schedule('*/15 * * * *', stallMonitor.track('automation-sweep', async () => {
     try {
-      const results = automationService.runAutomationSweep();
+      const results = await automationService.runAutomationSweepAsync();
       console.log('[CRON] Automation summary:', JSON.stringify(results));
     } catch (err) {
       console.error('[CRON] Automation failed:', err.message);

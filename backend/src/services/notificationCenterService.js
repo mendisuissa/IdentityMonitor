@@ -1,8 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const DIR = process.env.NODE_ENV === 'production' ? '/home/notification-center' : path.join(__dirname, '../../../notification-center');
+const DIR = process.env.NOTIFICATION_CENTER_DIR || (process.env.NODE_ENV === 'production' ? '/home/notification-center' : path.join(__dirname, '../../../notification-center'));
 if (!fs.existsSync(DIR)) fs.mkdirSync(DIR, { recursive: true });
+
+const STORE_CAP = 500; // newest notifications kept per tenant
 
 function sanitizeTenantId(tenantId) {
   if (!tenantId || typeof tenantId !== 'string') return null;
@@ -117,8 +119,47 @@ function enqueue(tenantId, item) {
     ...item
   });
   items.unshift(next);
-  writeStore(tenantId, items.slice(0, 500));
+  writeStore(tenantId, items.slice(0, STORE_CAP));
   return next;
+}
+
+function dedupeKey(type, uniqueKey) { return `${type}\u0000${uniqueKey}`; }
+function storedKeys(items) { return new Set(items.map(i => dedupeKey(i.type, uniqueKeyFor(i)))); }
+
+// Dedupe-and-enqueue for many notifications at once (the automation sweep, #105). The store is
+// read once when the batch opens and once more at flush, and written at most once per flush,
+// instead of a full read (and a full write) per notification. Dedupe covers every stored key.
+// flush() re-reads the store, so notifications written or acked by others meanwhile are kept,
+// and a key someone else stored meanwhile is not added twice. The result is the same as calling
+// enqueue() for each new notification in order: newest first, capped at 500.
+function openBatch(tenantId) {
+  const keys = storedKeys(readStore(tenantId));
+  let pending = [];
+  return {
+    enqueueUnique(item) {
+      const k = dedupeKey(item.type, item.uniqueKey);
+      if (keys.has(k)) return false;
+      keys.add(k);
+      pending.push(decorate({
+        id: item.id || `n_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        status: 'unread',
+        createdAt: new Date().toISOString(),
+        ...item
+      }));
+      return true;
+    },
+    flush() {
+      if (!pending.length) return 0;
+      const queued = pending;
+      pending = [];
+      const items = readStore(tenantId);
+      const stored = storedKeys(items);
+      const fresh = queued.filter(n => !stored.has(dedupeKey(n.type, n.uniqueKey)));
+      if (!fresh.length) return 0;
+      writeStore(tenantId, [...fresh.reverse(), ...items].slice(0, STORE_CAP));
+      return fresh.length;
+    }
+  };
 }
 
 function dedupeItems(items) {
@@ -174,4 +215,4 @@ function stats(tenantId) {
   };
 }
 
-module.exports = { enqueue, list, ack, stats, dedupeItems, decorate };
+module.exports = { enqueue, openBatch, list, ack, stats, dedupeItems, decorate };

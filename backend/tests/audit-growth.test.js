@@ -39,7 +39,7 @@ function loadWorkflowStore(stored = {}, opts = {}) {
       }
     },
     './alertsStore': { getAll: () => opts.alerts || [], getOpen: () => opts.alerts || [] },
-    './notificationCenterService': { enqueue: () => {}, list: () => [] },
+    './notificationCenterService': { enqueue: () => {}, list: () => [], openBatch: () => ({ enqueueUnique: () => true, flush: () => 0 }) },
     './auditLog': { log: (tenantId, action, details, actor) => audits.push({ tenantId, action, details, actor }) }
   };
   const origLoad = Module._load;
